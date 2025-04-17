@@ -1,0 +1,28 @@
+### INSTRUÇÕES PARA O GEMINI ###
+
+**Tarefa:** Gerar um artigo otimizado para SEO.
+
+**Contexto:**
+*   **Tema Principal:** {tema}
+*   **Palavra-chave Âncora (Link Interno):** {palavra_ancora}
+*   **URL da Âncora:** {url_ancora}
+*   **Título Sugerido:** {titulo}
+
+**Instruções Detalhadas:**
+1.  Escreva um artigo informativo e envolvente sobre o **Tema Principal**.
+2.  Incorpore naturalmente a **Palavra-chave Âncora** no texto.
+3.  Crie um hiperlink na **Palavra-chave Âncora** apontando para a **URL da Âncora**.
+4.  Use o **Título Sugerido** como base para o título principal do artigo (H1).
+5.  Estruture o artigo com subtítulos (H2, H3), parágrafos curtos e, se apropriado, listas.
+6.  O tom deve ser profissional mas conversacional, como se estivesse explicando o assunto para alguém com conhecimento intermediário.
+7.  O artigo deve ter aproximadamente 800-1000 palavras.
+8.  Certifique-se de que o conteúdo seja original e útil para o leitor interessado no **Tema Principal**.
+9.  Inclua uma breve introdução e conclusão.
+10. Formate a saída em Markdown, com o título principal começando com # (um hash).
+11. Os subtítulos devem usar ## (dois hashes) e ### (três hashes) conforme a hierarquia.
+12. Use negrito (**palavra**) para destacar termos importantes.
+
+**Exemplo de como incorporar o link:**
+... um exemplo relevante sobre {palavra_ancora} pode ser encontrado aqui ... (onde a frase com a palavra-chave vira o link)
+
+**Artigo Gerado:** 
