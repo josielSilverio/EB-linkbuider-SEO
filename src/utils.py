@@ -48,64 +48,95 @@ def extrair_titulos_markdown(texto):
     
     return titulos
 
-def converter_markdown_para_docs(texto):
+def converter_markdown_para_docs(texto, info_link=None):
     """
-    Converte a formatação Markdown básica para o formato usado pela API do Google Docs.
-    Retorna um array de pedidos (requests) para a API do Docs.
+    Converte texto com estrutura natural para o formato usado pela API do Google Docs.
+    Identifica título, subtítulos e parágrafos com base no contexto e posição no texto.
+    
+    Args:
+        texto: O texto a ser convertido
+        info_link: Informações sobre o link a ser criado (opcional)
+        
+    Returns:
+        Lista de requests para a API do Docs
     """
     requests = []
-    paragrafo_atual = ""
-    
     # Divide o texto em linhas
     linhas = texto.split('\n')
     
-    for i, linha in enumerate(linhas):
-        # Verifica se é um título
-        titulo_match = re.match(r'^(#{1,6})\s+(.*?)$', linha)
-        if titulo_match:
-            nivel = len(titulo_match.group(1))
-            titulo_texto = titulo_match.group(2).strip()
-            
-            # Se tem texto acumulado, insere como parágrafo normal
-            if paragrafo_atual.strip():
-                requests.append({
-                    'insertText': {
-                        'location': {'index': 1},
-                        'text': paragrafo_atual + '\n'
-                    }
-                })
-                paragrafo_atual = ""
-            
-            # Insere o título
+    # Primeira linha não vazia é o título principal
+    titulo_principal = None
+    linha_atual = 0
+    
+    # Encontra o título principal (primeira linha não vazia)
+    while linha_atual < len(linhas) and not titulo_principal:
+        if linhas[linha_atual].strip():
+            titulo_principal = linhas[linha_atual].strip()
+            # Insere o título principal
             requests.append({
                 'insertText': {
                     'location': {'index': 1},
-                    'text': titulo_texto + '\n'
+                    'text': titulo_principal + '\n'
                 }
             })
-            
-            # Aplica formatação conforme o nível do título
-            estilo = 'HEADING_1'
-            if nivel == 2:
-                estilo = 'HEADING_2'
-            elif nivel >= 3:
-                estilo = 'HEADING_3'
-            
+            # Formata como Heading 1
             requests.append({
                 'updateParagraphStyle': {
                     'range': {
                         'startIndex': 1,
-                        'endIndex': 1 + len(titulo_texto) + 1
+                        'endIndex': 1 + len(titulo_principal) + 1
                     },
                     'paragraphStyle': {
-                        'namedStyleType': estilo
+                        'namedStyleType': 'HEADING_1'
                     },
                     'fields': 'namedStyleType'
                 }
             })
+        linha_atual += 1
+    
+    # Variáveis para rastrear a posição atual no documento
+    posicao_atual = 1 + len(titulo_principal) + 1 if titulo_principal else 1
+    
+    # Rastreia a posição atual no texto original 
+    posicao_texto_original = 0
+    
+    # Processa o restante do texto
+    paragrafo_atual = ""
+    modo_paragrafo = True
+    
+    for i in range(linha_atual, len(linhas)):
+        linha = linhas[i].strip()
         
-        # Verifica se é uma linha em branco (quebra de parágrafo)
-        elif not linha.strip():
+        # Atualiza a posição no texto original
+        posicao_texto_original += len(linhas[i]) + 1  # +1 para o \n
+        
+        # Linha vazia significa quebra de parágrafo
+        if not linha:
+            if paragrafo_atual:
+                # Adiciona o parágrafo ao documento
+                requests.append({
+                    'insertText': {
+                        'location': {'index': 1},
+                        'text': paragrafo_atual + '\n\n'
+                    }
+                })
+                
+                # Atualiza a posição atual
+                posicao_atual += len(paragrafo_atual) + 2  # +2 para \n\n
+                
+                paragrafo_atual = ""
+            modo_paragrafo = True
+            continue
+        
+        # Verifica se é um subtítulo (geralmente são linhas curtas)
+        # A heurística é: linha curta (< 60 chars) e que não termina com pontuação
+        # E que não está no meio de um parágrafo
+        eh_subtitulo = False
+        if modo_paragrafo and len(linha) < 60 and not linha[-1] in '.!?:;,':
+            eh_subtitulo = True
+        
+        if eh_subtitulo:
+            # Se tem texto acumulado, insere como parágrafo
             if paragrafo_atual:
                 requests.append({
                     'insertText': {
@@ -113,26 +144,42 @@ def converter_markdown_para_docs(texto):
                         'text': paragrafo_atual + '\n\n'
                     }
                 })
+                posicao_atual += len(paragrafo_atual) + 2
                 paragrafo_atual = ""
-            else:
-                # Se já estava em branco, adiciona outra quebra
-                requests.append({
-                    'insertText': {
-                        'location': {'index': 1},
-                        'text': '\n'
-                    }
-                })
-        
-        # Conteúdo normal
-        else:
-            # Processa o texto para verificar formatação inline (negrito, itálico)
-            texto_processado = linha
             
-            # Adiciona ao parágrafo atual
+            # Insere o subtítulo
+            requests.append({
+                'insertText': {
+                    'location': {'index': 1},
+                    'text': linha + '\n'
+                }
+            })
+            
+            # Formata como Heading 2
+            requests.append({
+                'updateParagraphStyle': {
+                    'range': {
+                        'startIndex': 1,
+                        'endIndex': 1 + len(linha) + 1
+                    },
+                    'paragraphStyle': {
+                        'namedStyleType': 'HEADING_2'
+                    },
+                    'fields': 'namedStyleType'
+                }
+            })
+            
+            # Atualiza a posição atual
+            posicao_atual += len(linha) + 1
+            
+            modo_paragrafo = True
+        else:
+            # Texto normal, adiciona ao parágrafo atual
             if paragrafo_atual:
-                paragrafo_atual += " " + texto_processado
+                paragrafo_atual += " " + linha
             else:
-                paragrafo_atual = texto_processado
+                paragrafo_atual = linha
+            modo_paragrafo = False
     
     # Adiciona qualquer texto restante
     if paragrafo_atual:
@@ -140,6 +187,37 @@ def converter_markdown_para_docs(texto):
             'insertText': {
                 'location': {'index': 1},
                 'text': paragrafo_atual + '\n'
+            }
+        })
+        posicao_atual += len(paragrafo_atual) + 1
+    
+    # Se temos informações de link, adiciona o link
+    if info_link:
+        # Encontra a posição do link no documento
+        # Precisamos recalcular as posições no documento final
+        texto_completo = texto
+        
+        # Calcula a posição relativa ao início do documento
+        posicao_inicio = info_link['posicao_inicio'] 
+        posicao_fim = info_link['posicao_fim']
+        
+        # Posições aproximadas no documento final
+        doc_inicio = posicao_inicio + 1  # +1 para o índice base do Google Docs
+        doc_fim = posicao_fim + 1
+        
+        # Adiciona o comando para criar o link
+        requests.append({
+            'updateTextStyle': {
+                'range': {
+                    'startIndex': doc_inicio,
+                    'endIndex': doc_fim
+                },
+                'textStyle': {
+                    'link': {
+                        'url': info_link['url']
+                    }
+                },
+                'fields': 'link'
             }
         })
     
@@ -164,18 +242,31 @@ def contar_tokens(texto, modelo="gpt-3.5-turbo"):
 
 def substituir_links_markdown(texto, palavra_ancora, url_ancora):
     """
-    Substitui ocorrências da palavra âncora por um link markdown apontando para a URL.
+    Substitui ocorrências da palavra âncora para criar links no Google Docs.
+    Agora trabalha com texto em formato natural, em vez de markdown.
     """
     # Padrão regex para encontrar a palavra âncora como palavra completa (ignorando case)
     padrao = r'(^|[^\w])(' + re.escape(palavra_ancora) + r')([^\w]|$)'
     
-    # Função de substituição que preserva o case original e adiciona o link
-    def adicionar_link(match):
-        antes = match.group(1)  # Texto antes da palavra
-        palavra = match.group(2)  # A palavra âncora encontrada com o case original
-        depois = match.group(3)  # Texto depois da palavra
-        return f"{antes}[{palavra}]({url_ancora}){depois}"
+    # Verificamos se a palavra âncora foi encontrada
+    match = re.search(padrao, texto, flags=re.IGNORECASE)
     
-    # Substitui apenas a primeira ocorrência
-    texto_substituido = re.sub(padrao, adicionar_link, texto, count=1, flags=re.IGNORECASE)
-    return texto_substituido 
+    if not match:
+        # Se não encontrou, retorna o texto original
+        return texto
+    
+    # Posição onde a palavra foi encontrada
+    posicao_inicio = match.start(2)
+    posicao_fim = match.end(2)
+    
+    # Guardamos a informação da posição da palavra âncora para criar o link posteriormente
+    # Esta informação será usada pela função converter_markdown_para_docs
+    info_link = {
+        'palavra': match.group(2),
+        'url': url_ancora,
+        'posicao_inicio': posicao_inicio,
+        'posicao_fim': posicao_fim
+    }
+    
+    # Retornamos o texto original e a informação do link
+    return texto, info_link 

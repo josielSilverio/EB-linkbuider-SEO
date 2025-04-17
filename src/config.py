@@ -24,31 +24,44 @@ SUBTITULOS_ESTILO = os.getenv("SUBTITULOS_ESTILO", "NEGRITO")
 CONTEUDO_COLUNA_DRIVE = os.getenv("CONTEUDO_COLUNA_DRIVE", "L")
 
 # Padrão de nome para os arquivos
-NOME_ARQUIVO_PADRAO = os.getenv("NOME_ARQUIVO_PADRAO", "{data} - {site} - {ancora} - {titulo}")
+NOME_ARQUIVO_PADRAO = os.getenv("NOME_ARQUIVO_PADRAO", "{id} - {site} - {ancora} - {titulo}")
 
 # Constantes para o Gemini
 GEMINI_MODEL = "gemini-1.5-flash"  # Opções: gemini-1.5-flash, gemini-1.5-pro
 GEMINI_MAX_OUTPUT_TOKENS = 8192
 GEMINI_TEMPERATURE = 0.7
 
-# Configurações de colunas da planilha
+# Configurações de colunas da planilha (ajustado com base na estrutura real)
 COLUNAS = {
-    "TEMA": "A",
-    "SITE": "D",
-    "PALAVRA_ANCORA": "I",
-    "URL_ANCORA": "J",
-    "TITULO": "K",
-    "CONTEUDO_DRIVE": "L"
+    "ID": 1,               # Coluna B (índice 1 no DataFrame)
+    "DATA": 2,             # Coluna C (índice 2 no DataFrame)
+    "TEMA": 13,            # Coluna N (índice 13 no DataFrame) 
+    "SITE": 3,             # Coluna D (índice 3 no DataFrame)
+    "PALAVRA_ANCORA": 8,   # Coluna I (índice 8 no DataFrame)
+    "URL_ANCORA": 9,       # Coluna J (índice 9 no DataFrame)
+    "TITULO": 10,          # Coluna K (índice 10 no DataFrame)
+    "CONTEUDO_DRIVE": "L"  # Para atualização, mantém o formato de letra
 }
 
+# Configurações de filtragem
+LINHA_INICIAL = 675       # Linha inicial para processamento
+MES_ATUAL = "04"          # Abril (formato: MM)
+ANO_ATUAL = "2024"        # Ano atual (formato: YYYY)
+
 # Função para gerar o nome do arquivo
-def gerar_nome_arquivo(site, ancora, titulo):
-    data_hoje = datetime.now().strftime("%Y-%m-%d")
+def gerar_nome_arquivo(id, site, ancora, titulo=None):
+    """
+    Gera o nome do arquivo seguindo o padrão definido no .env
+    Formato simplificado: ID - Site - âncora
+    """
+    # Substitui caracteres inválidos para nomes de arquivo
+    ancora_seguro = ancora.replace('/', '-').replace('\\', '-').replace(':', '-')
+    
+    # Usa o formato definido no .env (que não inclui mais o título)
     return NOME_ARQUIVO_PADRAO.format(
-        data=data_hoje,
+        id=id,
         site=site,
-        ancora=ancora,
-        titulo=titulo
+        ancora=ancora_seguro
     )
 
 # Função para estimar custos do Gemini

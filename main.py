@@ -67,28 +67,35 @@ def main(limite_linhas: int = None, modo_teste: bool = False):
         try:
             # Extrai dados da linha
             dados = sheets.extrair_dados_linha(linha)
+            id_campanha = dados.get('id', 'Sem-ID')
             tema = dados.get('tema', 'Sem tema')
             site = dados.get('site', 'Sem site')
             palavra_ancora = dados.get('palavra_ancora', 'Sem palavra-âncora')
+            url_ancora = dados.get('url_ancora', 'Sem URL')
             titulo = dados.get('titulo', 'Sem título')
             
-            logger.info(f"Processando linha {i+1}/{len(df)}: {titulo}")
+            logger.info(f"Processando linha {i+1}/{len(df)}: ID {id_campanha} - {titulo}")
             
             # Gera o conteúdo usando o Gemini
             logger.info(f"Gerando conteúdo com o Gemini para '{tema}'...")
-            conteudo, metricas = gemini.gerar_conteudo(dados)
+            conteudo, metricas, info_link = gemini.gerar_conteudo(dados)
             
             # Atualiza métricas
             custo_total += metricas['custo_estimado']
             tokens_entrada_total += metricas['tokens_entrada']
             tokens_saida_total += metricas['tokens_saida']
             
-            # Gera o nome do arquivo
-            nome_arquivo = gerar_nome_arquivo(site, palavra_ancora, titulo)
+            # Gera o nome do arquivo usando o ID em vez da data
+            try:
+                nome_arquivo = gerar_nome_arquivo(id_campanha, site, palavra_ancora)
+            except Exception as e:
+                logger.error(f"Erro ao gerar nome de arquivo: {e}")
+                # Fallback para um nome simples
+                nome_arquivo = f"{id_campanha} - {site} - Artigo"
             
             # Cria o documento no Google Docs
             logger.info(f"Criando documento '{nome_arquivo}'...")
-            document_id, document_url = docs.criar_documento(titulo, conteudo, nome_arquivo)
+            document_id, document_url = docs.criar_documento(titulo, conteudo, nome_arquivo, info_link)
             
             # Atualiza a URL na planilha (se não estiver em modo de teste)
             if not modo_teste:
@@ -123,6 +130,8 @@ if __name__ == "__main__":
                         help='Executa apenas para a primeira linha sem atualizar a planilha')
     parser.add_argument('--todos', action='store_true',
                         help='Processa todas as linhas da planilha')
+    parser.add_argument('--abril', action='store_true',
+                        help='Processa apenas as linhas de abril/2024 (já é o padrão)')
     
     args = parser.parse_args()
     

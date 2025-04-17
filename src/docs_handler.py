@@ -21,14 +21,15 @@ class DocsHandler:
             self.logger.error(f"Erro ao inicializar os serviços: {e}")
             raise
     
-    def criar_documento(self, titulo: str, conteudo: str, nome_arquivo: str) -> Tuple[str, str]:
+    def criar_documento(self, titulo: str, conteudo: str, nome_arquivo: str, info_link=None) -> Tuple[str, str]:
         """
         Cria um novo documento no Google Docs e o salva na pasta especificada.
         
         Args:
             titulo: Título do documento
-            conteudo: Conteúdo (markdown) a ser inserido no documento
+            conteudo: Conteúdo em formato natural para o documento
             nome_arquivo: Nome do arquivo para o documento
+            info_link: Informações para adicionar link à palavra âncora (opcional)
         
         Returns:
             Tupla (document_id, document_url)
@@ -42,11 +43,8 @@ class DocsHandler:
             document_id = documento.get('documentId')
             self.logger.info(f"Documento criado com ID: {document_id}")
             
-            # Extrai os títulos do markdown (para formatação)
-            titulos = extrair_titulos_markdown(conteudo)
-            
-            # Converte o markdown para requests da API do Docs
-            requests = converter_markdown_para_docs(conteudo)
+            # Converte o texto para requests da API do Docs, incluindo informações do link
+            requests = converter_markdown_para_docs(conteudo, info_link)
             
             # Aplica as atualizações ao documento
             if requests:
@@ -56,7 +54,7 @@ class DocsHandler:
                 ).execute()
                 self.logger.info(f"Conteúdo inserido no documento {document_id}")
             
-            # Formata o título principal (H1) para tamanho 17
+            # Formata o título principal (H1) para tamanho configurado
             self._formatar_titulo(document_id, TITULO_TAMANHO)
             
             # Move o arquivo para a pasta especificada no Drive

@@ -72,7 +72,7 @@ class GeminiHandler:
             self.logger.error(f"Erro ao construir prompt: {e}")
             raise
     
-    def gerar_conteudo(self, dados: Dict[str, str]) -> Tuple[str, Dict[str, float]]:
+    def gerar_conteudo(self, dados: Dict[str, str]) -> Tuple[str, Dict[str, float], Optional[str]]:
         """
         Gera conteúdo usando a API do Gemini.
         
@@ -80,7 +80,7 @@ class GeminiHandler:
             dados: Dicionário com os dados da linha da planilha
         
         Returns:
-            Tupla (conteudo_gerado, metricas)
+            Tupla (conteudo_gerado, metricas, info_link)
             onde metricas é um dict com 'tokens_entrada', 'tokens_saida', 'custo_estimado'
         """
         try:
@@ -112,11 +112,14 @@ class GeminiHandler:
             palavra_ancora = dados.get('palavra_ancora', '')
             url_ancora = dados.get('url_ancora', '')
             
+            info_link = None
             if palavra_ancora and url_ancora:
-                conteudo_linkado = substituir_links_markdown(conteudo_gerado, palavra_ancora, url_ancora)
-                self.logger.info(f"Link adicionado para a palavra-âncora: {palavra_ancora}")
+                conteudo_gerado, info_link = substituir_links_markdown(conteudo_gerado, palavra_ancora, url_ancora)
+                if info_link:
+                    self.logger.info(f"Link adicionado para a palavra-âncora: {palavra_ancora}")
+                else:
+                    self.logger.warning(f"Palavra-âncora '{palavra_ancora}' não encontrada no texto gerado.")
             else:
-                conteudo_linkado = conteudo_gerado
                 self.logger.warning("Palavra-âncora ou URL não encontrados. Conteúdo gerado sem link.")
             
             # Retorna o conteúdo gerado e as métricas
@@ -126,7 +129,7 @@ class GeminiHandler:
                 'custo_estimado': custo_estimado
             }
             
-            return conteudo_linkado, metricas
+            return conteudo_gerado, metricas, info_link
         
         except Exception as e:
             self.logger.error(f"Erro ao gerar conteúdo: {e}")
