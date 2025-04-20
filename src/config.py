@@ -2,6 +2,8 @@
 import os
 import dotenv
 from datetime import datetime
+from typing import Optional, Dict, List, Tuple
+import re
 
 # Carrega as variáveis de ambiente do arquivo .env
 dotenv.load_dotenv()
@@ -14,9 +16,13 @@ CREDENTIALS_FILE_PATH = os.getenv("CREDENTIALS_FILE_PATH")
 # Configurações do Google Sheets
 SPREADSHEET_ID = os.getenv("SPREADSHEET_ID")
 SHEET_NAME = os.getenv("SHEET_NAME")
+RANGE_ABRIL = os.getenv("RANGE_ABRIL", "Abril 2024")
+RANGE_MAIO = os.getenv("RANGE_MAIO", "Maio 2024")
 
 # Configurações do Google Drive
 DRIVE_FOLDER_ID = os.getenv("DRIVE_FOLDER_ID")
+GOOGLE_CREDENTIALS_FILE = os.getenv("GOOGLE_CREDENTIALS_FILE", "credenciais.json")
+FOLDER_ID = os.getenv("FOLDER_ID")
 
 # Configurações de formatação
 TITULO_TAMANHO = int(os.getenv("TITULO_TAMANHO", 17))
@@ -24,54 +30,76 @@ SUBTITULOS_ESTILO = os.getenv("SUBTITULOS_ESTILO", "NEGRITO")
 CONTEUDO_COLUNA_DRIVE = os.getenv("CONTEUDO_COLUNA_DRIVE", "L")
 
 # Padrão de nome para os arquivos
-NOME_ARQUIVO_PADRAO = os.getenv("NOME_ARQUIVO_PADRAO", "{id} - {site} - {ancora} - {titulo}")
+NOME_ARQUIVO_PADRAO = os.getenv("NOME_ARQUIVO_PADRAO", "{id} - {site} - {ancora}")
 
-# Constantes para o Gemini
-GEMINI_MODEL = "gemini-1.5-flash"  # Opções: gemini-1.5-flash, gemini-1.5-pro
-GEMINI_MAX_OUTPUT_TOKENS = 8192
-GEMINI_TEMPERATURE = 0.7
+# Configurações do Gemini
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-1.5-pro")
+GEMINI_MAX_OUTPUT_TOKENS = int(os.getenv("GEMINI_MAX_OUTPUT_TOKENS", "1024"))
+GEMINI_TEMPERATURE = float(os.getenv("GEMINI_TEMPERATURE", "0.7"))
+
+# Preços do Gemini por milhão de tokens (em USD)
+GEMINI_PRECO_ENTRADA = float(os.getenv("GEMINI_PRECO_ENTRADA", "0.00025"))  # $0.00025 por 1K tokens de entrada
+GEMINI_PRECO_SAIDA = float(os.getenv("GEMINI_PRECO_SAIDA", "0.0005"))      # $0.0005 por 1K tokens de saída
 
 # Configurações de colunas da planilha (ajustado com base na estrutura real)
 COLUNAS = {
-    "ID": 1,               # Coluna B (índice 1 no DataFrame)
-    "DATA": 2,             # Coluna C (índice 2 no DataFrame)
-    "TEMA": 13,            # Coluna N (índice 13 no DataFrame) 
-    "SITE": 3,             # Coluna D (índice 3 no DataFrame)
-    "PALAVRA_ANCORA": 8,   # Coluna I (índice 8 no DataFrame)
-    "URL_ANCORA": 9,       # Coluna J (índice 9 no DataFrame)
-    "TITULO": 10,          # Coluna K (índice 10 no DataFrame)
-    "CONTEUDO_DRIVE": "L"  # Para atualização, mantém o formato de letra
+    'id': 1,                 # B
+    'data': 2,               # C 
+    'site': 3,               # D
+    'quantidade_palavras': 5, # F
+    'valor': 7,              # H
+    'palavra_ancora': 8,     # I
+    'url_ancora': 9,         # J
+    'titulo': 10,            # K
+    'url_documento': 11,     # L
+    'tema': None,            # Não tem coluna de tema na estrutura atual
 }
 
 # Configurações de filtragem
-LINHA_INICIAL = 675       # Linha inicial para processamento
-MES_ATUAL = "04"          # Abril (formato: MM)
-ANO_ATUAL = "2024"        # Ano atual (formato: YYYY)
+LINHA_INICIAL = 674       # Linha inicial para processamento
+MES_ATUAL = os.getenv('MES_ATUAL', '04')  # Mês atual no formato MM
+ANO_ATUAL = os.getenv('ANO_ATUAL', '2025')  # Ano atual no formato YYYY
+FORMATO_DATA = os.getenv('FORMATO_DATA', 'yyyy/mm')  # Formato: yyyy/mm, mm/yyyy, ou mm-yyyy
 
 # Função para gerar o nome do arquivo
-def gerar_nome_arquivo(id, site, ancora, titulo=None):
+def gerar_nome_arquivo(id: str, site: str, ancora: str, titulo: Optional[str] = None) -> str:
     """
-    Gera o nome do arquivo seguindo o padrão definido no .env
-    Formato simplificado: ID - Site - âncora
-    """
-    # Substitui caracteres inválidos para nomes de arquivo
-    ancora_seguro = ancora.replace('/', '-').replace('\\', '-').replace(':', '-')
+    Gera um nome de arquivo baseado nos parâmetros fornecidos e no padrão definido no .env.
     
-    # Usa o formato definido no .env (que não inclui mais o título)
-    return NOME_ARQUIVO_PADRAO.format(
+    Args:
+        id: ID da campanha ou linha da planilha
+        site: Nome do site
+        ancora: Palavra âncora
+        titulo: Título opcional
+        
+    Returns:
+        Nome de arquivo formatado
+    """
+    # Substitui caracteres inválidos em nomes de arquivo
+    ancora_sanitizada = re.sub(r'[\\/:"*?<>|]+', '_', ancora)
+    
+    # Aplica o padrão definido no .env
+    nome = NOME_ARQUIVO_PADRAO.format(
         id=id,
         site=site,
-        ancora=ancora_seguro
+        ancora=ancora_sanitizada,
+        titulo=titulo if titulo else ''
     )
+    
+    return nome.strip()
 
 # Função para estimar custos do Gemini
-def estimar_custo_gemini(tokens_entrada, tokens_saida):
+def estimar_custo_gemini(tokens_entrada: int, tokens_saida: int) -> float:
     """
-    Estima o custo em USD com base nos tokens de entrada e saída
-    Para o Gemini 1.5 Flash (valores de maio/2024)
-    Entrada: $0.00035 / 1K tokens
-    Saída: $0.00105 / 1K tokens
+    Estima o custo de uso do Gemini com base nos tokens de entrada e saída.
+    
+    Args:
+        tokens_entrada: Número de tokens de entrada (prompt)
+        tokens_saida: Número de tokens de saída (resposta)
+        
+    Returns:
+        Custo estimado em USD
     """
-    custo_entrada = (tokens_entrada / 1000) * 0.00035
-    custo_saida = (tokens_saida / 1000) * 0.00105
+    custo_entrada = (tokens_entrada / 1000) * GEMINI_PRECO_ENTRADA
+    custo_saida = (tokens_saida / 1000) * GEMINI_PRECO_SAIDA
     return custo_entrada + custo_saida 
