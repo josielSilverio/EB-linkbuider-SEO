@@ -6,6 +6,16 @@ Automatização para geração de artigos otimizados para SEO utilizando a API d
 
 Este projeto automatiza o fluxo de trabalho para geração de conteúdo SEO a partir de dados em uma planilha do Google Sheets. O script lê os dados da planilha, gera artigos otimizados utilizando a API do Gemini, cria documentos no Google Docs com o conteúdo gerado, e atualiza a planilha com as URLs dos documentos criados.
 
+## Funcionalidades
+
+- **Menu de categorias interativo**: Selecione categorias específicas de jogos para processar ou escolha "TODOS OS JOGOS" para processar tudo
+- **Estimativa de custos**: Visualize o custo estimado por categoria antes de executar o processamento
+- **Geração de artigos com Gemini AI**: Cria conteúdo otimizado para SEO com links âncora
+- **Integração completa**: Google Sheets, Google Docs e Google Drive em um fluxo automatizado
+- **Controle de qualidade**: Verifica e corrige títulos duplicados e conteúdos com alta similaridade
+- **Filtro por quantidade**: Opção para processar um número específico de itens aleatoriamente
+- **Detecção e substituição de termos proibidos**: Sistema automático para manter o conteúdo de acordo com as políticas
+
 ## Pré-requisitos
 
 - Python 3.7 ou superior
@@ -56,6 +66,18 @@ DRIVE_FOLDER_ID="ID_DA_PASTA_NO_DRIVE"
 
 # Caminho para o arquivo de credenciais
 CREDENTIALS_FILE_PATH="credentials/credentials.json"
+
+# Configurações do Gemini
+GEMINI_MODEL="gemini-1.5-flash"
+GEMINI_MAX_OUTPUT_TOKENS="1024"
+GEMINI_TEMPERATURE="0.4"
+
+# Preços Gemini (USD por 1000 tokens)
+GEMINI_PRECO_ENTRADA="0.00025"
+GEMINI_PRECO_SAIDA="0.0005"
+
+# Formato para nome de arquivo
+NOME_ARQUIVO_PADRAO="{id} - {site} - {ancora}"
 ```
 
 5. Coloque seu arquivo de credenciais OAuth (`credentials.json`) na pasta `credentials/`.
@@ -76,6 +98,43 @@ python main.py --limite 5
 
 # Processar todas as linhas da planilha
 python main.py --todos
+```
+
+### Menu Interativo
+
+Ao executar o script, um menu interativo será apresentado, mostrando:
+
+1. Uma visão geral de todas as categorias disponíveis
+2. O número de itens em cada categoria
+3. O custo estimado por categoria e o custo total
+4. A opção "TODOS OS JOGOS" para processar todos os itens
+5. A opção de selecionar uma categoria específica
+6. A opção de escolher uma quantidade personalizada de itens
+
+Exemplo do menu:
+```
+============================================================
+               MENU DE SELEÇÃO DE CATEGORIAS
+============================================================
+
+Total de itens: 150 | Custo estimado total: R$0.51
+
+Categorias disponíveis:
+
+Código | Categoria              | Quantidade | Custo estimado (R$)
+------------------------------------------------------------
+0      | TODOS OS JOGOS          |    150     | R$0.51
+------------------------------------------------------------
+  1    | outros               |     26     | R$0.09
+  2    | site de apostas      |     21     | R$0.07
+  3    | aposta online        |     20     | R$0.07
+  4    | casa de apostas      |     19     | R$0.07
+  5    | demo                 |     14     | R$0.05
+  ...
+------------------------------------------------------------
+T      | TODOS OS ITENS          |    150     | R$0.51
+Q      | QUANTIDADE ESPECÍFICA   | -          | -
+------------------------------------------------------------
 ```
 
 ## Estrutura do Projeto
@@ -106,8 +165,11 @@ SEO-LinkBuilder/
 
 A planilha do Google Sheets deve conter as seguintes colunas:
 
-- Coluna A: Tema do artigo
+- Coluna B: ID da campanha/linha
+- Coluna C: Data (formato YYYY/MM)
 - Coluna D: Site/domínio
+- Coluna F: Quantidade de palavras
+- Coluna H: Valor
 - Coluna I: Palavra-âncora para o link interno
 - Coluna J: URL da âncora (para onde o link deve apontar)
 - Coluna K: Título sugerido para o artigo
@@ -130,7 +192,7 @@ Se encontrar problemas com a autenticação:
 
 - O uso das APIs do Google Sheets, Docs e Drive é gratuito para a maioria dos casos de uso pessoal.
 - A API do Gemini tem custos baseados no número de tokens processados. Consulte o site do Google para informações atualizadas sobre preços.
-- O script inclui uma calculadora de custos que estima o valor gasto a cada execução.
+- O script inclui uma calculadora de custos que estima o valor gasto a cada execução e por categoria.
 
 ## Contribuições
 

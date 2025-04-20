@@ -43,8 +43,24 @@ class DocsHandler:
             document_id = documento.get('documentId')
             self.logger.info(f"Documento criado com ID: {document_id}")
             
+            # Verifica o tamanho do conteúdo
+            self.logger.info(f"Tamanho do conteúdo: {len(conteudo)} caracteres")
+            
+            # Verificação da estrutura do texto
+            linhas = conteudo.split('\n')
+            self.logger.info(f"Número de linhas no texto: {len(linhas)}")
+            if len(linhas) > 0:
+                self.logger.info(f"Primeira linha (título): {linhas[0][:50]}...")
+            
+            # Depuração de info_link
+            if info_link:
+                self.logger.info(f"Informações de link: palavra='{info_link.get('palavra', '')}', URL={info_link.get('url', '')}")
+            else:
+                self.logger.warning("Nenhuma informação de link fornecida")
+
             # Converte o texto para requests da API do Docs, incluindo informações do link
             requests = converter_markdown_para_docs(conteudo, info_link)
+            self.logger.info(f"Gerados {len(requests)} requests para a API do Docs")
             
             # Aplica as atualizações ao documento
             if requests:
@@ -53,6 +69,8 @@ class DocsHandler:
                     body={"requests": requests}
                 ).execute()
                 self.logger.info(f"Conteúdo inserido no documento {document_id}")
+            else:
+                self.logger.warning("Nenhum request gerado para atualizar o documento")
             
             # Formata o título principal (H1) para tamanho configurado
             self._formatar_titulo(document_id, TITULO_TAMANHO)
@@ -145,3 +163,165 @@ class DocsHandler:
         except Exception as e:
             self.logger.warning(f"Erro ao mover documento para a pasta: {e}")
             # Isso não deve interromper o fluxo principal, apenas logamos o erro 
+    
+    def obter_conteudo_documento(self, document_id: str) -> str:
+        """
+        Recupera o conteúdo de um documento do Google Docs.
+        
+        Args:
+            document_id: ID do documento do Google Docs a ser recuperado
+            
+        Returns:
+            Conteúdo do documento como texto
+        """
+        try:
+            # Obtém o documento
+            documento = self.service_docs.documents().get(documentId=document_id).execute()
+            
+            # Extrai o conteúdo do documento
+            conteudo = ''
+            if 'body' in documento and 'content' in documento['body']:
+                for elemento in documento['body']['content']:
+                    if 'paragraph' in elemento:
+                        for item in elemento['paragraph']['elements']:
+                            if 'textRun' in item and 'content' in item['textRun']:
+                                conteudo += item['textRun']['content']
+            
+            self.logger.info(f"Conteúdo do documento {document_id} recuperado com sucesso ({len(conteudo)} caracteres)")
+            return conteudo
+        
+        except Exception as e:
+            self.logger.error(f"Erro ao recuperar conteúdo do documento {document_id}: {e}")
+            raise
+    
+    def atualizar_documento(self, document_id: str, titulo: str, conteudo: str, nome_arquivo: str, info_link: dict = None) -> tuple:
+        """
+        Atualiza um documento existente no Google Docs com novo título e conteúdo.
+        
+        Args:
+            document_id: ID do documento existente
+            titulo: Novo título para o documento
+            conteudo: Novo conteúdo do documento
+            nome_arquivo: Nome para identificar o documento
+            info_link: Informações sobre o link inserido no conteúdo
+            
+        Returns:
+            Tupla (document_id, document_url)
+        """
+        try:
+            # Primeiro, renomeia o documento
+            self.service_drive.files().update(
+                fileId=document_id,
+                body={'name': nome_arquivo}
+            ).execute()
+            
+            # Prepara o conteúdo (titulo + corpo)
+            conteudo_completo = f"{titulo}\n\n{conteudo}"
+            
+            # Limpa o documento existente
+            self.service_docs.documents().batchUpdate(
+                documentId=document_id,
+                body={
+                    'requests': [
+                        {
+                            'deleteContentRange': {
+                                'range': {
+                                    'startIndex': 1,
+                                    'endIndex': self._obter_tamanho_documento(document_id)
+                                }
+                            }
+                        }
+                    ]
+                }
+            ).execute()
+            
+            # Insere o novo conteúdo
+            self.service_docs.documents().batchUpdate(
+                documentId=document_id,
+                body={
+                    'requests': [
+                        {
+                            'insertText': {
+                                'location': {
+                                    'index': 1
+                                },
+                                'text': conteudo_completo
+                            }
+                        }
+                    ]
+                }
+            ).execute()
+            
+            # Formata o título (primeira linha) como H1
+            self.service_docs.documents().batchUpdate(
+                documentId=document_id,
+                body={
+                    'requests': [
+                        {
+                            'updateParagraphStyle': {
+                                'range': {
+                                    'startIndex': 1,
+                                    'endIndex': len(titulo) + 1
+                                },
+                                'paragraphStyle': {
+                                    'namedStyleType': 'HEADING_1'
+                                },
+                                'fields': 'namedStyleType'
+                            }
+                        }
+                    ]
+                }
+            ).execute()
+            
+            # Se houver informações de link, formata o link
+            if info_link and 'inicio' in info_link and 'fim' in info_link:
+                # Ajusta os índices para o documento atualizado (adiciona o tamanho do título + 2 quebras de linha)
+                offset = len(titulo) + 2
+                inicio_link = info_link['inicio'] + offset
+                fim_link = info_link['fim'] + offset
+                
+                # Adiciona o link
+                self.service_docs.documents().batchUpdate(
+                    documentId=document_id,
+                    body={
+                        'requests': [
+                            {
+                                'updateTextStyle': {
+                                    'range': {
+                                        'startIndex': inicio_link,
+                                        'endIndex': fim_link
+                                    },
+                                    'textStyle': {
+                                        'link': {
+                                            'url': info_link['url']
+                                        }
+                                    },
+                                    'fields': 'link'
+                                }
+                            }
+                        ]
+                    }
+                ).execute()
+            
+            # Obtém a URL do documento
+            document_url = f"https://docs.google.com/document/d/{document_id}/edit"
+            
+            self.logger.info(f"Documento {document_id} atualizado com sucesso")
+            return document_id, document_url
+        
+        except Exception as e:
+            self.logger.error(f"Erro ao atualizar documento {document_id}: {e}")
+            raise
+            
+    def _obter_tamanho_documento(self, document_id: str) -> int:
+        """
+        Obtém o tamanho total (número de caracteres) de um documento.
+        
+        Args:
+            document_id: ID do documento
+            
+        Returns:
+            Número de caracteres no documento
+        """
+        documento = self.service_docs.documents().get(documentId=document_id).execute()
+        return documento.get('body', {}).get('content', [])[-1].get('endIndex', 0) 

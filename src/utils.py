@@ -61,97 +61,97 @@ def converter_markdown_para_docs(texto, info_link=None):
         Lista de requests para a API do Docs
     """
     requests = []
+    
     # Divide o texto em linhas
-    linhas = texto.split('\n')
+    linhas = [linha.strip() for linha in texto.split('\n') if linha.strip()]
     
     # Primeira linha não vazia é o título principal
-    titulo_principal = None
-    linha_atual = 0
+    if not linhas:
+        return requests
     
-    # Encontra o título principal (primeira linha não vazia)
-    while linha_atual < len(linhas) and not titulo_principal:
-        if linhas[linha_atual].strip():
-            titulo_principal = linhas[linha_atual].strip()
-            # Insere o título principal
-            requests.append({
-                'insertText': {
-                    'location': {'index': 1},
-                    'text': titulo_principal + '\n'
-                }
-            })
-            # Formata como Heading 1
-            requests.append({
-                'updateParagraphStyle': {
-                    'range': {
-                        'startIndex': 1,
-                        'endIndex': 1 + len(titulo_principal) + 1
-                    },
-                    'paragraphStyle': {
-                        'namedStyleType': 'HEADING_1'
-                    },
-                    'fields': 'namedStyleType'
-                }
-            })
-        linha_atual += 1
+    titulo_principal = linhas[0]
+    
+    # Insere o título principal
+    requests.append({
+        'insertText': {
+            'location': {'index': 1},
+            'text': titulo_principal + '\n\n'
+        }
+    })
+    
+    # Formata como Heading 1
+    requests.append({
+        'updateParagraphStyle': {
+            'range': {
+                'startIndex': 1,
+                'endIndex': 1 + len(titulo_principal)
+            },
+            'paragraphStyle': {
+                'namedStyleType': 'HEADING_1'
+            },
+            'fields': 'namedStyleType'
+        }
+    })
+    
+    # Aplica estilo ao título (tamanho 13pt, negrito)
+    requests.append({
+        'updateTextStyle': {
+            'range': {
+                'startIndex': 1,
+                'endIndex': 1 + len(titulo_principal) 
+            },
+            'textStyle': {
+                'fontSize': {
+                    'magnitude': 13,
+                    'unit': 'PT'
+                },
+                'bold': True
+            },
+            'fields': 'fontSize,bold'
+        }
+    })
     
     # Variáveis para rastrear a posição atual no documento
-    posicao_atual = 1 + len(titulo_principal) + 1 if titulo_principal else 1
+    posicao_atual = 1 + len(titulo_principal) + 2  # +2 para os dois \n após o título
     
-    # Rastreia a posição atual no texto original 
-    posicao_texto_original = 0
+    # Mapa para rastrear posições exatas de cada parágrafo no documento
+    mapa_paragrafos = {}
+    indice_paragrafo = 0
     
-    # Processa o restante do texto
-    paragrafo_atual = ""
-    modo_paragrafo = True
+    # O título é considerado o parágrafo 0
+    mapa_paragrafos[0] = {
+        'texto': titulo_principal,
+        'inicio': 1,
+        'fim': 1 + len(titulo_principal)
+    }
     
-    for i in range(linha_atual, len(linhas)):
-        linha = linhas[i].strip()
+    # Processa o restante do texto (a partir da segunda linha)
+    i = 1
+    while i < len(linhas):
+        linha = linhas[i]
+        indice_paragrafo += 1
         
-        # Atualiza a posição no texto original
-        posicao_texto_original += len(linhas[i]) + 1  # +1 para o \n
+        # Verifica se é um possível subtítulo
+        # Características de um subtítulo: linha curta, sem pontuação final, entre parágrafos
+        eh_subtitulo = len(linha) < 60 and not linha[-1] in '.!?:;,' and (i == 1 or i == len(linhas)-1 or len(linhas[i-1]) > 50 or len(linhas[i+1]) > 50)
         
-        # Linha vazia significa quebra de parágrafo
-        if not linha:
-            if paragrafo_atual:
-                # Adiciona o parágrafo ao documento
-                requests.append({
-                    'insertText': {
-                        'location': {'index': 1},
-                        'text': paragrafo_atual + '\n\n'
-                    }
-                })
-                
-                # Atualiza a posição atual
-                posicao_atual += len(paragrafo_atual) + 2  # +2 para \n\n
-                
-                paragrafo_atual = ""
-            modo_paragrafo = True
-            continue
+        # Registra a posição deste parágrafo no documento
+        inicio_paragrafo = posicao_atual
+        fim_paragrafo = posicao_atual + len(linha)
         
-        # Verifica se é um subtítulo (geralmente são linhas curtas)
-        # A heurística é: linha curta (< 60 chars) e que não termina com pontuação
-        # E que não está no meio de um parágrafo
-        eh_subtitulo = False
-        if modo_paragrafo and len(linha) < 60 and not linha[-1] in '.!?:;,':
-            eh_subtitulo = True
+        mapa_paragrafos[indice_paragrafo] = {
+            'texto': linha,
+            'inicio': inicio_paragrafo,
+            'fim': fim_paragrafo,
+            'tipo': 'subtitulo' if eh_subtitulo else 'paragrafo'
+        }
         
         if eh_subtitulo:
-            # Se tem texto acumulado, insere como parágrafo
-            if paragrafo_atual:
-                requests.append({
-                    'insertText': {
-                        'location': {'index': 1},
-                        'text': paragrafo_atual + '\n\n'
-                    }
-                })
-                posicao_atual += len(paragrafo_atual) + 2
-                paragrafo_atual = ""
-            
             # Insere o subtítulo
             requests.append({
                 'insertText': {
-                    'location': {'index': 1},
-                    'text': linha + '\n'
+                    'location': {'index': posicao_atual},
+                    'text': linha + '\n\n'
                 }
             })
             
@@ -159,8 +159,8 @@ def converter_markdown_para_docs(texto, info_link=None):
             requests.append({
                 'updateParagraphStyle': {
                     'range': {
-                        'startIndex': 1,
-                        'endIndex': 1 + len(linha) + 1
+                        'startIndex': posicao_atual,
+                        'endIndex': posicao_atual + len(linha)
                     },
                     'paragraphStyle': {
                         'namedStyleType': 'HEADING_2'
@@ -169,57 +169,176 @@ def converter_markdown_para_docs(texto, info_link=None):
                 }
             })
             
-            # Atualiza a posição atual
-            posicao_atual += len(linha) + 1
+            # Aplica estilo ao subtítulo (tamanho 11pt, negrito)
+            requests.append({
+                'updateTextStyle': {
+                    'range': {
+                        'startIndex': posicao_atual,
+                        'endIndex': posicao_atual + len(linha)
+                    },
+                    'textStyle': {
+                        'fontSize': {
+                            'magnitude': 11,
+                            'unit': 'PT'
+                        },
+                        'bold': True
+                    },
+                    'fields': 'fontSize,bold'
+                }
+            })
             
-            modo_paragrafo = True
+            # Atualiza a posição atual
+            posicao_atual += len(linha) + 2  # +2 para os dois \n
         else:
-            # Texto normal, adiciona ao parágrafo atual
-            if paragrafo_atual:
-                paragrafo_atual += " " + linha
-            else:
-                paragrafo_atual = linha
-            modo_paragrafo = False
-    
-    # Adiciona qualquer texto restante
-    if paragrafo_atual:
-        requests.append({
-            'insertText': {
-                'location': {'index': 1},
-                'text': paragrafo_atual + '\n'
-            }
-        })
-        posicao_atual += len(paragrafo_atual) + 1
+            # É um parágrafo normal
+            requests.append({
+                'insertText': {
+                    'location': {'index': posicao_atual},
+                    'text': linha + '\n\n'
+                }
+            })
+            
+            # Aplica estilo ao parágrafo (tamanho 11pt, normal)
+            requests.append({
+                'updateTextStyle': {
+                    'range': {
+                        'startIndex': posicao_atual,
+                        'endIndex': posicao_atual + len(linha)
+                    },
+                    'textStyle': {
+                        'fontSize': {
+                            'magnitude': 11,
+                            'unit': 'PT'
+                        },
+                        'bold': False
+                    },
+                    'fields': 'fontSize,bold'
+                }
+            })
+            
+            # Atualiza a posição atual
+            posicao_atual += len(linha) + 2  # +2 para os dois \n
+        
+        i += 1
     
     # Se temos informações de link, adiciona o link
-    if info_link:
-        # Encontra a posição do link no documento
-        # Precisamos recalcular as posições no documento final
-        texto_completo = texto
+    if info_link and 'palavra' in info_link and 'url' in info_link:
+        palavra = info_link['palavra']
+        url = info_link['url']
+        paragrafo_alvo = info_link.get('paragrafo', -1)
         
-        # Calcula a posição relativa ao início do documento
-        posicao_inicio = info_link['posicao_inicio'] 
-        posicao_fim = info_link['posicao_fim']
-        
-        # Posições aproximadas no documento final
-        doc_inicio = posicao_inicio + 1  # +1 para o índice base do Google Docs
-        doc_fim = posicao_fim + 1
-        
-        # Adiciona o comando para criar o link
-        requests.append({
-            'updateTextStyle': {
-                'range': {
-                    'startIndex': doc_inicio,
-                    'endIndex': doc_fim
-                },
-                'textStyle': {
-                    'link': {
-                        'url': info_link['url']
+        # Se sabemos em qual parágrafo a palavra está
+        if paragrafo_alvo > 0 and paragrafo_alvo in mapa_paragrafos:
+            paragrafo = mapa_paragrafos[paragrafo_alvo]
+            texto_paragrafo = paragrafo['texto'].lower()
+            posicao_na_linha = texto_paragrafo.find(palavra.lower())
+            
+            if posicao_na_linha >= 0:
+                # Calcula a posição exata no documento
+                posicao_inicio = paragrafo['inicio'] + posicao_na_linha
+                posicao_fim = posicao_inicio + len(palavra)
+                
+                # Adiciona o comando para criar o link
+                requests.append({
+                    'updateTextStyle': {
+                        'range': {
+                            'startIndex': posicao_inicio,
+                            'endIndex': posicao_fim
+                        },
+                        'textStyle': {
+                            'link': {
+                                'url': url
+                            }
+                        },
+                        'fields': 'link'
                     }
-                },
-                'fields': 'link'
-            }
-        })
+                })
+                
+                # Adiciona um estilo extra para destacar o link
+                requests.append({
+                    'updateTextStyle': {
+                        'range': {
+                            'startIndex': posicao_inicio,
+                            'endIndex': posicao_fim
+                        },
+                        'textStyle': {
+                            'foregroundColor': {
+                                'color': {
+                                    'rgbColor': {
+                                        'blue': 0.8,
+                                        'red': 0.0,
+                                        'green': 0.0
+                                    }
+                                }
+                            },
+                            'underline': True
+                        },
+                        'fields': 'foregroundColor,underline'
+                    }
+                })
+                
+                logging.getLogger('seo_linkbuilder.utils').info(
+                    f"Link aplicado à palavra '{palavra}' no parágrafo {paragrafo_alvo} posição {posicao_inicio}-{posicao_fim}"
+                )
+                return requests
+        
+        # Se não sabemos o parágrafo exato ou não encontramos a palavra no parágrafo, procuramos em todos os parágrafos
+        for num_paragrafo, paragrafo in mapa_paragrafos.items():
+            # Pular parágrafos de título ou subtítulo
+            if paragrafo.get('tipo') == 'subtitulo':
+                continue
+                
+            texto_paragrafo = paragrafo['texto'].lower()
+            posicao_na_linha = texto_paragrafo.find(palavra.lower())
+            
+            if posicao_na_linha >= 0:
+                # Calcula a posição exata no documento
+                posicao_inicio = paragrafo['inicio'] + posicao_na_linha
+                posicao_fim = posicao_inicio + len(palavra)
+                
+                # Adiciona o comando para criar o link
+                requests.append({
+                    'updateTextStyle': {
+                        'range': {
+                            'startIndex': posicao_inicio,
+                            'endIndex': posicao_fim
+                        },
+                        'textStyle': {
+                            'link': {
+                                'url': url
+                            }
+                        },
+                        'fields': 'link'
+                    }
+                })
+                
+                # Adiciona um estilo extra para destacar o link
+                requests.append({
+                    'updateTextStyle': {
+                        'range': {
+                            'startIndex': posicao_inicio,
+                            'endIndex': posicao_fim
+                        },
+                        'textStyle': {
+                            'foregroundColor': {
+                                'color': {
+                                    'rgbColor': {
+                                        'blue': 0.8,
+                                        'red': 0.0,
+                                        'green': 0.0
+                                    }
+                                }
+                            },
+                            'underline': True
+                        },
+                        'fields': 'foregroundColor,underline'
+                    }
+                })
+                
+                logging.getLogger('seo_linkbuilder.utils').info(
+                    f"Link aplicado à palavra '{palavra}' no parágrafo {num_paragrafo} posição {posicao_inicio}-{posicao_fim}"
+                )
+                break
     
     return requests
 
@@ -242,31 +361,166 @@ def contar_tokens(texto, modelo="gpt-3.5-turbo"):
 
 def substituir_links_markdown(texto, palavra_ancora, url_ancora):
     """
-    Substitui ocorrências da palavra âncora para criar links no Google Docs.
-    Agora trabalha com texto em formato natural, em vez de markdown.
+    Identifica a palavra âncora no texto para criar um link no Google Docs.
+    Verifica se a palavra foi inserida de forma natural dentro de um contexto.
+    
+    Args:
+        texto: O texto a ser analisado
+        palavra_ancora: A palavra âncora a ser encontrada
+        url_ancora: A URL para a qual o link deve apontar
+    
+    Returns:
+        Tupla (texto_original, info_link)
     """
-    # Padrão regex para encontrar a palavra âncora como palavra completa (ignorando case)
-    padrao = r'(^|[^\w])(' + re.escape(palavra_ancora) + r')([^\w]|$)'
+    # Logger para registrar o processo
+    logger = logging.getLogger('seo_linkbuilder.utils')
     
-    # Verificamos se a palavra âncora foi encontrada
-    match = re.search(padrao, texto, flags=re.IGNORECASE)
+    # Dividir o texto em parágrafos para análise contextual
+    paragrafos = [p for p in texto.split('\n') if p.strip()]
     
-    if not match:
-        # Se não encontrou, retorna o texto original
-        return texto
+    # Se a palavra não for encontrada exatamente como está, tentamos abordagens alternativas
+    if palavra_ancora not in texto:
+        logger.warning(f"Palavra âncora '{palavra_ancora}' não encontrada exatamente como fornecida. Tentando alternativas...")
+        
+        # Busca case-insensitive
+        padrao = re.compile(re.escape(palavra_ancora), re.IGNORECASE)
+        match = padrao.search(texto)
+        
+        if match:
+            # Encontrou uma correspondência case-insensitive
+            palavra_encontrada = texto[match.start():match.end()]
+            logger.info(f"Palavra âncora encontrada em formato diferente: '{palavra_encontrada}'")
+            
+            # Analisa o contexto da palavra para verificar se foi inserida naturalmente
+            inicio_contexto = max(0, match.start() - 50)
+            fim_contexto = min(len(texto), match.end() + 50)
+            contexto = texto[inicio_contexto:fim_contexto]
+            logger.info(f"Contexto da palavra-âncora: '...{contexto}...'")
+            
+            # Identifica o parágrafo onde a palavra foi encontrada
+            for i, paragrafo in enumerate(paragrafos):
+                if palavra_encontrada in paragrafo:
+                    logger.info(f"Palavra-âncora encontrada no parágrafo {i+1}: '{paragrafo[:100]}...'")
+                    
+                    # Verifica se está nos parágrafos iniciais conforme solicitado
+                    if i < 3:
+                        logger.info(f"✓ Palavra-âncora inserida no parágrafo {i+1} conforme solicitado.")
+                    else:
+                        logger.warning(f"⚠️ Palavra-âncora inserida no parágrafo {i+1}, mas deveria estar nos parágrafos 2 ou 3.")
+                    
+                    break
+            
+            # Retorna a palavra exata encontrada no texto
+            info_link = {
+                'palavra': palavra_encontrada,
+                'url': url_ancora,
+                'paragrafo': i+1 if 'i' in locals() else -1,
+                'contexto_natural': True
+            }
+            return texto, info_link
+        
+        # Tenta plurais/singulares baseado em regras simples para português
+        palavra_alternativa = None
+        if palavra_ancora.endswith('s'):
+            # Tenta remover o 's' do plural
+            palavra_alternativa = palavra_ancora[:-1]
+        else:
+            # Tenta adicionar 's' para criar plural
+            palavra_alternativa = palavra_ancora + 's'
+        
+        # Busca alternativa
+        if palavra_alternativa in texto:
+            logger.info(f"Encontrada forma alternativa '{palavra_alternativa}' para a palavra âncora")
+            
+            # Procura a palavra alternativa nos parágrafos
+            for i, paragrafo in enumerate(paragrafos):
+                if palavra_alternativa in paragrafo:
+                    logger.info(f"Forma alternativa encontrada no parágrafo {i+1}: '{paragrafo[:100]}...'")
+                    
+                    # Verifica se está nos parágrafos iniciais conforme solicitado
+                    if i < 3:
+                        logger.info(f"✓ Forma alternativa da palavra-âncora inserida no parágrafo {i+1}.")
+                    else:
+                        logger.warning(f"⚠️ Forma alternativa inserida no parágrafo {i+1}, mas deveria estar nos parágrafos 2 ou 3.")
+                    
+                    break
+            
+            info_link = {
+                'palavra': palavra_alternativa,
+                'url': url_ancora,
+                'paragrafo': i+1 if 'i' in locals() else -1,
+                'contexto_natural': True
+            }
+            return texto, info_link
+        
+        # Procura apenas pela parte inicial da palavra âncora
+        if len(palavra_ancora) > 5:
+            raiz = palavra_ancora[:5]  # Primeiros 5 caracteres
+            padrao = re.compile(f"{re.escape(raiz)}\\w+", re.IGNORECASE)
+            match = padrao.search(texto)
+            
+            if match:
+                palavra_encontrada = texto[match.start():match.end()]
+                logger.info(f"Encontrada palavra com a mesma raiz: '{palavra_encontrada}'")
+                
+                # Analisa o contexto da palavra para verificar se foi inserida naturalmente
+                inicio_contexto = max(0, match.start() - 50)
+                fim_contexto = min(len(texto), match.end() + 50)
+                contexto = texto[inicio_contexto:fim_contexto]
+                logger.info(f"Contexto da palavra com mesma raiz: '...{contexto}...'")
+                
+                # Verifica em qual parágrafo a palavra foi encontrada
+                for i, paragrafo in enumerate(paragrafos):
+                    if palavra_encontrada in paragrafo:
+                        logger.info(f"Palavra com mesma raiz encontrada no parágrafo {i+1}")
+                        
+                        # Verifica se está nos parágrafos iniciais conforme solicitado
+                        if i < 3:
+                            logger.info(f"✓ Palavra com mesma raiz inserida no parágrafo {i+1} conforme solicitado.")
+                        else:
+                            logger.warning(f"⚠️ Palavra com mesma raiz inserida no parágrafo {i+1}, mas deveria estar nos parágrafos 2 ou 3.")
+                        
+                        break
+                
+                info_link = {
+                    'palavra': palavra_encontrada,
+                    'url': url_ancora,
+                    'paragrafo': i+1 if 'i' in locals() else -1,
+                    'contexto_natural': True
+                }
+                return texto, info_link
+        
+        # Se nenhuma tentativa encontrou a palavra, retornamos None para info_link
+        logger.error(f"❌ Não foi possível encontrar a palavra âncora '{palavra_ancora}' ou alternativas no texto")
+        return texto, None
     
-    # Posição onde a palavra foi encontrada
-    posicao_inicio = match.start(2)
-    posicao_fim = match.end(2)
+    # Palavra encontrada exatamente como fornecida
+    logger.info(f"✓ Palavra âncora '{palavra_ancora}' encontrada exatamente como fornecida")
     
-    # Guardamos a informação da posição da palavra âncora para criar o link posteriormente
-    # Esta informação será usada pela função converter_markdown_para_docs
+    # Verifica em qual parágrafo a palavra-âncora foi inserida
+    for i, paragrafo in enumerate(paragrafos):
+        if palavra_ancora in paragrafo:
+            # Verifica se está nos parágrafos iniciais conforme solicitado
+            if i < 3:
+                logger.info(f"✓ Palavra-âncora inserida no parágrafo {i+1} conforme solicitado.")
+            else:
+                logger.warning(f"⚠️ Palavra-âncora inserida no parágrafo {i+1}, mas deveria estar nos parágrafos 2 ou 3.")
+            
+            # Analisa o contexto da palavra para verificar se foi inserida naturalmente
+            match = re.search(r'\b' + re.escape(palavra_ancora) + r'\b', paragrafo)
+            if match:
+                inicio_contexto = max(0, match.start() - 50)
+                fim_contexto = min(len(paragrafo), match.end() + 50)
+                contexto = paragrafo[inicio_contexto:fim_contexto]
+                logger.info(f"Contexto da palavra-âncora: '...{contexto}...'")
+            
+            break
+    
     info_link = {
-        'palavra': match.group(2),
+        'palavra': palavra_ancora,
         'url': url_ancora,
-        'posicao_inicio': posicao_inicio,
-        'posicao_fim': posicao_fim
+        'paragrafo': i+1 if 'i' in locals() else -1,
+        'contexto_natural': True
     }
     
-    # Retornamos o texto original e a informação do link
     return texto, info_link 

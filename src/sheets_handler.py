@@ -10,7 +10,8 @@ from src.config import (
     COLUNAS, 
     LINHA_INICIAL,
     MES_ATUAL,
-    ANO_ATUAL
+    ANO_ATUAL,
+    FORMATO_DATA
 )
 from src.auth_handler import obter_credenciais, criar_servico_sheets
 
@@ -28,21 +29,22 @@ class SheetsHandler:
             self.logger.error(f"Erro ao inicializar o serviço do Sheets: {e}")
             raise
     
-    def ler_planilha(self, limite_linhas: Optional[int] = None) -> pd.DataFrame:
+    def ler_planilha(self, limite_linhas: Optional[int] = None, apenas_dados: bool = False) -> pd.DataFrame:
         """
         Lê a planilha do Google Sheets e retorna os dados como um DataFrame pandas.
         
         Args:
             limite_linhas: Opcional. Limita o número de linhas a serem lidas.
+            apenas_dados: Se True, retorna todos os dados sem filtrar por data.
         
         Returns:
             DataFrame com os dados da planilha
         """
         try:
-            # Obtém a planilha - agora lemos mais colunas (até N)
+            # Obtém a planilha - lemos até a coluna O
             resultado = self.service.spreadsheets().values().get(
                 spreadsheetId=SPREADSHEET_ID,
-                range=f"{SHEET_NAME}!A:O"  # Ampliado para incluir coluna N (tema)
+                range=f"{SHEET_NAME}!A:O"
             ).execute()
             
             # Extrai os valores
@@ -55,33 +57,59 @@ class SheetsHandler:
             # Converte para DataFrame pandas
             df = pd.DataFrame(valores)
             
-            # Inicializa as colunas com índices numéricos
-            # (não usamos os nomes das colunas porque vamos trabalhar com índices)
-            
             # Começa a partir da linha específica
             if len(df) > LINHA_INICIAL:
                 df = df.iloc[LINHA_INICIAL:]
                 self.logger.info(f"Começando a partir da linha {LINHA_INICIAL}")
             
-            # Filtra apenas as linhas do mês atual (usando a coluna C - DATA)
-            if MES_ATUAL and ANO_ATUAL:
+            # Se apenas_dados for True, ignoramos o filtro de data
+            if not apenas_dados and MES_ATUAL and ANO_ATUAL:
                 # Certifica-se de que temos pelo menos 3 colunas
                 if len(df.columns) > COLUNAS["DATA"]:
-                    # Filtra por padrão de data (MM/YYYY ou MM-YYYY ou YYYY-MM)
-                    padrao_data = f"{MES_ATUAL}[/-]{ANO_ATUAL}|{ANO_ATUAL}[/-]{MES_ATUAL}"
-                    
-                    # Cria uma máscara booleana para filtrar
-                    mascara_mes = df[COLUNAS["DATA"]].astype(str).str.contains(padrao_data, regex=True, na=False)
-                    df_filtrado = df[mascara_mes]
-                    
-                    if len(df_filtrado) > 0:
-                        df = df_filtrado
-                        self.logger.info(f"Filtrado para {len(df)} linhas do mês {MES_ATUAL}/{ANO_ATUAL}")
+                    coluna_data = COLUNAS["DATA"]
+                    # Verifica se a coluna existe no DataFrame
+                    if coluna_data < len(df.columns):
+                        # Determina o padrão de data com base no formato configurado
+                        formato = FORMATO_DATA.lower() if 'FORMATO_DATA' in globals() else 'mm/yyyy'
+                        
+                        if formato == 'yyyy/mm':
+                            padrao_data = f"{ANO_ATUAL}[/-]{MES_ATUAL}"
+                            self.logger.info(f"Buscando datas no formato YYYY/MM: {ANO_ATUAL}/{MES_ATUAL}")
+                        elif formato == 'yyyy-mm':
+                            padrao_data = f"{ANO_ATUAL}-{MES_ATUAL}"
+                            self.logger.info(f"Buscando datas no formato YYYY-MM: {ANO_ATUAL}-{MES_ATUAL}")
+                        else:  # mm/yyyy ou padrão
+                            padrao_data = f"{MES_ATUAL}[/-]{ANO_ATUAL}"
+                            self.logger.info(f"Buscando datas no formato MM/YYYY: {MES_ATUAL}/{ANO_ATUAL}")
+                        
+                        try:
+                            # Cria uma máscara booleana para filtrar
+                            mascara_mes = df[coluna_data].astype(str).str.contains(padrao_data, regex=True, na=False)
+                            df_filtrado = df[mascara_mes]
+                            
+                            if len(df_filtrado) > 0:
+                                df = df_filtrado
+                                self.logger.info(f"Filtrado para {len(df)} linhas do período {padrao_data}")
+                            else:
+                                self.logger.warning(f"Nenhuma linha encontrada para o período {padrao_data}")
+                                # IMPORTANTE: Se não achar pelo padrão, vamos procurar por substring simples
+                                alternativa = f"{ANO_ATUAL}/{MES_ATUAL}"
+                                mascara_alternativa = df[coluna_data].astype(str).str.contains(alternativa, regex=False, na=False)
+                                df_alternativo = df[mascara_alternativa]
+                                
+                                if len(df_alternativo) > 0:
+                                    df = df_alternativo
+                                    self.logger.info(f"Filtrado para {len(df)} linhas usando busca simples por '{alternativa}'")
+                        except Exception as e:
+                            self.logger.error(f"Erro ao filtrar por data: {e}")
+                            # Continua sem filtrar
                     else:
-                        self.logger.warning(f"Nenhuma linha encontrada para o mês {MES_ATUAL}/{ANO_ATUAL}")
+                        self.logger.warning(f"Coluna DATA (índice {coluna_data}) não encontrada. Continuando sem filtrar por data.")
+            elif apenas_dados:
+                self.logger.info("Modo 'apenas_dados' ativado: retornando todos os dados sem filtrar por data")
             
             # Aplica limite de linhas se especificado
-            if limite_linhas and len(df) > limite_linhas:
+            if limite_linhas and len(df) > limite_linhas and not apenas_dados:
                 df = df.iloc[:limite_linhas]
                 self.logger.info(f"Leitura limitada a {limite_linhas} linhas")
             
@@ -117,12 +145,8 @@ class SheetsHandler:
             # Limpa os valores None ou vazios
             dados = {k: v if v and str(v).strip() else f"Sem {k}" for k, v in dados.items()}
             
-            # Verifica se algum dado obrigatório está sem valor significativo
-            campos_obrigatorios = ['tema', 'palavra_ancora', 'url_ancora', 'titulo']
-            campos_nulos = [campo for campo in campos_obrigatorios if dados.get(campo).startswith("Sem ")]
-            
-            if campos_nulos:
-                self.logger.warning(f"Campos obrigatórios nulos: {', '.join(campos_nulos)}")
+            # Não precisamos mais verificar campos nulos, já que sabemos que tema e título geralmente são vazios
+            # e serão gerados automaticamente
             
             return dados
         
@@ -163,4 +187,37 @@ class SheetsHandler:
         
         except Exception as e:
             self.logger.error(f"Erro ao atualizar URL do documento na linha {indice_linha}: {e}")
+            return False
+
+    def atualizar_titulo_documento(self, indice_linha: int, titulo: str) -> bool:
+        """
+        Atualiza o título do documento na coluna K da planilha.
+        
+        Args:
+            indice_linha: Índice da linha a ser atualizada (relativo ao DataFrame filtrado)
+            titulo: Título do documento gerado
+        
+        Returns:
+            True se a atualização foi bem-sucedida, False caso contrário
+        """
+        try:
+            # Índice na planilha original é LINHA_INICIAL + índice no DataFrame + 1 (para o cabeçalho)
+            linha_sheets = LINHA_INICIAL + indice_linha + 1
+            
+            # Prepara o range para atualização (coluna K)
+            range_atualizacao = f"{SHEET_NAME}!K{linha_sheets}"
+            
+            # Atualiza a célula
+            self.service.spreadsheets().values().update(
+                spreadsheetId=SPREADSHEET_ID,
+                range=range_atualizacao,
+                valueInputOption="RAW",
+                body={"values": [[titulo]]}
+            ).execute()
+            
+            self.logger.info(f"Título do documento atualizado na linha {linha_sheets}: {titulo}")
+            return True
+        
+        except Exception as e:
+            self.logger.error(f"Erro ao atualizar título do documento na linha {indice_linha}: {e}")
             return False 
