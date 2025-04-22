@@ -3,14 +3,13 @@ import logging
 import pandas as pd
 from typing import List, Dict, Any, Optional
 import re
+import os
 
 from src.config import (
     SPREADSHEET_ID, 
     SHEET_NAME, 
     COLUNAS, 
     LINHA_INICIAL,
-    MES_ATUAL,
-    ANO_ATUAL,
     FORMATO_DATA
 )
 from src.auth_handler import obter_credenciais, criar_servico_sheets
@@ -62,50 +61,81 @@ class SheetsHandler:
                 df = df.iloc[LINHA_INICIAL:]
                 self.logger.info(f"Começando a partir da linha {LINHA_INICIAL}")
             
+            df_original = df.copy()  # Cópia para diagnóstico
+            
             # Se apenas_dados for True, ignoramos o filtro de data
-            if not apenas_dados and MES_ATUAL and ANO_ATUAL:
+            if not apenas_dados:
+                # Obtém os valores atualizados do ambiente (definidos no menu de seleção de mês)
+                mes_atual = os.environ.get('MES_ATUAL', '04')
+                ano_atual = os.environ.get('ANO_ATUAL', '2025')
+                
+                self.logger.info(f"Filtrando por período: {mes_atual}/{ano_atual}")
+                
                 # Certifica-se de que temos pelo menos 3 colunas
-                if len(df.columns) > COLUNAS["DATA"]:
-                    coluna_data = COLUNAS["DATA"]
+                if len(df.columns) > COLUNAS["data"]:
+                    coluna_data = COLUNAS["data"]
                     # Verifica se a coluna existe no DataFrame
                     if coluna_data < len(df.columns):
+                        # Examina os valores na coluna de data para diagnóstico
+                        valores_unicos = df[coluna_data].astype(str).unique()
+                        self.logger.info(f"Valores únicos na coluna data: {valores_unicos[:20]} {'...' if len(valores_unicos) > 20 else ''}")
+                        
                         # Determina o padrão de data com base no formato configurado
-                        formato = FORMATO_DATA.lower() if 'FORMATO_DATA' in globals() else 'mm/yyyy'
+                        formato = FORMATO_DATA.lower() if FORMATO_DATA else 'yyyy/mm'
                         
                         if formato == 'yyyy/mm':
-                            padrao_data = f"{ANO_ATUAL}[/-]{MES_ATUAL}"
-                            self.logger.info(f"Buscando datas no formato YYYY/MM: {ANO_ATUAL}/{MES_ATUAL}")
+                            padrao_data = f"{ano_atual}[/-]{mes_atual}"
+                            self.logger.info(f"Buscando datas no formato YYYY/MM: {ano_atual}/{mes_atual}")
                         elif formato == 'yyyy-mm':
-                            padrao_data = f"{ANO_ATUAL}-{MES_ATUAL}"
-                            self.logger.info(f"Buscando datas no formato YYYY-MM: {ANO_ATUAL}-{MES_ATUAL}")
+                            padrao_data = f"{ano_atual}-{mes_atual}"
+                            self.logger.info(f"Buscando datas no formato YYYY-MM: {ano_atual}-{mes_atual}")
                         else:  # mm/yyyy ou padrão
-                            padrao_data = f"{MES_ATUAL}[/-]{ANO_ATUAL}"
-                            self.logger.info(f"Buscando datas no formato MM/YYYY: {MES_ATUAL}/{ANO_ATUAL}")
+                            padrao_data = f"{mes_atual}[/-]{ano_atual}"
+                            self.logger.info(f"Buscando datas no formato MM/YYYY: {mes_atual}/{ano_atual}")
                         
                         try:
-                            # Cria uma máscara booleana para filtrar
-                            mascara_mes = df[coluna_data].astype(str).str.contains(padrao_data, regex=True, na=False)
-                            df_filtrado = df[mascara_mes]
+                            # Lista de padrões para tentar
+                            padroes_a_tentar = [
+                                (f"{ano_atual}[/-]{mes_atual}", "YYYY/MM (regex)"),
+                                (f"{ano_atual}/{mes_atual}", "YYYY/MM (exato)"),
+                                (f"{mes_atual}[/-]{ano_atual}", "MM/YYYY (regex)"),
+                                (f"{mes_atual}/{ano_atual}", "MM/YYYY (exato)"),
+                                (f"{ano_atual}-{mes_atual}", "YYYY-MM (exato)"),
+                                (f"{mes_atual}-{ano_atual}", "MM-YYYY (exato)")
+                            ]
                             
-                            if len(df_filtrado) > 0:
-                                df = df_filtrado
-                                self.logger.info(f"Filtrado para {len(df)} linhas do período {padrao_data}")
-                            else:
-                                self.logger.warning(f"Nenhuma linha encontrada para o período {padrao_data}")
-                                # IMPORTANTE: Se não achar pelo padrão, vamos procurar por substring simples
-                                alternativa = f"{ANO_ATUAL}/{MES_ATUAL}"
-                                mascara_alternativa = df[coluna_data].astype(str).str.contains(alternativa, regex=False, na=False)
-                                df_alternativo = df[mascara_alternativa]
+                            df_filtrado = None
+                            
+                            # Tenta cada padrão até encontrar registros
+                            for padrao, descricao in padroes_a_tentar:
+                                # Verifica se é regex ou string literal
+                                if '[' in padrao or '\\' in padrao:
+                                    mascara = df[coluna_data].astype(str).str.contains(padrao, regex=True, na=False)
+                                else:
+                                    mascara = df[coluna_data].astype(str).str.contains(padrao, regex=False, na=False)
+                                    
+                                temp_df = df[mascara]
                                 
-                                if len(df_alternativo) > 0:
-                                    df = df_alternativo
-                                    self.logger.info(f"Filtrado para {len(df)} linhas usando busca simples por '{alternativa}'")
+                                # Se encontrou registros, usa este padrão
+                                if len(temp_df) > 0:
+                                    df_filtrado = temp_df
+                                    self.logger.info(f"Filtrado para {len(df_filtrado)} linhas usando formato {descricao}: '{padrao}'")
+                                    break
+                            
+                            # Se nenhum padrão funcionou
+                            if df_filtrado is None or len(df_filtrado) == 0:
+                                self.logger.warning(f"Nenhuma linha encontrada para o período {mes_atual}/{ano_atual} em nenhum formato")
+                                # Retornar DataFrame vazio em vez de todos os dados quando não encontra registros para o período
+                                return pd.DataFrame()
+                            else:
+                                df = df_filtrado
                         except Exception as e:
                             self.logger.error(f"Erro ao filtrar por data: {e}")
+                            self.logger.exception("Detalhes do erro:")
                             # Continua sem filtrar
                     else:
-                        self.logger.warning(f"Coluna DATA (índice {coluna_data}) não encontrada. Continuando sem filtrar por data.")
-            elif apenas_dados:
+                        self.logger.warning(f"Coluna data (índice {coluna_data}) não encontrada. Continuando sem filtrar por data.")
+            else:
                 self.logger.info("Modo 'apenas_dados' ativado: retornando todos os dados sem filtrar por data")
             
             # Aplica limite de linhas se especificado
@@ -113,11 +143,12 @@ class SheetsHandler:
                 df = df.iloc[:limite_linhas]
                 self.logger.info(f"Leitura limitada a {limite_linhas} linhas")
             
-            self.logger.info(f"Lidos {len(df)} registros da planilha")
+            self.logger.info(f"Lidos {len(df)} registros da planilha de um total de {len(df_original)}")
             return df
         
         except Exception as e:
             self.logger.error(f"Erro ao ler a planilha: {e}")
+            self.logger.exception("Detalhes do erro:")
             raise
     
     def extrair_dados_linha(self, linha_df: pd.Series) -> Dict[str, str]:
@@ -134,12 +165,12 @@ class SheetsHandler:
             # Mapeamento usando os índices numéricos das colunas
             # Se o índice existe no DataFrame, usa o valor, senão None
             dados = {
-                'id': linha_df.get(COLUNAS["ID"]) if COLUNAS["ID"] in linha_df.index else None,
-                'tema': linha_df.get(COLUNAS["TEMA"]) if COLUNAS["TEMA"] in linha_df.index else None,
-                'site': linha_df.get(COLUNAS["SITE"]) if COLUNAS["SITE"] in linha_df.index else None,
-                'palavra_ancora': linha_df.get(COLUNAS["PALAVRA_ANCORA"]) if COLUNAS["PALAVRA_ANCORA"] in linha_df.index else None,
-                'url_ancora': linha_df.get(COLUNAS["URL_ANCORA"]) if COLUNAS["URL_ANCORA"] in linha_df.index else None,
-                'titulo': linha_df.get(COLUNAS["TITULO"]) if COLUNAS["TITULO"] in linha_df.index else None
+                'id': linha_df.get(COLUNAS["id"]) if COLUNAS["id"] in linha_df.index else None,
+                'tema': linha_df.get(COLUNAS["tema"]) if COLUNAS["tema"] and COLUNAS["tema"] in linha_df.index else None,
+                'site': linha_df.get(COLUNAS["site"]) if COLUNAS["site"] in linha_df.index else None,
+                'palavra_ancora': linha_df.get(COLUNAS["palavra_ancora"]) if COLUNAS["palavra_ancora"] in linha_df.index else None,
+                'url_ancora': linha_df.get(COLUNAS["url_ancora"]) if COLUNAS["url_ancora"] in linha_df.index else None,
+                'titulo': linha_df.get(COLUNAS["titulo"]) if COLUNAS["titulo"] in linha_df.index else None
             }
             
             # Limpa os valores None ou vazios

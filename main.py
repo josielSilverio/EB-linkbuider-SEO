@@ -15,7 +15,7 @@ from src.utils import configurar_logging
 from src.sheets_handler import SheetsHandler
 from src.gemini_handler import GeminiHandler, verificar_conteudo_proibido
 from src.docs_handler import DocsHandler
-from src.config import gerar_nome_arquivo, COLUNAS, estimar_custo_gemini, GEMINI_MAX_OUTPUT_TOKENS
+from src.config import gerar_nome_arquivo, COLUNAS, estimar_custo_gemini, GEMINI_MAX_OUTPUT_TOKENS, MESES
 
 def verificar_titulos_duplicados(sheets: SheetsHandler, gemini: GeminiHandler, docs: DocsHandler, modo_teste: bool = False):
     """
@@ -761,6 +761,182 @@ def filtrar_dataframe_por_categorias(df: pd.DataFrame, sheets: SheetsHandler, se
     logger.info(f"DataFrame filtrado com {len(df_filtrado)} linhas de {len(df)} originais.")
     return df_filtrado
 
+def apresentar_menu_meses(sheets: SheetsHandler = None) -> Tuple[str, str]:
+    """
+    Apresenta um menu interativo para o usuário escolher qual mês processar.
+    Verifica se existem dados para o período selecionado.
+    
+    Args:
+        sheets: Instância opcional de SheetsHandler para verificar disponibilidade de dados
+        
+    Returns:
+        Tupla com (ano, mês) selecionados no formato (YYYY, MM)
+    """
+    logger = logging.getLogger('seo_linkbuilder')
+    
+    try:
+        # Usar o dicionário de meses da configuração
+        meses = MESES
+        
+        # Criar um mapeamento inverso (nome do mês para código)
+        meses_invertido = {nome.lower(): codigo for codigo, nome in meses.items()}
+        
+        # Definir anos disponíveis (ano atual e próximo)
+        ano_atual_sistema = datetime.now().year
+        anos = [str(ano_atual_sistema), str(ano_atual_sistema + 1)]
+        
+        # Verificar quais períodos têm dados disponíveis se o sheets foi fornecido
+        periodos_disponiveis = {}
+        if sheets is not None:
+            logger.info("Verificando períodos disponíveis na planilha...")
+            try:
+                df_completo = sheets.ler_planilha(None, apenas_dados=True)
+                
+                if not df_completo.empty and COLUNAS["data"] < len(df_completo.columns):
+                    # Analisar a coluna de data para identificar períodos disponíveis
+                    for ano in anos:
+                        for mes_codigo in meses.keys():
+                            # Verificar o formato da data
+                            formato = FORMATO_DATA.lower() if FORMATO_DATA else 'yyyy/mm'
+                            
+                            if formato == 'yyyy/mm':
+                                padrao = f"{ano}[/-]{mes_codigo}"
+                            elif formato == 'yyyy-mm':
+                                padrao = f"{ano}-{mes_codigo}"
+                            else:  # mm/yyyy ou padrão
+                                padrao = f"{mes_codigo}[/-]{ano}"
+                            
+                            # Verificar se há dados para este período
+                            mascara = df_completo[COLUNAS["data"]].astype(str).str.contains(padrao, regex=True, na=False)
+                            contagem = mascara.sum()
+                            
+                            if contagem > 0:
+                                periodos_disponiveis[(ano, mes_codigo)] = contagem
+                                logger.info(f"Encontrados {contagem} registros para {meses[mes_codigo]} de {ano}")
+            except Exception as e:
+                logger.error(f"Erro ao verificar períodos disponíveis: {e}")
+        
+        print("\n" + "="*60)
+        print("MENU DE SELEÇÃO DE MÊS".center(60))
+        print("="*60)
+        
+        if periodos_disponiveis:
+            print("\nPeríodos com dados disponíveis:")
+            print("-"*60)
+            print("Ano | Mês             | Quantidade de registros")
+            print("-"*60)
+            
+            # Ordenar períodos por data (mais recente primeiro)
+            periodos_ordenados = sorted(periodos_disponiveis.items(), 
+                                       key=lambda x: (x[0][0], x[0][1]), 
+                                       reverse=True)
+            
+            for (ano, mes_codigo), contagem in periodos_ordenados:
+                print(f"{ano} | {meses[mes_codigo]:<15} | {contagem}")
+            
+            print("-"*60)
+        
+        # Solicitar escolha do ano
+        while True:
+            print("\nSelecione o ano:")
+            for i, ano in enumerate(anos):
+                print(f"{i+1}. {ano}")
+                
+            escolha_ano = input("\nDigite o número da opção ou o ano completo: ").strip()
+            
+            # Verificar se o usuário digitou o ano completo
+            if escolha_ano in anos:
+                ano_selecionado = escolha_ano
+                break
+                
+            # Verificar se o usuário digitou o número da opção
+            try:
+                indice_ano = int(escolha_ano) - 1
+                if 0 <= indice_ano < len(anos):
+                    ano_selecionado = anos[indice_ano]
+                    break
+                else:
+                    print(f"Por favor, digite um número entre 1 e {len(anos)}.")
+            except ValueError:
+                print(f"Por favor, digite um número válido ou o ano completo ({anos[0]} ou {anos[1]}).")
+        
+        # Solicitar escolha do mês
+        while True:
+            print("\nSelecione o mês:")
+            for codigo, nome in meses.items():
+                print(f"{codigo}. {nome}")
+                
+            escolha_mes = input("\nDigite o código do mês (01-12) ou o nome: ").strip()
+            
+            # Verificar pelo código do mês
+            if escolha_mes in meses:
+                mes_selecionado = escolha_mes
+                nome_mes = meses[mes_selecionado]
+                break
+                
+            # Verificar pelo nome do mês
+            elif escolha_mes.lower() in meses_invertido:
+                mes_selecionado = meses_invertido[escolha_mes.lower()]
+                nome_mes = meses[mes_selecionado]
+                break
+                
+            # Verificar se foi digitado um número sem o zero à esquerda
+            elif escolha_mes.isdigit() and 1 <= int(escolha_mes) <= 12:
+                mes_selecionado = f"{int(escolha_mes):02d}"  # Formata com zero à esquerda
+                nome_mes = meses[mes_selecionado]
+                break
+                
+            else:
+                print("Por favor, digite um código de mês válido (01-12) ou o nome do mês.")
+        
+        # Verificar se o período selecionado tem dados
+        periodo_selecionado = (ano_selecionado, mes_selecionado)
+        if periodos_disponiveis and periodo_selecionado not in periodos_disponiveis:
+            print(f"\n⚠️ AVISO: Não foram encontrados dados para {nome_mes} de {ano_selecionado}!")
+            
+            if len(periodos_disponiveis) > 0:
+                print("Períodos disponíveis:", end=" ")
+                for (ano, mes), _ in sorted(periodos_disponiveis.items()):
+                    print(f"{meses[mes]} de {ano}", end=", ")
+                print("\n")
+                
+                # Perguntar se deseja continuar mesmo assim
+                continuar = input("Deseja continuar mesmo assim? (S/N): ").strip().upper()
+                if continuar != 'S':
+                    # Oferecer para selecionar um período disponível
+                    usar_disponivel = input("Deseja selecionar um período disponível? (S/N): ").strip().upper()
+                    if usar_disponivel == 'S':
+                        # Pegar o período mais recente disponível
+                        periodo_mais_recente = sorted(periodos_disponiveis.keys(), 
+                                                    key=lambda x: (x[0], x[1]), 
+                                                    reverse=True)[0]
+                        
+                        ano_selecionado, mes_selecionado = periodo_mais_recente
+                        nome_mes = meses[mes_selecionado]
+                        print(f"\nUsando período disponível: {nome_mes} de {ano_selecionado}")
+                    else:
+                        # Continuar com a seleção atual mesmo sem dados
+                        print("\nContinuando com a seleção atual mesmo sem dados.")
+        
+        logger.info(f"Selecionado: {nome_mes} de {ano_selecionado}")
+        print(f"\nVocê selecionou: {nome_mes} de {ano_selecionado}")
+        
+        return (ano_selecionado, mes_selecionado)
+    
+    except Exception as e:
+        logger.error(f"Erro durante a seleção do mês: {e}")
+        logger.exception("Detalhes do erro:")
+        
+        # Em caso de erro, retornar valores padrão
+        mes_atual = datetime.now().month
+        ano_atual = datetime.now().year
+        mes_codigo = f"{mes_atual:02d}"
+        
+        logger.warning(f"Usando valores padrão: {MESES.get(mes_codigo, 'Mês atual')} de {ano_atual}")
+        print(f"\nOcorreu um erro na seleção. Usando: {MESES.get(mes_codigo, 'Mês atual')} de {ano_atual}")
+        
+        return (str(ano_atual), mes_codigo)
+
 def main(limite_linhas: int = None, modo_teste: bool = False, categorias_selecionadas: Dict = None, quantidade_especifica: int = None):
     """
     Função principal que orquestra o fluxo de trabalho.
@@ -776,14 +952,34 @@ def main(limite_linhas: int = None, modo_teste: bool = False, categorias_selecio
     logger = configurar_logging()
     logger.info(f"Iniciando script SEO-LinkBuilder - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     
-    # Inicializa os handlers
+    # Inicializa o sheets handler antes do menu para verificar períodos disponíveis
     try:
         sheets = SheetsHandler()
+        logger.info("SheetsHandler inicializado com sucesso")
+    except Exception as e:
+        logger.error(f"Erro ao inicializar SheetsHandler: {e}")
+        logger.exception("Detalhes do erro:")
+        sheets = None
+    
+    # Selecionar o mês e ano a processar
+    ano_selecionado, mes_selecionado = apresentar_menu_meses(sheets)
+    
+    # Configura as variáveis de ambiente para o mês selecionado
+    os.environ['ANO_ATUAL'] = ano_selecionado
+    os.environ['MES_ATUAL'] = mes_selecionado
+    
+    # Inicializa os handlers restantes
+    try:
+        if sheets is None:  # Se falhou na inicialização anterior
+            sheets = SheetsHandler()
+        
         gemini = GeminiHandler()
         docs = DocsHandler()
-        logger.info("Serviços inicializados com sucesso")
+        
+        logger.info("Handlers inicializados com sucesso")
     except Exception as e:
-        logger.error(f"Erro ao inicializar serviços: {e}")
+        logger.error(f"Erro ao inicializar handlers: {e}")
+        logger.exception("Detalhes do erro:")
         return
     
     # Lê a planilha completa
@@ -964,8 +1160,6 @@ if __name__ == "__main__":
                         help='Executa apenas para a primeira linha sem atualizar a planilha')
     parser.add_argument('--todos', action='store_true',
                         help='Processa todas as linhas da planilha')
-    parser.add_argument('--abril', action='store_true',
-                        help='Processa apenas as linhas de abril/2024 (já é o padrão)')
     
     args = parser.parse_args()
     
