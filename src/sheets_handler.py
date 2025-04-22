@@ -83,56 +83,56 @@ class SheetsHandler:
                         # Determina o padrão de data com base no formato configurado
                         formato = FORMATO_DATA.lower() if FORMATO_DATA else 'yyyy/mm'
                         
-                        if formato == 'yyyy/mm':
-                            padrao_data = f"{ano_atual}[/-]{mes_atual}"
-                            self.logger.info(f"Buscando datas no formato YYYY/MM: {ano_atual}/{mes_atual}")
-                        elif formato == 'yyyy-mm':
-                            padrao_data = f"{ano_atual}-{mes_atual}"
-                            self.logger.info(f"Buscando datas no formato YYYY-MM: {ano_atual}-{mes_atual}")
-                        else:  # mm/yyyy ou padrão
-                            padrao_data = f"{mes_atual}[/-]{ano_atual}"
-                            self.logger.info(f"Buscando datas no formato MM/YYYY: {mes_atual}/{ano_atual}")
+                        # Lista de padrões exatos para tentar (sem regex)
+                        formatos_a_tentar = [
+                            f"{ano_atual}/{mes_atual}",  # YYYY/MM
+                            f"{mes_atual}/{ano_atual}",  # MM/YYYY
+                            f"{ano_atual}-{mes_atual}",  # YYYY-MM
+                            f"{mes_atual}-{ano_atual}"   # MM-YYYY
+                        ]
                         
-                        try:
-                            # Lista de padrões para tentar
-                            padroes_a_tentar = [
-                                (f"{ano_atual}[/-]{mes_atual}", "YYYY/MM (regex)"),
-                                (f"{ano_atual}/{mes_atual}", "YYYY/MM (exato)"),
-                                (f"{mes_atual}[/-]{ano_atual}", "MM/YYYY (regex)"),
-                                (f"{mes_atual}/{ano_atual}", "MM/YYYY (exato)"),
-                                (f"{ano_atual}-{mes_atual}", "YYYY-MM (exato)"),
-                                (f"{mes_atual}-{ano_atual}", "MM-YYYY (exato)")
-                            ]
+                        # Inicializa DataFrame filtrado como vazio
+                        df_filtrado = pd.DataFrame()
+                        formato_encontrado = None
+                        
+                        # Para cada formato, tenta encontrar linhas que correspondam exatamente
+                        for fmt in formatos_a_tentar:
+                            # Cria uma máscara para encontrar apenas correspondências exatas
+                            # Convertemos para string e aplicamos filtragem exata
+                            linhas_encontradas = []
                             
-                            df_filtrado = None
-                            
-                            # Tenta cada padrão até encontrar registros
-                            for padrao, descricao in padroes_a_tentar:
-                                # Verifica se é regex ou string literal
-                                if '[' in padrao or '\\' in padrao:
-                                    mascara = df[coluna_data].astype(str).str.contains(padrao, regex=True, na=False)
-                                else:
-                                    mascara = df[coluna_data].astype(str).str.contains(padrao, regex=False, na=False)
+                            # Itera por cada linha para fazer comparação exata
+                            for idx, row in df.iterrows():
+                                if coluna_data < len(row) and row[coluna_data]:
+                                    # Obtém o valor da data e normaliza para comparação
+                                    valor_data = str(row[coluna_data]).strip()
                                     
-                                temp_df = df[mascara]
-                                
-                                # Se encontrou registros, usa este padrão
-                                if len(temp_df) > 0:
-                                    df_filtrado = temp_df
-                                    self.logger.info(f"Filtrado para {len(df_filtrado)} linhas usando formato {descricao}: '{padrao}'")
-                                    break
+                                    # Verificação exata para YYYY/MM ou MM/YYYY
+                                    if fmt == valor_data or fmt in valor_data.split():
+                                        linhas_encontradas.append(idx)
+                                    # Casos adicionais que queremos capturar
+                                    elif fmt.replace("-", "/") == valor_data or fmt.replace("/", "-") == valor_data:
+                                        linhas_encontradas.append(idx)
                             
-                            # Se nenhum padrão funcionou
-                            if df_filtrado is None or len(df_filtrado) == 0:
-                                self.logger.warning(f"Nenhuma linha encontrada para o período {mes_atual}/{ano_atual} em nenhum formato")
-                                # Retornar DataFrame vazio em vez de todos os dados quando não encontra registros para o período
-                                return pd.DataFrame()
-                            else:
-                                df = df_filtrado
-                        except Exception as e:
-                            self.logger.error(f"Erro ao filtrar por data: {e}")
-                            self.logger.exception("Detalhes do erro:")
-                            # Continua sem filtrar
+                            # Se encontrou linhas com este formato
+                            if linhas_encontradas:
+                                if len(linhas_encontradas) > 0:
+                                    temp_df = df.loc[linhas_encontradas]
+                                    self.logger.info(f"Encontradas {len(temp_df)} linhas com formato exato '{fmt}'")
+                                    df_filtrado = pd.concat([df_filtrado, temp_df])
+                                    formato_encontrado = fmt
+                        
+                        # Remove duplicados (caso uma linha tenha sido capturada por mais de um formato)
+                        df_filtrado = df_filtrado.drop_duplicates()
+                        
+                        # Verifica se encontrou algum dado
+                        if not df_filtrado.empty:
+                            df = df_filtrado
+                            self.logger.info(f"Filtrado para {len(df)} linhas do período {mes_atual}/{ano_atual} usando formato '{formato_encontrado}'")
+                        else:
+                            self.logger.warning(f"Nenhuma linha encontrada para o período {mes_atual}/{ano_atual} em nenhum formato")
+                            # Retornar DataFrame vazio
+                            return pd.DataFrame()
                     else:
                         self.logger.warning(f"Coluna data (índice {coluna_data}) não encontrada. Continuando sem filtrar por data.")
             else:

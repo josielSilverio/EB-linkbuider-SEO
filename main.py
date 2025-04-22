@@ -982,22 +982,72 @@ def main(limite_linhas: int = None, modo_teste: bool = False, categorias_selecio
         logger.exception("Detalhes do erro:")
         return
     
-    # Lê a planilha completa
+    # Lê a planilha com filtro de data aplicado
     try:
-        df_completo = sheets.ler_planilha(None, apenas_dados=True)
-        total_linhas_completo = len(df_completo)
-        logger.info(f"Planilha lida com sucesso. Total de {total_linhas_completo} linhas")
+        # Primeiro tentamos ler aplicando o filtro de data para verificar se existem dados
+        df = sheets.ler_planilha()
         
-        if total_linhas_completo == 0:
-            logger.warning("Nenhum dado encontrado na planilha. Encerrando.")
+        if df.empty:
+            logger.warning(f"Nenhum dado encontrado para o período {mes_selecionado}/{ano_selecionado}!")
+            print(f"\n⚠️ AVISO: Não foram encontrados dados para o período {MESES[mes_selecionado]} de {ano_selecionado}")
+            
+            # Vamos verificar quais períodos têm dados disponíveis
+            df_completo = sheets.ler_planilha(None, apenas_dados=True)
+            periodos_disponiveis = {}
+            
+            if not df_completo.empty and COLUNAS["data"] < len(df_completo.columns):
+                # Verificar todos os meses nos dois anos
+                anos = [str(datetime.now().year), str(datetime.now().year + 1)]
+                
+                for ano in anos:
+                    for mes_codigo in MESES.keys():
+                        # Verificar pelo formato exato
+                        mascara1 = df_completo[COLUNAS["data"]].astype(str).str.contains(f"{ano}/{mes_codigo}", regex=False)
+                        mascara2 = df_completo[COLUNAS["data"]].astype(str).str.contains(f"{mes_codigo}/{ano}", regex=False)
+                        
+                        contagem = mascara1.sum() + mascara2.sum()
+                        if contagem > 0:
+                            periodos_disponiveis[(ano, mes_codigo)] = contagem
+            
+            if periodos_disponiveis:
+                print("\nPeríodos com dados disponíveis:")
+                print("-" * 50)
+                for (ano, mes), count in sorted(periodos_disponiveis.items()):
+                    print(f"{MESES[mes]} de {ano}: {count} registros")
+                print("-" * 50)
+                
+                # Perguntar se quer selecionar outro período
+                continuar = input("\nDeseja selecionar outro período? (S/N): ").strip().upper()
+                if continuar == 'S':
+                    # Reiniciar o script
+                    print("\nReiniciando o script...\n")
+                    return main(limite_linhas, modo_teste, categorias_selecionadas, quantidade_especifica)
+            
+            print("Encerrando o script.")
             return
+            
+        total_linhas = len(df)
+        logger.info(f"Planilha filtrada para {mes_selecionado}/{ano_selecionado} lida com sucesso. Total de {total_linhas} linhas")
             
     except Exception as e:
         logger.error(f"Erro ao ler planilha: {e}")
+        logger.exception("Detalhes do erro:")
+        return
+    
+    # Agora que temos certeza de que existem dados para o período, lemos novamente para processar
+    # Lê a planilha completa para estimar custos por categoria (sem filtro de data)
+    try:
+        df_completo = sheets.ler_planilha(None, apenas_dados=True)
+        total_linhas_completo = len(df_completo)
+        logger.info(f"Planilha completa lida com sucesso. Total de {total_linhas_completo} linhas")
+            
+    except Exception as e:
+        logger.error(f"Erro ao ler planilha completa: {e}")
+        logger.exception("Detalhes do erro:")
         return
     
     # Estimar custos por categoria
-    categorias = estimar_custo_por_categoria(sheets, df_completo)
+    categorias = estimar_custo_por_categoria(sheets, df)  # Usar o dataframe filtrado, não o completo
     
     # Se não foram fornecidas categorias, apresentar menu para seleção
     if categorias_selecionadas is None:
@@ -1012,21 +1062,21 @@ def main(limite_linhas: int = None, modo_teste: bool = False, categorias_selecio
     if 'quantidade_especifica' in categorias_selecionadas:
         quantidade_especifica = categorias_selecionadas['quantidade_especifica']
         # Selecionar aleatoriamente a quantidade solicitada
-        if quantidade_especifica >= len(df_completo):
-            logger.info(f"A quantidade solicitada ({quantidade_especifica}) é maior ou igual ao total disponível ({len(df_completo)}). Usando todo o DataFrame.")
-            df = df_completo
+        if quantidade_especifica >= len(df):
+            logger.info(f"A quantidade solicitada ({quantidade_especifica}) é maior ou igual ao total disponível ({len(df)}). Usando todo o DataFrame.")
+            df_filtrado = df
         else:
             logger.info(f"Selecionando {quantidade_especifica} itens aleatoriamente.")
-            df = df_completo.sample(n=quantidade_especifica, random_state=42)
+            df_filtrado = df.sample(n=quantidade_especifica, random_state=42)
     else:
-        df = filtrar_dataframe_por_categorias(df_completo, sheets, categorias_selecionadas)
+        df_filtrado = filtrar_dataframe_por_categorias(df, sheets, categorias_selecionadas)
     
     # Aplicar limite de linhas se fornecido
     if limite_linhas is not None:
-        df = df.head(limite_linhas)
+        df_filtrado = df_filtrado.head(limite_linhas)
     
     # Verificar se ainda há linhas após a filtragem
-    total_linhas = len(df)
+    total_linhas = len(df_filtrado)
     if total_linhas == 0:
         logger.warning("Nenhuma linha restante após filtragem. Encerrando.")
         return
@@ -1049,7 +1099,7 @@ def main(limite_linhas: int = None, modo_teste: bool = False, categorias_selecio
     
     # Modo teste usa apenas a primeira linha
     if modo_teste:
-        df = df.iloc[:1]
+        df_filtrado = df_filtrado.iloc[:1]
         logger.info("EXECUTANDO EM MODO DE TESTE - Apenas a primeira linha será processada")
     
     # Métricas de custo
@@ -1058,7 +1108,7 @@ def main(limite_linhas: int = None, modo_teste: bool = False, categorias_selecio
     tokens_saida_total = 0
     
     # Processa cada linha
-    for i, (idx, linha) in enumerate(df.iterrows()):
+    for i, (idx, linha) in enumerate(df_filtrado.iterrows()):
         try:
             # Acesso direto às colunas ao invés de extrair_dados_linha
             id_campanha = str(linha[COLUNAS['id']]) if COLUNAS['id'] < len(linha) else 'Sem-ID'
@@ -1079,10 +1129,10 @@ def main(limite_linhas: int = None, modo_teste: bool = False, categorias_selecio
             
             # Pula linhas que parecem ser cabeçalho
             if palavra_ancora.lower() in ('palavra_ancora', 'palavra ancora', ''):
-                logger.info(f"Pulando linha {i+1}/{len(df)} que parece ser cabeçalho ou está vazia")
+                logger.info(f"Pulando linha {i+1}/{len(df_filtrado)} que parece ser cabeçalho ou está vazia")
                 continue
             
-            logger.info(f"Processando linha {i+1}/{len(df)}: ID {id_campanha} - {titulo}")
+            logger.info(f"Processando linha {i+1}/{len(df_filtrado)}: ID {id_campanha} - {titulo}")
             
             # Gera o conteúdo usando o Gemini
             logger.info(f"Gerando conteúdo com o Gemini para '{palavra_ancora}'...")
@@ -1129,7 +1179,7 @@ def main(limite_linhas: int = None, modo_teste: bool = False, categorias_selecio
     # Exibe resumo
     logger.info(f"\n{'='*50}")
     logger.info(f"RESUMO DE EXECUÇÃO - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    logger.info(f"Total de artigos processados: {len(df)}")
+    logger.info(f"Total de artigos processados: {len(df_filtrado)}")
     logger.info(f"Tokens de entrada: {tokens_entrada_total}")
     logger.info(f"Tokens de saída: {tokens_saida_total}")
     logger.info(f"Custo total estimado: ${custo_total:.4f} USD (aproximadamente R${custo_total*5:.2f})")
