@@ -9,8 +9,7 @@ from src.config import (
     SPREADSHEET_ID, 
     SHEET_NAME, 
     COLUNAS, 
-    LINHA_INICIAL,
-    FORMATO_DATA
+    LINHA_INICIAL
 )
 from src.auth_handler import obter_credenciais, criar_servico_sheets
 
@@ -28,122 +27,173 @@ class SheetsHandler:
             self.logger.error(f"Erro ao inicializar o serviço do Sheets: {e}")
             raise
     
-    def ler_planilha(self, limite_linhas: Optional[int] = None, apenas_dados: bool = False) -> pd.DataFrame:
+    def obter_planilhas_disponiveis(self):
+        """
+        Obtém a lista de planilhas disponíveis na conta do usuário.
+        
+        Returns:
+            Lista de dicionários com informações das planilhas (id, nome)
+        """
+        try:
+            # Lista todas as planilhas
+            resultado = self.service.files().list(
+                q="mimeType='application/vnd.google-apps.spreadsheet'",
+                spaces='drive',
+                fields='files(id, name)'
+            ).execute()
+            
+            # Extrai os arquivos retornados
+            planilhas = resultado.get('files', [])
+            
+            if not planilhas:
+                self.logger.warning("Nenhuma planilha encontrada")
+                return []
+                
+            self.logger.info(f"Encontradas {len(planilhas)} planilhas")
+            return planilhas
+            
+        except Exception as e:
+            self.logger.error(f"Erro ao listar planilhas disponíveis: {e}")
+            return []
+            
+    def obter_abas_disponiveis(self, spreadsheet_id=None):
+        """
+        Obtém a lista de abas disponíveis em uma planilha específica.
+        
+        Args:
+            spreadsheet_id: ID da planilha. Se None, usa o ID configurado no .env
+            
+        Returns:
+            Lista de dicionários com informações das abas (título, índice)
+        """
+        try:
+            # Usa o ID fornecido ou o configurado
+            id_planilha = spreadsheet_id or SPREADSHEET_ID
+            
+            # Obtém informações da planilha, incluindo suas abas
+            resultado = self.service.spreadsheets().get(
+                spreadsheetId=id_planilha
+            ).execute()
+            
+            # Extrai as abas (sheets)
+            abas = resultado.get('sheets', [])
+            
+            if not abas:
+                self.logger.warning(f"Nenhuma aba encontrada na planilha {id_planilha}")
+                return []
+                
+            # Formata os resultados para incluir apenas o que precisamos
+            abas_formatadas = []
+            for aba in abas:
+                props = aba.get('properties', {})
+                abas_formatadas.append({
+                    'titulo': props.get('title', 'Sem título'),
+                    'indice': props.get('index', 0)
+                })
+                
+            self.logger.info(f"Encontradas {len(abas_formatadas)} abas na planilha {id_planilha}")
+            return abas_formatadas
+            
+        except Exception as e:
+            self.logger.error(f"Erro ao listar abas da planilha {spreadsheet_id}: {e}")
+            return []
+    
+    def ler_planilha(self, limite_linhas: Optional[int] = None, apenas_dados: bool = False, spreadsheet_id=None, sheet_name=None) -> pd.DataFrame:
         """
         Lê a planilha do Google Sheets e retorna os dados como um DataFrame pandas.
+        Filtra apenas linhas que tenham IDs válidos.
         
         Args:
             limite_linhas: Opcional. Limita o número de linhas a serem lidas.
-            apenas_dados: Se True, retorna todos os dados sem filtrar por data.
+            apenas_dados: Se True, retorna todos os dados sem aplicar filtros adicionais.
+            spreadsheet_id: ID da planilha. Se None, usa o ID configurado no .env
+            sheet_name: Nome da aba. Se None, usa o nome configurado no .env
         
         Returns:
             DataFrame com os dados da planilha
         """
         try:
+            # Usa os IDs fornecidos ou os configurados
+            id_planilha = spreadsheet_id or SPREADSHEET_ID
+            nome_aba = sheet_name or SHEET_NAME
+            
+            self.logger.info(f"Tentando ler planilha {id_planilha}, aba {nome_aba}")
+            
             # Obtém a planilha - lemos até a coluna O
             resultado = self.service.spreadsheets().values().get(
-                spreadsheetId=SPREADSHEET_ID,
-                range=f"{SHEET_NAME}!A:O"
+                spreadsheetId=id_planilha,
+                range=f"{nome_aba}!A:O"
             ).execute()
             
             # Extrai os valores
             valores = resultado.get('values', [])
             
             if not valores:
-                self.logger.warning("Nenhum dado encontrado na planilha")
+                self.logger.warning(f"Nenhum dado encontrado na planilha {id_planilha}, aba {nome_aba}")
                 return pd.DataFrame()
+            
+            # Exibe informação sobre a quantidade de linhas lidas
+            self.logger.info(f"Lidas {len(valores)} linhas da planilha no total")
             
             # Converte para DataFrame pandas
             df = pd.DataFrame(valores)
             
-            # Começa a partir da linha específica
-            if len(df) > LINHA_INICIAL:
-                df = df.iloc[LINHA_INICIAL:]
-                self.logger.info(f"Começando a partir da linha {LINHA_INICIAL}")
+            # Preserva a primeira linha como cabeçalho para referência
+            cabecalho = df.iloc[0].copy() if len(df) > 0 else None
+            self.logger.info(f"Cabeçalho identificado: {cabecalho.values.tolist() if cabecalho is not None else 'Nenhum'}")
             
+            # Remove a linha de cabeçalho (sempre primeiro depois da conversão para DataFrame)
+            if len(df) > 1:
+                df = df.iloc[1:]
+                self.logger.info(f"Removendo linha de cabeçalho, restam {len(df)} linhas")
+            
+            # Garante que as linhas mantenham seus índices originais
+            df = df.reset_index(drop=True)
             df_original = df.copy()  # Cópia para diagnóstico
             
-            # Se apenas_dados for True, ignoramos o filtro de data
-            if not apenas_dados:
-                # Obtém os valores atualizados do ambiente (definidos no menu de seleção de mês)
-                mes_atual = os.environ.get('MES_ATUAL', '04')
-                ano_atual = os.environ.get('ANO_ATUAL', '2025')
-                
-                self.logger.info(f"Filtrando por período: {mes_atual}/{ano_atual}")
-                
-                # Certifica-se de que temos pelo menos 3 colunas
-                if len(df.columns) > COLUNAS["data"]:
-                    coluna_data = COLUNAS["data"]
-                    # Verifica se a coluna existe no DataFrame
-                    if coluna_data < len(df.columns):
-                        # Examina os valores na coluna de data para diagnóstico
-                        valores_unicos = df[coluna_data].astype(str).unique()
-                        self.logger.info(f"Valores únicos na coluna data: {valores_unicos[:20]} {'...' if len(valores_unicos) > 20 else ''}")
+            # Se apenas_dados for False, aplicamos o filtro para linhas com ID válido
+            if not apenas_dados and len(df.columns) > 0:
+                # Verifica se a coluna ID existe no DataFrame
+                if len(df.columns) > COLUNAS["id"]:
+                    coluna_id = COLUNAS["id"]
+                    
+                    # Filtra linhas que tenham um ID válido (não vazio e não um cabeçalho)
+                    def is_valid_id(id_value):
+                        if not id_value:  # Se for None ou string vazia
+                            return False
+                        id_str = str(id_value).strip().lower()
+                        # Verifica se não é um cabeçalho ou valor inválido
+                        if not id_str or id_str in ['id', 'identificador', 'código', 'code', 'none', 'nan', '#n/a', 'n/a']:
+                            return False
+                        return True
+                    
+                    # Aplica o filtro de ID
+                    if len(df) > 0:
+                        mascara = df[coluna_id].apply(is_valid_id)
+                        df_filtrado = df[mascara]
                         
-                        # Determina o padrão de data com base no formato configurado
-                        formato = FORMATO_DATA.lower() if FORMATO_DATA else 'yyyy/mm'
+                        # Preserva os índices originais
+                        df_filtrado = df_filtrado.reset_index(drop=False).rename(columns={'index': 'linha_original'})
                         
-                        # Lista de padrões exatos para tentar (sem regex)
-                        formatos_a_tentar = [
-                            f"{ano_atual}/{mes_atual}",  # YYYY/MM
-                            f"{mes_atual}/{ano_atual}",  # MM/YYYY
-                            f"{ano_atual}-{mes_atual}",  # YYYY-MM
-                            f"{mes_atual}-{ano_atual}"   # MM-YYYY
-                        ]
+                        self.logger.info(f"Filtrado para {len(df_filtrado)} linhas com IDs válidos de {len(df)} linhas")
                         
-                        # Inicializa DataFrame filtrado como vazio
-                        df_filtrado = pd.DataFrame()
-                        formato_encontrado = None
+                        # Exibe as primeiras linhas filtradas para diagnóstico
+                        if len(df_filtrado) > 0:
+                            primeiras_linhas = df_filtrado.head(3)
+                            self.logger.info(f"Primeiras linhas filtradas (com índices originais): \n{primeiras_linhas}")
                         
-                        # Para cada formato, tenta encontrar linhas que correspondam exatamente
-                        for fmt in formatos_a_tentar:
-                            # Cria uma máscara para encontrar apenas correspondências exatas
-                            # Convertemos para string e aplicamos filtragem exata
-                            linhas_encontradas = []
-                            
-                            # Itera por cada linha para fazer comparação exata
-                            for idx, row in df.iterrows():
-                                if coluna_data < len(row) and row[coluna_data]:
-                                    # Obtém o valor da data e normaliza para comparação
-                                    valor_data = str(row[coluna_data]).strip()
-                                    
-                                    # Verificação exata para YYYY/MM ou MM/YYYY
-                                    if fmt == valor_data or fmt in valor_data.split():
-                                        linhas_encontradas.append(idx)
-                                    # Casos adicionais que queremos capturar
-                                    elif fmt.replace("-", "/") == valor_data or fmt.replace("/", "-") == valor_data:
-                                        linhas_encontradas.append(idx)
-                            
-                            # Se encontrou linhas com este formato
-                            if linhas_encontradas:
-                                if len(linhas_encontradas) > 0:
-                                    temp_df = df.loc[linhas_encontradas]
-                                    self.logger.info(f"Encontradas {len(temp_df)} linhas com formato exato '{fmt}'")
-                                    df_filtrado = pd.concat([df_filtrado, temp_df])
-                                    formato_encontrado = fmt
-                        
-                        # Remove duplicados (caso uma linha tenha sido capturada por mais de um formato)
-                        df_filtrado = df_filtrado.drop_duplicates()
-                        
-                        # Verifica se encontrou algum dado
-                        if not df_filtrado.empty:
-                            df = df_filtrado
-                            self.logger.info(f"Filtrado para {len(df)} linhas do período {mes_atual}/{ano_atual} usando formato '{formato_encontrado}'")
-                        else:
-                            self.logger.warning(f"Nenhuma linha encontrada para o período {mes_atual}/{ano_atual} em nenhum formato")
-                            # Retornar DataFrame vazio
-                            return pd.DataFrame()
-                    else:
-                        self.logger.warning(f"Coluna data (índice {coluna_data}) não encontrada. Continuando sem filtrar por data.")
+                        df = df_filtrado
+                else:
+                    self.logger.warning(f"Coluna ID (índice {COLUNAS['id']}) não encontrada. Continuando sem filtrar.")
             else:
-                self.logger.info("Modo 'apenas_dados' ativado: retornando todos os dados sem filtrar por data")
+                self.logger.info("Modo 'apenas_dados' ativado: retornando todos os dados sem filtrar")
             
             # Aplica limite de linhas se especificado
             if limite_linhas and len(df) > limite_linhas and not apenas_dados:
                 df = df.iloc[:limite_linhas]
                 self.logger.info(f"Leitura limitada a {limite_linhas} linhas")
             
-            self.logger.info(f"Lidos {len(df)} registros da planilha de um total de {len(df_original)}")
+            self.logger.info(f"Lidos {len(df)} registros filtrados da planilha de um total de {len(df_original)}")
             return df
         
         except Exception as e:
@@ -187,68 +237,144 @@ class SheetsHandler:
             self.logger.error(f"Valores: {linha_df.values}")
             raise
     
-    def atualizar_url_documento(self, indice_linha: int, url_documento: str) -> bool:
+    def atualizar_url_documento(self, indice_linha: int, url_documento: str, spreadsheet_id=None, sheet_name=None) -> bool:
         """
-        Atualiza a URL do documento criado na coluna L da planilha.
+        Atualiza a URL do documento criado na coluna correspondente da planilha.
         
         Args:
             indice_linha: Índice da linha a ser atualizada (relativo ao DataFrame filtrado)
             url_documento: URL do documento do Google Docs
-        
+            spreadsheet_id: ID da planilha. Se None, usa o ID configurado no .env
+            sheet_name: Nome da aba. Se None, usa o nome configurado no .env
+            
         Returns:
             True se a atualização foi bem-sucedida, False caso contrário
         """
         try:
-            # Índice na planilha original é LINHA_INICIAL + índice no DataFrame + 1 (para o cabeçalho)
-            linha_sheets = LINHA_INICIAL + indice_linha + 1
+            # Usa os IDs fornecidos ou os configurados
+            id_planilha = spreadsheet_id or SPREADSHEET_ID
+            nome_aba = sheet_name or SHEET_NAME
             
-            # Prepara o range para atualização (coluna L)
-            range_atualizacao = f"{SHEET_NAME}!{COLUNAS['CONTEUDO_DRIVE']}{linha_sheets}"
+            # Verificamos se o índice pode já ser real (baseado em 0)
+            # Na maioria dos casos, estamos recebendo o índice_real, que corresponde à linha na planilha
+            # O índice na planilha é o índice + 2 (1 para linha de cabeçalho + 1 para índice baseado em 1)
+            linha_sheets = indice_linha + 2
+            
+            # Mapeia diretamente para a coluna J (URL do documento)
+            coluna_url = 'J'
+            
+            # Prepara o range para atualização 
+            range_atualizacao = f"{nome_aba}!{coluna_url}{linha_sheets}"
+            
+            self.logger.info(f"Atualizando URL do documento na planilha {id_planilha}, aba '{nome_aba}'")
+            self.logger.info(f"Range: {range_atualizacao} (célula {coluna_url}{linha_sheets})")
+            self.logger.info(f"Índice original: {indice_linha}, índice ajustado: {linha_sheets}")
+            self.logger.info(f"URL a ser inserida: {url_documento}")
+            
+            # Verifica se a aba existe antes de tentar atualizar
+            abas = self.obter_abas_disponiveis(id_planilha)
+            aba_encontrada = False
+            nomes_abas = []
+            
+            for aba in abas:
+                nome_aba_atual = aba.get('titulo', '')
+                nomes_abas.append(nome_aba_atual)
+                if nome_aba_atual == nome_aba:
+                    aba_encontrada = True
+            
+            if not aba_encontrada:
+                self.logger.error(f"Aba '{nome_aba}' não encontrada na planilha. Abas disponíveis: {nomes_abas}")
+                return False
             
             # Atualiza a célula
-            self.service.spreadsheets().values().update(
-                spreadsheetId=SPREADSHEET_ID,
+            resultado = self.service.spreadsheets().values().update(
+                spreadsheetId=id_planilha,
                 range=range_atualizacao,
-                valueInputOption="RAW",
+                valueInputOption="USER_ENTERED",  # Alterado para USER_ENTERED para processar links corretamente
                 body={"values": [[url_documento]]}
             ).execute()
             
-            self.logger.info(f"URL do documento atualizada na linha {linha_sheets}: {url_documento}")
+            if 'updatedRange' in resultado:
+                self.logger.info(f"URL atualizada com sucesso na range: {resultado['updatedRange']}")
+            else:
+                self.logger.warning(f"URL atualizada, mas sem confirmação da range específica.")
+            
+            self.logger.info(f"URL do documento atualizada com sucesso na planilha")
+            self.logger.debug(f"Detalhes do resultado da atualização: {resultado}")
             return True
         
         except Exception as e:
             self.logger.error(f"Erro ao atualizar URL do documento na linha {indice_linha}: {e}")
+            self.logger.exception("Detalhes do erro:")
             return False
 
-    def atualizar_titulo_documento(self, indice_linha: int, titulo: str) -> bool:
+    def atualizar_titulo_documento(self, indice_linha: int, titulo: str, spreadsheet_id=None, sheet_name=None) -> bool:
         """
-        Atualiza o título do documento na coluna K da planilha.
+        Atualiza o título do documento na coluna correspondente da planilha.
         
         Args:
             indice_linha: Índice da linha a ser atualizada (relativo ao DataFrame filtrado)
             titulo: Título do documento gerado
-        
+            spreadsheet_id: ID da planilha. Se None, usa o ID configurado no .env
+            sheet_name: Nome da aba. Se None, usa o nome configurado no .env
+            
         Returns:
             True se a atualização foi bem-sucedida, False caso contrário
         """
         try:
-            # Índice na planilha original é LINHA_INICIAL + índice no DataFrame + 1 (para o cabeçalho)
-            linha_sheets = LINHA_INICIAL + indice_linha + 1
+            # Usa os IDs fornecidos ou os configurados
+            id_planilha = spreadsheet_id or SPREADSHEET_ID
+            nome_aba = sheet_name or SHEET_NAME
             
-            # Prepara o range para atualização (coluna K)
-            range_atualizacao = f"{SHEET_NAME}!K{linha_sheets}"
+            # Verificamos se o índice pode já ser real (baseado em 0)
+            # Na maioria dos casos, estamos recebendo o índice_real, que corresponde à linha na planilha
+            # O índice na planilha é o índice + 2 (1 para linha de cabeçalho + 1 para índice baseado em 1)
+            linha_sheets = indice_linha + 2
+            
+            # Mapeia diretamente para a coluna I (Tema/Título)
+            coluna_titulo = 'I'
+            
+            # Prepara o range para atualização
+            range_atualizacao = f"{nome_aba}!{coluna_titulo}{linha_sheets}"
+            
+            self.logger.info(f"Atualizando título do documento na planilha {id_planilha}, aba '{nome_aba}'")
+            self.logger.info(f"Range: {range_atualizacao} (célula {coluna_titulo}{linha_sheets})")
+            self.logger.info(f"Índice original: {indice_linha}, índice ajustado: {linha_sheets}")
+            self.logger.info(f"Título a ser inserido: {titulo}")
+            
+            # Verifica se a aba existe antes de tentar atualizar
+            abas = self.obter_abas_disponiveis(id_planilha)
+            aba_encontrada = False
+            nomes_abas = []
+            
+            for aba in abas:
+                nome_aba_atual = aba.get('titulo', '')
+                nomes_abas.append(nome_aba_atual)
+                if nome_aba_atual == nome_aba:
+                    aba_encontrada = True
+            
+            if not aba_encontrada:
+                self.logger.error(f"Aba '{nome_aba}' não encontrada na planilha. Abas disponíveis: {nomes_abas}")
+                return False
             
             # Atualiza a célula
-            self.service.spreadsheets().values().update(
-                spreadsheetId=SPREADSHEET_ID,
+            resultado = self.service.spreadsheets().values().update(
+                spreadsheetId=id_planilha,
                 range=range_atualizacao,
-                valueInputOption="RAW",
+                valueInputOption="USER_ENTERED",  # Alterado para USER_ENTERED para garantir formatação correta
                 body={"values": [[titulo]]}
             ).execute()
             
-            self.logger.info(f"Título do documento atualizado na linha {linha_sheets}: {titulo}")
+            if 'updatedRange' in resultado:
+                self.logger.info(f"Título atualizado com sucesso na range: {resultado['updatedRange']}")
+            else:
+                self.logger.warning(f"Título atualizado, mas sem confirmação da range específica.")
+            
+            self.logger.info(f"Título do documento atualizado com sucesso na planilha")
+            self.logger.debug(f"Detalhes do resultado da atualização: {resultado}")
             return True
         
         except Exception as e:
             self.logger.error(f"Erro ao atualizar título do documento na linha {indice_linha}: {e}")
+            self.logger.exception("Detalhes do erro:")
             return False 
