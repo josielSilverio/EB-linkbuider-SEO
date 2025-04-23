@@ -41,25 +41,40 @@ GEMINI_TEMPERATURE = float(os.getenv("GEMINI_TEMPERATURE", "0.7"))
 GEMINI_PRECO_ENTRADA = float(os.getenv("GEMINI_PRECO_ENTRADA", "0.00025"))  # $0.00025 por 1K tokens de entrada
 GEMINI_PRECO_SAIDA = float(os.getenv("GEMINI_PRECO_SAIDA", "0.0005"))      # $0.0005 por 1K tokens de saída
 
-# Configurações de colunas da planilha (ajustado com base na estrutura real)
+# Configurações de colunas da planilha (ajustado conforme a estrutura real da planilha)
 COLUNAS = {
-    'id': 1,                 # B
-    'data': 2,               # C 
-    'site': 3,               # D
-    'quantidade_palavras': 5, # F
-    'valor': 7,              # H
-    'palavra_ancora': 8,     # I
-    'url_ancora': 9,         # J
-    'titulo': 10,            # K
-    'url_documento': 11,     # L
-    'tema': None,            # Não tem coluna de tema na estrutura atual
+    'id': 0,                 # A - ID
+    'site': 1,               # B - Site
+    'as': 2,                 # C - AS
+    'da': 3,                 # D - DA
+    'trafego': 4,            # E - Tráfego
+    'valor': 5,              # F - Preço (R$)
+    'palavra_ancora': 6,     # G - Âncora
+    'url_ancora': 7,         # H - URL de Destino
+    'titulo': 8,             # I - Tema 
+    'url_documento': 9,      # J - Conteúdo (Drive)
+    'observacao': 11,        # L - Observação
+    'url_publicada': 12      # M - URL Publicada
+}
+
+# Dicionário com nomes de meses
+MESES = {
+    "01": "Janeiro",
+    "02": "Fevereiro",
+    "03": "Março",
+    "04": "Abril",
+    "05": "Maio",
+    "06": "Junho",
+    "07": "Julho",
+    "08": "Agosto",
+    "09": "Setembro",
+    "10": "Outubro",
+    "11": "Novembro",
+    "12": "Dezembro"
 }
 
 # Configurações de filtragem
-LINHA_INICIAL = 674       # Linha inicial para processamento
-MES_ATUAL = os.getenv('MES_ATUAL', '04')  # Mês atual no formato MM
-ANO_ATUAL = os.getenv('ANO_ATUAL', '2025')  # Ano atual no formato YYYY
-FORMATO_DATA = os.getenv('FORMATO_DATA', 'yyyy/mm')  # Formato: yyyy/mm, mm/yyyy, ou mm-yyyy
+LINHA_INICIAL = 0       # Inicia da primeira linha (antes era 674)
 
 # Função para gerar o nome do arquivo
 def gerar_nome_arquivo(id: str, site: str, ancora: str, titulo: Optional[str] = None) -> str:

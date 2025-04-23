@@ -10,12 +10,21 @@ from collections import Counter
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import re
+import dotenv
 
 from src.utils import configurar_logging
 from src.sheets_handler import SheetsHandler
 from src.gemini_handler import GeminiHandler, verificar_conteudo_proibido
 from src.docs_handler import DocsHandler
-from src.config import gerar_nome_arquivo, COLUNAS, estimar_custo_gemini, GEMINI_MAX_OUTPUT_TOKENS, MESES
+from src.config import (
+    gerar_nome_arquivo, 
+    COLUNAS, 
+    estimar_custo_gemini, 
+    GEMINI_MAX_OUTPUT_TOKENS, 
+    MESES,
+    SPREADSHEET_ID,
+    SHEET_NAME
+)
 
 def verificar_titulos_duplicados(sheets: SheetsHandler, gemini: GeminiHandler, docs: DocsHandler, modo_teste: bool = False):
     """
@@ -324,14 +333,45 @@ def verificar_similaridade_conteudos(sheets: SheetsHandler, gemini: GeminiHandle
                                                                     nome_arquivo, 
                                                                     info_link)
                 
-                # Atualiza a URL e o título na planilha, se necessário
-                if document_url != doc_reescrever['url']:
-                    sheets.atualizar_url_documento(doc_reescrever['indice'], document_url)
-                
-                # Sempre atualiza o título, pois deve ter mudado
-                sheets.atualizar_titulo_documento(doc_reescrever['indice'], titulo_novo)
-                
-                logger.info(f"✓ Documento reescrito com sucesso: {titulo_novo}")
+                # Atualiza a URL e o título na planilha (se não estiver em modo de teste)
+                if not modo_teste:
+                    # Armazena o índice real da linha no arquivo original
+                    indice_real = idx
+                    logger.info(f"Atualizando a planilha para a linha com índice {indice_real}")
+                    
+                    # Atualiza diretamente as células específicas
+                    try:
+                        # Prepara os ranges para atualização
+                        range_titulo = f"{sheet_name}!I{indice_real+2}"  # +2 porque +1 para cabeçalho e +1 para índice baseado em 1
+                        range_url = f"{sheet_name}!J{indice_real+2}"
+                        
+                        # Log para debugging
+                        logger.info(f"Tentando atualizar título na posição {range_titulo}: {titulo_novo}")
+                        logger.info(f"Tentando atualizar URL na posição {range_url}: {document_url}")
+                        
+                        # Atualiza o título (tema)
+                        sheets.service.spreadsheets().values().update(
+                            spreadsheetId=spreadsheet_id,
+                            range=range_titulo,
+                            valueInputOption="RAW",
+                            body={"values": [[titulo_novo]]}
+                        ).execute()
+                        
+                        # Atualiza a URL do documento
+                        sheets.service.spreadsheets().values().update(
+                            spreadsheetId=spreadsheet_id,
+                            range=range_url,
+                            valueInputOption="RAW",
+                            body={"values": [[document_url]]}
+                        ).execute()
+                        
+                        logger.info(f"✓ URL e título atualizados na planilha com sucesso!")
+                    except Exception as e:
+                        logger.error(f"Erro ao atualizar a planilha: {e}")
+                        logger.exception("Detalhes do erro:")
+                else:
+                    logger.info(f"[MODO TESTE] URL gerada (não atualizada na planilha): {document_url}")
+                    logger.info(f"[MODO TESTE] Título gerado (não atualizado na planilha): {titulo_novo}")
                 
             except Exception as e:
                 logger.error(f"Erro ao reescrever documento: {e}")
@@ -716,10 +756,10 @@ def filtrar_dataframe_por_categorias(df: pd.DataFrame, sheets: SheetsHandler, se
         # Selecionar aleatoriamente a quantidade solicitada
         if quantidade >= len(df):
             logger.info(f"A quantidade solicitada ({quantidade}) é maior ou igual ao total disponível ({len(df)}). Usando todo o DataFrame.")
-            return df
+            df_filtrado = df
         else:
             logger.info(f"Selecionando {quantidade} itens aleatoriamente.")
-            return df.sample(n=quantidade, random_state=42)
+            df_filtrado = df.sample(n=quantidade, random_state=42)
     
     # Se nenhuma seleção foi feita ou está vazia, retornar DataFrame vazio
     if not selecao:
@@ -764,7 +804,6 @@ def filtrar_dataframe_por_categorias(df: pd.DataFrame, sheets: SheetsHandler, se
 def apresentar_menu_meses(sheets: SheetsHandler = None) -> Tuple[str, str]:
     """
     Apresenta um menu interativo para o usuário escolher qual mês processar.
-    Verifica se existem dados para o período selecionado.
     
     Args:
         sheets: Instância opcional de SheetsHandler para verificar disponibilidade de dados
@@ -785,56 +824,9 @@ def apresentar_menu_meses(sheets: SheetsHandler = None) -> Tuple[str, str]:
         ano_atual_sistema = datetime.now().year
         anos = [str(ano_atual_sistema), str(ano_atual_sistema + 1)]
         
-        # Verificar quais períodos têm dados disponíveis se o sheets foi fornecido
-        periodos_disponiveis = {}
-        if sheets is not None:
-            logger.info("Verificando períodos disponíveis na planilha...")
-            try:
-                df_completo = sheets.ler_planilha(None, apenas_dados=True)
-                
-                if not df_completo.empty and COLUNAS["data"] < len(df_completo.columns):
-                    # Analisar a coluna de data para identificar períodos disponíveis
-                    for ano in anos:
-                        for mes_codigo in meses.keys():
-                            # Verificar o formato da data
-                            formato = FORMATO_DATA.lower() if FORMATO_DATA else 'yyyy/mm'
-                            
-                            if formato == 'yyyy/mm':
-                                padrao = f"{ano}[/-]{mes_codigo}"
-                            elif formato == 'yyyy-mm':
-                                padrao = f"{ano}-{mes_codigo}"
-                            else:  # mm/yyyy ou padrão
-                                padrao = f"{mes_codigo}[/-]{ano}"
-                            
-                            # Verificar se há dados para este período
-                            mascara = df_completo[COLUNAS["data"]].astype(str).str.contains(padrao, regex=True, na=False)
-                            contagem = mascara.sum()
-                            
-                            if contagem > 0:
-                                periodos_disponiveis[(ano, mes_codigo)] = contagem
-                                logger.info(f"Encontrados {contagem} registros para {meses[mes_codigo]} de {ano}")
-            except Exception as e:
-                logger.error(f"Erro ao verificar períodos disponíveis: {e}")
-        
         print("\n" + "="*60)
         print("MENU DE SELEÇÃO DE MÊS".center(60))
         print("="*60)
-        
-        if periodos_disponiveis:
-            print("\nPeríodos com dados disponíveis:")
-            print("-"*60)
-            print("Ano | Mês             | Quantidade de registros")
-            print("-"*60)
-            
-            # Ordenar períodos por data (mais recente primeiro)
-            periodos_ordenados = sorted(periodos_disponiveis.items(), 
-                                       key=lambda x: (x[0][0], x[0][1]), 
-                                       reverse=True)
-            
-            for (ano, mes_codigo), contagem in periodos_ordenados:
-                print(f"{ano} | {meses[mes_codigo]:<15} | {contagem}")
-            
-            print("-"*60)
         
         # Solicitar escolha do ano
         while True:
@@ -889,35 +881,6 @@ def apresentar_menu_meses(sheets: SheetsHandler = None) -> Tuple[str, str]:
             else:
                 print("Por favor, digite um código de mês válido (01-12) ou o nome do mês.")
         
-        # Verificar se o período selecionado tem dados
-        periodo_selecionado = (ano_selecionado, mes_selecionado)
-        if periodos_disponiveis and periodo_selecionado not in periodos_disponiveis:
-            print(f"\n⚠️ AVISO: Não foram encontrados dados para {nome_mes} de {ano_selecionado}!")
-            
-            if len(periodos_disponiveis) > 0:
-                print("Períodos disponíveis:", end=" ")
-                for (ano, mes), _ in sorted(periodos_disponiveis.items()):
-                    print(f"{meses[mes]} de {ano}", end=", ")
-                print("\n")
-                
-                # Perguntar se deseja continuar mesmo assim
-                continuar = input("Deseja continuar mesmo assim? (S/N): ").strip().upper()
-                if continuar != 'S':
-                    # Oferecer para selecionar um período disponível
-                    usar_disponivel = input("Deseja selecionar um período disponível? (S/N): ").strip().upper()
-                    if usar_disponivel == 'S':
-                        # Pegar o período mais recente disponível
-                        periodo_mais_recente = sorted(periodos_disponiveis.keys(), 
-                                                    key=lambda x: (x[0], x[1]), 
-                                                    reverse=True)[0]
-                        
-                        ano_selecionado, mes_selecionado = periodo_mais_recente
-                        nome_mes = meses[mes_selecionado]
-                        print(f"\nUsando período disponível: {nome_mes} de {ano_selecionado}")
-                    else:
-                        # Continuar com a seleção atual mesmo sem dados
-                        print("\nContinuando com a seleção atual mesmo sem dados.")
-        
         logger.info(f"Selecionado: {nome_mes} de {ano_selecionado}")
         print(f"\nVocê selecionou: {nome_mes} de {ano_selecionado}")
         
@@ -937,6 +900,257 @@ def apresentar_menu_meses(sheets: SheetsHandler = None) -> Tuple[str, str]:
         
         return (str(ano_atual), mes_codigo)
 
+def apresentar_menu_planilha(sheets: SheetsHandler = None) -> Tuple[str, str]:
+    """
+    Apresenta um menu interativo para o usuário escolher qual planilha e aba deseja trabalhar,
+    permitindo a inserção direta do ID da planilha e nome da aba.
+    
+    Args:
+        sheets: Instância opcional de SheetsHandler
+        
+    Returns:
+        Tupla com (spreadsheet_id, sheet_name) selecionados ou (None, None) se a planilha não for acessível
+    """
+    logger = logging.getLogger('seo_linkbuilder')
+    
+    if sheets is None:
+        try:
+            sheets = SheetsHandler()
+        except Exception as e:
+            logger.error(f"Erro ao inicializar SheetsHandler: {e}")
+            # Retorna os valores padrão do .env
+            return (SPREADSHEET_ID, SHEET_NAME)
+    
+    try:
+        print("\n" + "="*60)
+        print("CONFIGURAÇÃO DA PLANILHA".center(60))
+        print("="*60)
+        
+        # Oferece opção para usar a planilha padrão
+        print(f"\nPlanilha padrão atual: {SPREADSHEET_ID} (aba: {SHEET_NAME})")
+        
+        usar_padrao = input("\nDeseja usar a planilha padrão? (S/N): ").strip().upper()
+        if usar_padrao == 'S':
+            # Verificar se a planilha padrão é acessível
+            try:
+                logger.info(f"Verificando acesso à planilha padrão {SPREADSHEET_ID}...")
+                abas = sheets.obter_abas_disponiveis(SPREADSHEET_ID)
+                if not abas:
+                    logger.error(f"Não foi possível acessar a planilha padrão {SPREADSHEET_ID}")
+                    print(f"\nErro: Não foi possível acessar a planilha padrão.")
+                    print("Verifique se o ID está correto e se você tem permissão de acesso.")
+                    return (None, None)
+                    
+                logger.info(f"Usando planilha padrão: {SPREADSHEET_ID}, aba: {SHEET_NAME}")
+                return (SPREADSHEET_ID, SHEET_NAME)
+            except Exception as e:
+                logger.error(f"Erro ao verificar planilha padrão {SPREADSHEET_ID}: {e}")
+                print(f"\nErro ao verificar planilha padrão: {e}")
+                print("Verifique se o ID está correto e se você tem permissão de acesso.")
+                return (None, None)
+        
+        # Loop para permitir múltiplas tentativas
+        while True:
+            # Solicita entrada direta do ID da planilha
+            print("\nInsira o ID da planilha do Google Sheets")
+            print("(Ex: 1AbCdEfGhIjKlMnOpQrStUvWxYz0123456789)")
+            print("Ou digite 'X' para sair")
+            spreadsheet_id = input("ID da planilha: ").strip()
+            
+            if spreadsheet_id.upper() == 'X':
+                logger.info("Operação cancelada pelo usuário.")
+                print("\nOperação cancelada pelo usuário.")
+                return (None, None)
+                
+            if not spreadsheet_id:
+                print("\nID de planilha vazio. Por favor, tente novamente.")
+                continue
+            
+            # Verifica se a planilha existe e é acessível
+            try:
+                logger.info(f"Verificando acesso à planilha {spreadsheet_id}...")
+                abas = sheets.obter_abas_disponiveis(spreadsheet_id)
+                if not abas:
+                    logger.warning(f"Não foi possível acessar a planilha {spreadsheet_id} ou ela não tem abas.")
+                    print(f"\nAlerta: Não foi possível acessar a planilha ou ela não tem abas.")
+                    print("Verifique se o ID está correto e se você tem permissão de acesso.")
+                    tentar_novamente = input("Deseja tentar outro ID? (S/N): ").strip().upper()
+                    if tentar_novamente == 'S':
+                        continue
+                    else:
+                        return (None, None)
+                
+                # Se chegou aqui, a planilha é acessível
+                break
+                
+            except Exception as e:
+                logger.error(f"Erro ao verificar planilha {spreadsheet_id}: {e}")
+                print(f"\nErro ao verificar planilha: {e}")
+                tentar_novamente = input("Deseja tentar outro ID? (S/N): ").strip().upper()
+                if tentar_novamente == 'S':
+                    continue
+                else:
+                    return (None, None)
+        
+        # Solicita entrada direta do nome da aba
+        print("\nInsira o nome da aba da planilha")
+        if abas:
+            print(f"Abas disponíveis: {', '.join([aba['titulo'] for aba in abas])}")
+        
+        sheet_name = input("Nome da aba: ").strip()
+        
+        if not sheet_name:
+            if abas:
+                sheet_name = abas[0]['titulo']
+                logger.info(f"Nome de aba vazio. Usando primeira aba disponível: {sheet_name}")
+                print(f"\nNome de aba vazio. Usando primeira aba disponível: {sheet_name}")
+            else:
+                logger.error(f"Nenhuma aba disponível e nome não fornecido.")
+                print(f"\nErro: Nenhuma aba disponível e nome não fornecido.")
+                return (None, None)
+        
+        # Verificar se a aba especificada existe
+        aba_existe = any(aba['titulo'] == sheet_name for aba in abas)
+        if not aba_existe:
+            logger.warning(f"A aba '{sheet_name}' não foi encontrada na planilha.")
+            print(f"\nAviso: A aba '{sheet_name}' não foi encontrada na planilha.")
+            usar_mesmo_assim = input("Deseja usar este nome de aba mesmo assim? (S/N): ").strip().upper()
+            if usar_mesmo_assim != 'S':
+                return (None, None)
+        
+        logger.info(f"Selecionada planilha ID: {spreadsheet_id}, aba: {sheet_name}")
+        print(f"\nVocê selecionou: Planilha ID: {spreadsheet_id}, Aba: {sheet_name}")
+        
+        # Pergunta se deseja salvar como padrão
+        salvar_padrao = input("\nDeseja salvar esta escolha como padrão? (S/N): ").strip().upper()
+        if salvar_padrao == 'S':
+            # Atualiza arquivo .env
+            try:
+                with open('.env', 'r') as file:
+                    env_content = file.read()
+                
+                # Atualiza os valores no conteúdo
+                env_content = re.sub(r'SPREADSHEET_ID=.*', f'SPREADSHEET_ID="{spreadsheet_id}"', env_content)
+                env_content = re.sub(r'SHEET_NAME=.*', f'SHEET_NAME="{sheet_name}"', env_content)
+                
+                with open('.env', 'w') as file:
+                    file.write(env_content)
+                
+                # Recarrega variáveis de ambiente
+                dotenv.load_dotenv(override=True)
+                
+                logger.info(f"Configuração salva como padrão")
+                print(f"Configuração salva como padrão.")
+            except Exception as e:
+                logger.error(f"Erro ao salvar configuração: {e}")
+                print(f"Erro ao salvar configuração: {e}")
+        
+        return (spreadsheet_id, sheet_name)
+    
+    except Exception as e:
+        logger.error(f"Erro durante a seleção da planilha: {e}")
+        logger.exception("Detalhes do erro:")
+        return (None, None)
+
+def processar_linha(linha, indice, df, df_original, modo_teste, spreadsheet_id, sheet_name):
+    """
+    Processa uma linha específica da planilha.
+    Extrai dados, gera o conteúdo com a API e salva no Google Drive.
+    """
+    try:
+        # Extrai os dados da linha
+        id_campanha = str(df.iloc[indice][COLUNAS["id"]])
+        site = str(df.iloc[indice][COLUNAS["site"]])
+        ancora = str(df.iloc[indice][COLUNAS["ancora"]])
+        assunto = str(df.iloc[indice][COLUNAS["assunto"]])
+        contexto = str(df.iloc[indice][COLUNAS["contexto"]])
+        instrucoes = str(df.iloc[indice][COLUNAS["instrucoes"]])
+        
+        # Obtém a linha original no DataFrame antes da filtragem
+        indice_real = int(df.iloc[indice]["linha_original"]) if "linha_original" in df.columns else indice
+        logger.info(f"Processando ID {id_campanha} (índice {indice}, índice real na planilha: {indice_real})")
+        
+        # Chama a API para gerar o conteúdo
+        gemini_handler = GeminiHandler()
+        conteudo_gerado = gemini_handler.gerar_conteudo(
+            site=site,
+            ancora=ancora,
+            assunto=assunto,
+            contexto=contexto,
+            instrucoes=instrucoes
+        )
+        
+        # Extrai o título do conteúdo gerado (primeira linha não vazia)
+        titulo = extrair_titulo(conteudo_gerado)
+        
+        # Gera o nome do arquivo baseado no padrão definido
+        nome_arquivo = gerar_nome_arquivo(id=id_campanha, site=site, ancora=ancora)
+        
+        # Apenas gera o documento no Drive se não estiver em modo teste
+        if not modo_teste:
+            # Cria o documento no Google Docs e obtém a URL
+            docs_handler = DocsHandler()
+            url_documento = docs_handler.criar_documento(
+                titulo=titulo,
+                conteudo=conteudo_gerado,
+                nome_arquivo=nome_arquivo
+            )
+            
+            # Inicializa o handler de planilhas para atualização
+            sheets_handler = SheetsHandler()
+            
+            # Atualiza o título na planilha usando o método específico do SheetsHandler
+            atualizado_titulo = sheets_handler.atualizar_titulo_documento(
+                indice_linha=indice_real,
+                titulo=titulo,
+                spreadsheet_id=spreadsheet_id,
+                sheet_name=sheet_name
+            )
+            
+            if atualizado_titulo:
+                logger.info(f"Título atualizado na planilha com sucesso: {titulo}")
+            else:
+                logger.error("Falha ao atualizar o título na planilha")
+            
+            # Atualiza a URL na planilha usando o método específico do SheetsHandler
+            atualizado_url = sheets_handler.atualizar_url_documento(
+                indice_linha=indice_real,
+                url_documento=url_documento,
+                spreadsheet_id=spreadsheet_id,
+                sheet_name=sheet_name
+            )
+            
+            if atualizado_url:
+                logger.info(f"URL atualizada na planilha com sucesso: {url_documento}")
+            else:
+                logger.error("Falha ao atualizar a URL na planilha")
+        else:
+            logger.info("Modo teste ativado: não atualizando a planilha ou criando documento no Drive")
+            
+        logger.info(f"Processamento do ID {id_campanha} concluído com sucesso.")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Erro ao processar a linha {indice}: {e}")
+        logger.exception("Detalhes do erro:")
+        return False
+
+def extrair_titulo(conteudo):
+    """
+    Extrai o título do conteúdo gerado (primeira linha não vazia).
+    """
+    linhas = conteudo.strip().split('\n')
+    for linha in linhas:
+        linha_limpa = linha.strip()
+        if linha_limpa and not linha_limpa.startswith('#'):
+            # Remove marcadores de formatação (** para negrito, etc)
+            return re.sub(r'[*_#]', '', linha_limpa)
+    
+    # Se não encontrar um título claro, usa as primeiras palavras
+    palavras = conteudo.split()[:5]
+    titulo_padrao = ' '.join(palavras) + '...'
+    return titulo_padrao
+
 def main(limite_linhas: int = None, modo_teste: bool = False, categorias_selecionadas: Dict = None, quantidade_especifica: int = None):
     """
     Função principal que orquestra o fluxo de trabalho.
@@ -952,27 +1166,26 @@ def main(limite_linhas: int = None, modo_teste: bool = False, categorias_selecio
     logger = configurar_logging()
     logger.info(f"Iniciando script SEO-LinkBuilder - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     
-    # Inicializa o sheets handler antes do menu para verificar períodos disponíveis
+    # Inicializa o sheets handler
     try:
         sheets = SheetsHandler()
         logger.info("SheetsHandler inicializado com sucesso")
     except Exception as e:
         logger.error(f"Erro ao inicializar SheetsHandler: {e}")
         logger.exception("Detalhes do erro:")
-        sheets = None
+        return
     
-    # Selecionar o mês e ano a processar
-    ano_selecionado, mes_selecionado = apresentar_menu_meses(sheets)
+    # Selecionar a planilha e aba
+    spreadsheet_id, sheet_name = apresentar_menu_planilha(sheets)
     
-    # Configura as variáveis de ambiente para o mês selecionado
-    os.environ['ANO_ATUAL'] = ano_selecionado
-    os.environ['MES_ATUAL'] = mes_selecionado
+    # Verificar se a planilha foi selecionada com sucesso
+    if spreadsheet_id is None or sheet_name is None:
+        logger.error("Não foi possível selecionar uma planilha válida. Encerrando.")
+        print("\nNão foi possível selecionar uma planilha válida. Encerrando.")
+        return
     
     # Inicializa os handlers restantes
     try:
-        if sheets is None:  # Se falhou na inicialização anterior
-            sheets = SheetsHandler()
-        
         gemini = GeminiHandler()
         docs = DocsHandler()
         
@@ -982,72 +1195,26 @@ def main(limite_linhas: int = None, modo_teste: bool = False, categorias_selecio
         logger.exception("Detalhes do erro:")
         return
     
-    # Lê a planilha com filtro de data aplicado
+    # Lê a planilha filtrando apenas por IDs válidos
     try:
-        # Primeiro tentamos ler aplicando o filtro de data para verificar se existem dados
-        df = sheets.ler_planilha()
+        df = sheets.ler_planilha(spreadsheet_id=spreadsheet_id, sheet_name=sheet_name)
         
         if df.empty:
-            logger.warning(f"Nenhum dado encontrado para o período {mes_selecionado}/{ano_selecionado}!")
-            print(f"\n⚠️ AVISO: Não foram encontrados dados para o período {MESES[mes_selecionado]} de {ano_selecionado}")
-            
-            # Vamos verificar quais períodos têm dados disponíveis
-            df_completo = sheets.ler_planilha(None, apenas_dados=True)
-            periodos_disponiveis = {}
-            
-            if not df_completo.empty and COLUNAS["data"] < len(df_completo.columns):
-                # Verificar todos os meses nos dois anos
-                anos = [str(datetime.now().year), str(datetime.now().year + 1)]
-                
-                for ano in anos:
-                    for mes_codigo in MESES.keys():
-                        # Verificar pelo formato exato
-                        mascara1 = df_completo[COLUNAS["data"]].astype(str).str.contains(f"{ano}/{mes_codigo}", regex=False)
-                        mascara2 = df_completo[COLUNAS["data"]].astype(str).str.contains(f"{mes_codigo}/{ano}", regex=False)
-                        
-                        contagem = mascara1.sum() + mascara2.sum()
-                        if contagem > 0:
-                            periodos_disponiveis[(ano, mes_codigo)] = contagem
-            
-            if periodos_disponiveis:
-                print("\nPeríodos com dados disponíveis:")
-                print("-" * 50)
-                for (ano, mes), count in sorted(periodos_disponiveis.items()):
-                    print(f"{MESES[mes]} de {ano}: {count} registros")
-                print("-" * 50)
-                
-                # Perguntar se quer selecionar outro período
-                continuar = input("\nDeseja selecionar outro período? (S/N): ").strip().upper()
-                if continuar == 'S':
-                    # Reiniciar o script
-                    print("\nReiniciando o script...\n")
-                    return main(limite_linhas, modo_teste, categorias_selecionadas, quantidade_especifica)
-            
-            print("Encerrando o script.")
+            logger.warning(f"Nenhuma linha com ID válido encontrada na planilha!")
+            print(f"\n⚠️ AVISO: Nenhuma linha com ID válido encontrada na planilha.")
+            print("Verifique se a planilha contém dados com IDs válidos.")
             return
             
         total_linhas = len(df)
-        logger.info(f"Planilha filtrada para {mes_selecionado}/{ano_selecionado} lida com sucesso. Total de {total_linhas} linhas")
+        logger.info(f"Planilha lida com sucesso. Total de {total_linhas} linhas com IDs válidos")
             
     except Exception as e:
         logger.error(f"Erro ao ler planilha: {e}")
         logger.exception("Detalhes do erro:")
         return
     
-    # Agora que temos certeza de que existem dados para o período, lemos novamente para processar
-    # Lê a planilha completa para estimar custos por categoria (sem filtro de data)
-    try:
-        df_completo = sheets.ler_planilha(None, apenas_dados=True)
-        total_linhas_completo = len(df_completo)
-        logger.info(f"Planilha completa lida com sucesso. Total de {total_linhas_completo} linhas")
-            
-    except Exception as e:
-        logger.error(f"Erro ao ler planilha completa: {e}")
-        logger.exception("Detalhes do erro:")
-        return
-    
     # Estimar custos por categoria
-    categorias = estimar_custo_por_categoria(sheets, df)  # Usar o dataframe filtrado, não o completo
+    categorias = estimar_custo_por_categoria(sheets, df)
     
     # Se não foram fornecidas categorias, apresentar menu para seleção
     if categorias_selecionadas is None:
@@ -1162,9 +1329,48 @@ def main(limite_linhas: int = None, modo_teste: bool = False, categorias_selecio
             
             # Atualiza a URL e o título na planilha (se não estiver em modo de teste)
             if not modo_teste:
-                sheets.atualizar_url_documento(i, document_url)
-                sheets.atualizar_titulo_documento(i, titulo_gerado)
-                logger.info(f"URL e título atualizados na planilha: {document_url}")
+                try:
+                    # Obtém o número real da linha na planilha (a linha original + 2 para offset)
+                    linha_planilha = idx + 2
+                    
+                    # Imprime detalhes de diagnóstico
+                    logger.info(f"==== INFORMAÇÕES DE ATUALIZAÇÃO DA PLANILHA ====")
+                    logger.info(f"ID da Planilha: {spreadsheet_id}")
+                    logger.info(f"Nome da Aba: {sheet_name}")
+                    logger.info(f"Linha na planilha a ser atualizada: {linha_planilha}")
+                    logger.info(f"Título a ser inserido na coluna I: {titulo_gerado}")
+                    logger.info(f"URL a ser inserida na coluna J: {document_url}")
+                    
+                    # Atualiza o título (coluna I)
+                    titulo_range = f"{sheet_name}!I{linha_planilha}"
+                    logger.info(f"Atualizando título em: {titulo_range}")
+                    
+                    sheets.service.spreadsheets().values().update(
+                        spreadsheetId=spreadsheet_id,
+                        range=titulo_range,
+                        valueInputOption="USER_ENTERED",  # Mudado para USER_ENTERED para melhor formatação
+                        body={"values": [[titulo_gerado]]}
+                    ).execute()
+                    
+                    logger.info(f"✓ Título atualizado com sucesso em {titulo_range}!")
+                    
+                    # Atualiza a URL (coluna J)
+                    url_range = f"{sheet_name}!J{linha_planilha}"
+                    logger.info(f"Atualizando URL em: {url_range}")
+                    
+                    sheets.service.spreadsheets().values().update(
+                        spreadsheetId=spreadsheet_id,
+                        range=url_range,
+                        valueInputOption="USER_ENTERED",  # Mudado para USER_ENTERED para melhor formatação
+                        body={"values": [[document_url]]}
+                    ).execute()
+                    
+                    logger.info(f"✓ URL atualizada com sucesso em {url_range}!")
+                    logger.info(f"==== FIM DA ATUALIZAÇÃO DA PLANILHA ====")
+                    
+                except Exception as e:
+                    logger.error(f"Erro ao atualizar planilha: {e}")
+                    logger.exception("Detalhes do erro:")
             else:
                 logger.info(f"[MODO TESTE] URL gerada (não atualizada na planilha): {document_url}")
                 logger.info(f"[MODO TESTE] Título gerado (não atualizado na planilha): {titulo_gerado}")
