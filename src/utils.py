@@ -19,15 +19,36 @@ def configurar_logging(nivel=logging.INFO):
     data_atual = datetime.now().strftime('%Y-%m-%d')
     log_arquivo = f'logs/seo_linkbuilder_{data_atual}.log'
     
-    # Configuração do logging
+    # Remove handlers existentes para evitar duplicação
+    for handler in logging.root.handlers[:]:
+        logging.root.removeHandler(handler)
+        
+    # Configuração base (sem handlers inicialmente)
     logging.basicConfig(
         level=nivel,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.FileHandler(log_arquivo),
-            logging.StreamHandler(sys.stdout)
-        ]
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
+    
+    # Cria os handlers com encoding UTF-8
+    file_handler = logging.FileHandler(log_arquivo, encoding='utf-8')
+    stream_handler = logging.StreamHandler(sys.stdout)
+    # Tenta definir encoding para stdout, pode falhar dependendo do terminal
+    try:
+        stream_handler.setStream(open(sys.stdout.fileno(), mode='w', encoding='utf-8', buffering=1))
+    except Exception:
+        # Se falhar, usa o stdout padrão (pode ter problemas de encoding no console)
+        pass 
+
+    # Define o formatador
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    file_handler.setFormatter(formatter)
+    stream_handler.setFormatter(formatter)
+    
+    # Adiciona os handlers ao logger raiz
+    logging.root.addHandler(file_handler)
+    logging.root.addHandler(stream_handler)
+    
+    # Retorna o logger principal
     return logging.getLogger('seo_linkbuilder')
 
 # Funções para manipulação de texto

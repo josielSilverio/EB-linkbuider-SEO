@@ -6,7 +6,7 @@ from typing import Optional, Dict, List, Tuple
 import re
 
 # Carrega as variáveis de ambiente do arquivo .env
-dotenv.load_dotenv()
+dotenv.load_dotenv(encoding='utf-8')
 
 # Configurações da API do Google
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")

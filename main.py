@@ -326,52 +326,61 @@ def verificar_similaridade_conteudos(sheets: SheetsHandler, gemini: GeminiHandle
                     logger.error(f"Erro ao gerar nome de arquivo: {e}")
                     nome_arquivo = f"{dados.get('id', 'Sem-ID')} - {dados.get('site', 'Sem-site')} - Reescrito"
                 
-                # Atualiza o documento
+                # Cria o documento no Google Docs
+                logger.info(f"Criando documento '{nome_arquivo}'...")
                 document_id, document_url = docs.atualizar_documento(doc_reescrever['id_doc'], 
                                                                     titulo_novo, 
                                                                     conteudo, 
                                                                     nome_arquivo, 
                                                                     info_link)
                 
-                # Atualiza a URL e o título na planilha (se não estiver em modo de teste)
-                if not modo_teste:
-                    # Armazena o índice real da linha no arquivo original
-                    indice_real = idx
-                    logger.info(f"Atualizando a planilha para a linha com índice {indice_real}")
+                # Atualiza a URL e o título na planilha (INDEPENDENTE DO MODO TESTE)
+                try:
+                    # Calcula o número da linha na planilha (índice original + 2 para offset de cabeçalho e base 1)
+                    linha_planilha = doc_reescrever['indice'] + 2
                     
-                    # Atualiza diretamente as células específicas
-                    try:
-                        # Prepara os ranges para atualização
-                        range_titulo = f"{sheet_name}!I{indice_real+2}"  # +2 porque +1 para cabeçalho e +1 para índice baseado em 1
-                        range_url = f"{sheet_name}!J{indice_real+2}"
-                        
-                        # Log para debugging
-                        logger.info(f"Tentando atualizar título na posição {range_titulo}: {titulo_novo}")
-                        logger.info(f"Tentando atualizar URL na posição {range_url}: {document_url}")
-                        
-                        # Atualiza o título (tema)
-                        sheets.service.spreadsheets().values().update(
-                            spreadsheetId=spreadsheet_id,
-                            range=range_titulo,
-                            valueInputOption="RAW",
-                            body={"values": [[titulo_novo]]}
-                        ).execute()
-                        
-                        # Atualiza a URL do documento
-                        sheets.service.spreadsheets().values().update(
-                            spreadsheetId=spreadsheet_id,
-                            range=range_url,
-                            valueInputOption="RAW",
-                            body={"values": [[document_url]]}
-                        ).execute()
-                        
-                        logger.info(f"✓ URL e título atualizados na planilha com sucesso!")
-                    except Exception as e:
-                        logger.error(f"Erro ao atualizar a planilha: {e}")
-                        logger.exception("Detalhes do erro:")
-                else:
-                    logger.info(f"[MODO TESTE] URL gerada (não atualizada na planilha): {document_url}")
-                    logger.info(f"[MODO TESTE] Título gerado (não atualizado na planilha): {titulo_novo}")
+                    # Imprime detalhes de diagnóstico ANTES de atualizar
+                    logger.info(f"==== INFORMAÇÕES DE ATUALIZAÇÃO DA PLANILHA ====")
+                    logger.info(f"ID da Planilha: {SPREADSHEET_ID}")
+                    logger.info(f"Nome da Aba: {SHEET_NAME}")
+                    logger.info(f"Índice Original da Linha (base 0): {doc_reescrever['indice']}")
+                    logger.info(f"Linha na planilha a ser atualizada (base 1): {linha_planilha}")
+                    
+                    # Atualiza o título (coluna I)
+                    coluna_titulo = 'I' # Coluna do título
+                    titulo_range = f"{SHEET_NAME}!{coluna_titulo}{linha_planilha}"
+                    logger.info(f"Tentando atualizar Título na célula {coluna_titulo}{linha_planilha} (Range: {titulo_range}) com valor: '{titulo_novo}'")
+                    
+                    sheets.service.spreadsheets().values().update(
+                        spreadsheetId=SPREADSHEET_ID,
+                        range=titulo_range,
+                        valueInputOption="USER_ENTERED", 
+                        body={"values": [[titulo_novo]]}
+                    ).execute()
+                    
+                    logger.info(f"✓ Título atualizado com sucesso em {titulo_range}!")
+                    
+                    # Atualiza a URL (coluna J)
+                    coluna_url = 'J' # Coluna da URL
+                    url_range = f"{SHEET_NAME}!{coluna_url}{linha_planilha}"
+                    logger.info(f"Tentando atualizar URL na célula {coluna_url}{linha_planilha} (Range: {url_range}) com valor: '{document_url}'")
+                    
+                    sheets.service.spreadsheets().values().update(
+                        spreadsheetId=SPREADSHEET_ID,
+                        range=url_range,
+                        valueInputOption="USER_ENTERED",
+                        body={"values": [[document_url]]}
+                    ).execute()
+                    
+                    logger.info(f"✓ URL atualizada com sucesso em {url_range}!")
+                    logger.info(f"==== FIM DA ATUALIZAÇÃO DA PLANILHA ====")
+                    
+                except Exception as e:
+                    logger.error(f"Erro ao atualizar planilha para linha original {doc_reescrever['indice']} (linha sheet {linha_planilha}): {e}")
+                    logger.exception("Detalhes do erro:")
+                
+                # Pausa para não sobrecarregar as APIs
+                time.sleep(1)
                 
             except Exception as e:
                 logger.error(f"Erro ao reescrever documento: {e}")
@@ -1021,30 +1030,6 @@ def apresentar_menu_planilha(sheets: SheetsHandler = None) -> Tuple[str, str]:
         logger.info(f"Selecionada planilha ID: {spreadsheet_id}, aba: {sheet_name}")
         print(f"\nVocê selecionou: Planilha ID: {spreadsheet_id}, Aba: {sheet_name}")
         
-        # Pergunta se deseja salvar como padrão
-        salvar_padrao = input("\nDeseja salvar esta escolha como padrão? (S/N): ").strip().upper()
-        if salvar_padrao == 'S':
-            # Atualiza arquivo .env
-            try:
-                with open('.env', 'r') as file:
-                    env_content = file.read()
-                
-                # Atualiza os valores no conteúdo
-                env_content = re.sub(r'SPREADSHEET_ID=.*', f'SPREADSHEET_ID="{spreadsheet_id}"', env_content)
-                env_content = re.sub(r'SHEET_NAME=.*', f'SHEET_NAME="{sheet_name}"', env_content)
-                
-                with open('.env', 'w') as file:
-                    file.write(env_content)
-                
-                # Recarrega variáveis de ambiente
-                dotenv.load_dotenv(override=True)
-                
-                logger.info(f"Configuração salva como padrão")
-                print(f"Configuração salva como padrão.")
-            except Exception as e:
-                logger.error(f"Erro ao salvar configuração: {e}")
-                print(f"Erro ao salvar configuração: {e}")
-        
         return (spreadsheet_id, sheet_name)
     
     except Exception as e:
@@ -1282,7 +1267,15 @@ def main(limite_linhas: int = None, modo_teste: bool = False, categorias_selecio
             site = str(linha[COLUNAS['site']]) if COLUNAS['site'] < len(linha) else 'Sem site'
             palavra_ancora = str(linha[COLUNAS['palavra_ancora']]) if COLUNAS['palavra_ancora'] < len(linha) else 'Sem palavra-âncora'
             url_ancora = str(linha[COLUNAS['url_ancora']]) if COLUNAS['url_ancora'] < len(linha) else 'Sem URL'
-            titulo = str(linha[COLUNAS['titulo']]) if COLUNAS['titulo'] < len(linha) and linha[COLUNAS['titulo']] else 'Sem título'
+            titulo_original = str(linha[COLUNAS['titulo']]) if COLUNAS['titulo'] < len(linha) and linha[COLUNAS['titulo']] else 'Sem título'
+
+            # Obter o índice original da linha ANTES da filtragem
+            # 'idx' é o índice no df_filtrado, 'linha_original' é o índice no df original (baseado em 0)
+            if 'linha_original' not in linha:
+                 logger.error(f"Coluna 'linha_original' não encontrada na linha com ID {id_campanha}. Pulando atualização da planilha.")
+                 continue # Pula para a próxima iteração se não encontrar o índice original
+
+            indice_original_linha = int(linha['linha_original'])
             
             # Cria um dicionário de dados para passar para o Gemini
             dados = {
@@ -1290,7 +1283,7 @@ def main(limite_linhas: int = None, modo_teste: bool = False, categorias_selecio
                 'site': site,
                 'palavra_ancora': palavra_ancora,
                 'url_ancora': url_ancora,
-                'titulo': titulo,
+                'titulo': titulo_original, # Usar o título original aqui
                 'tema': 'Sem tema',  # Tema não existe na estrutura atual
             }
             
@@ -1299,7 +1292,7 @@ def main(limite_linhas: int = None, modo_teste: bool = False, categorias_selecio
                 logger.info(f"Pulando linha {i+1}/{len(df_filtrado)} que parece ser cabeçalho ou está vazia")
                 continue
             
-            logger.info(f"Processando linha {i+1}/{len(df_filtrado)}: ID {id_campanha} - {titulo}")
+            logger.info(f"Processando linha {i+1}/{len(df_filtrado)}: ID {id_campanha} - {titulo_original} (Índice Original Planilha: {indice_original_linha})")
             
             # Gera o conteúdo usando o Gemini
             logger.info(f"Gerando conteúdo com o Gemini para '{palavra_ancora}'...")
@@ -1311,8 +1304,7 @@ def main(limite_linhas: int = None, modo_teste: bool = False, categorias_selecio
             tokens_saida_total += metricas['tokens_saida']
             
             # Extrai o título real do conteúdo gerado (primeira linha)
-            linhas = conteudo.split('\n')
-            titulo_gerado = linhas[0].strip() if linhas else "Artigo sem título"
+            titulo_gerado = extrair_titulo(conteudo) # Usar função para extrair título
             logger.info(f"Título gerado: {titulo_gerado}")
             
             # Gera o nome do arquivo usando o ID em vez da data
@@ -1330,38 +1322,39 @@ def main(limite_linhas: int = None, modo_teste: bool = False, categorias_selecio
             # Atualiza a URL e o título na planilha (se não estiver em modo de teste)
             if not modo_teste:
                 try:
-                    # Obtém o número real da linha na planilha (a linha original + 2 para offset)
-                    linha_planilha = idx + 2
+                    # Calcula o número da linha na planilha (índice original + 2 para offset de cabeçalho e base 1)
+                    linha_planilha = indice_original_linha + 2
                     
-                    # Imprime detalhes de diagnóstico
+                    # Imprime detalhes de diagnóstico ANTES de atualizar
                     logger.info(f"==== INFORMAÇÕES DE ATUALIZAÇÃO DA PLANILHA ====")
                     logger.info(f"ID da Planilha: {spreadsheet_id}")
                     logger.info(f"Nome da Aba: {sheet_name}")
-                    logger.info(f"Linha na planilha a ser atualizada: {linha_planilha}")
-                    logger.info(f"Título a ser inserido na coluna I: {titulo_gerado}")
-                    logger.info(f"URL a ser inserida na coluna J: {document_url}")
+                    logger.info(f"Índice Original da Linha (base 0): {indice_original_linha}")
+                    logger.info(f"Linha na planilha a ser atualizada (base 1): {linha_planilha}")
                     
                     # Atualiza o título (coluna I)
-                    titulo_range = f"{sheet_name}!I{linha_planilha}"
-                    logger.info(f"Atualizando título em: {titulo_range}")
+                    coluna_titulo = 'I' # Coluna do título
+                    titulo_range = f"{sheet_name}!{coluna_titulo}{linha_planilha}"
+                    logger.info(f"Tentando atualizar Título na célula {coluna_titulo}{linha_planilha} (Range: {titulo_range}) com valor: '{titulo_gerado}'")
                     
                     sheets.service.spreadsheets().values().update(
                         spreadsheetId=spreadsheet_id,
                         range=titulo_range,
-                        valueInputOption="USER_ENTERED",  # Mudado para USER_ENTERED para melhor formatação
+                        valueInputOption="USER_ENTERED", 
                         body={"values": [[titulo_gerado]]}
                     ).execute()
                     
                     logger.info(f"✓ Título atualizado com sucesso em {titulo_range}!")
                     
                     # Atualiza a URL (coluna J)
-                    url_range = f"{sheet_name}!J{linha_planilha}"
-                    logger.info(f"Atualizando URL em: {url_range}")
+                    coluna_url = 'J' # Coluna da URL
+                    url_range = f"{sheet_name}!{coluna_url}{linha_planilha}"
+                    logger.info(f"Tentando atualizar URL na célula {coluna_url}{linha_planilha} (Range: {url_range}) com valor: '{document_url}'")
                     
                     sheets.service.spreadsheets().values().update(
                         spreadsheetId=spreadsheet_id,
                         range=url_range,
-                        valueInputOption="USER_ENTERED",  # Mudado para USER_ENTERED para melhor formatação
+                        valueInputOption="USER_ENTERED",
                         body={"values": [[document_url]]}
                     ).execute()
                     
@@ -1369,7 +1362,7 @@ def main(limite_linhas: int = None, modo_teste: bool = False, categorias_selecio
                     logger.info(f"==== FIM DA ATUALIZAÇÃO DA PLANILHA ====")
                     
                 except Exception as e:
-                    logger.error(f"Erro ao atualizar planilha: {e}")
+                    logger.error(f"Erro ao atualizar planilha para linha original {indice_original_linha} (linha sheet {linha_planilha}): {e}")
                     logger.exception("Detalhes do erro:")
             else:
                 logger.info(f"[MODO TESTE] URL gerada (não atualizada na planilha): {document_url}")
@@ -1379,7 +1372,10 @@ def main(limite_linhas: int = None, modo_teste: bool = False, categorias_selecio
             time.sleep(1)
             
         except Exception as e:
-            logger.error(f"Erro ao processar linha {i+1}: {e}")
+            # Log do erro incluindo o índice original se disponível
+            indice_orig_erro = linha.get('linha_original', 'N/A')
+            logger.error(f"Erro ao processar linha {i+1} (Índice Original Planilha: {indice_orig_erro}): {e}")
+            logger.exception("Detalhes completos do erro:")
             continue
     
     # Exibe resumo

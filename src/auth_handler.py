@@ -11,9 +11,11 @@ from src.config import CREDENTIALS_FILE_PATH
 
 # Se modifica essas permissões, delete o arquivo token.json.
 SCOPES = [
-    'https://www.googleapis.com/auth/spreadsheets',           # Ler e escrever nas planilhas (adicionei permissão completa)
+    'https://www.googleapis.com/auth/spreadsheets',           # Ler e escrever nas planilhas
     'https://www.googleapis.com/auth/documents',              # Criar e editar documentos
-    'https://www.googleapis.com/auth/drive.file'              # Acessar arquivos criados pelo app
+    'https://www.googleapis.com/auth/drive.file',             # Acessar arquivos criados pelo app
+    'https://www.googleapis.com/auth/drive',                  # Acesso completo aos arquivos e metadados do Drive
+    'https://www.googleapis.com/auth/drive.metadata.readonly' # Ler metadados dos arquivos do Drive
 ]
 
 def obter_credenciais():

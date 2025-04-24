@@ -1,0 +1,504 @@
+2025-04-22 17:52:11,530 - seo_linkbuilder - INFO - Iniciando script SEO-LinkBuilder - 2025-04-22 17:52:11
+2025-04-22 17:53:07,792 - seo_linkbuilder - INFO - Selecionado: Janeiro de 2025
+2025-04-22 17:53:08,093 - googleapiclient.discovery_cache - INFO - file_cache is only supported with oauth2client<4.0.0
+2025-04-22 17:53:08,124 - seo_linkbuilder.sheets - INFO - Serviço do Google Sheets inicializado com sucesso
+2025-04-22 17:53:08,125 - seo_linkbuilder.gemini - INFO - API do Gemini inicializada com sucesso. Modelo: gemini-1.5-flash
+2025-04-22 17:53:08,142 - googleapiclient.discovery_cache - INFO - file_cache is only supported with oauth2client<4.0.0
+2025-04-22 17:53:08,168 - googleapiclient.discovery_cache - INFO - file_cache is only supported with oauth2client<4.0.0
+2025-04-22 17:53:08,197 - seo_linkbuilder.docs - INFO - Serviços do Google Docs e Drive inicializados com sucesso
+2025-04-22 17:53:08,199 - seo_linkbuilder - INFO - Handlers inicializados com sucesso
+2025-04-22 17:53:09,956 - seo_linkbuilder.sheets - INFO - Começando a partir da linha 674
+2025-04-22 17:53:09,957 - seo_linkbuilder.sheets - INFO - Modo 'apenas_dados' ativado: retornando todos os dados sem filtrar por data
+2025-04-22 17:53:09,957 - seo_linkbuilder.sheets - INFO - Lidos 264 registros da planilha
+2025-04-22 17:53:09,958 - seo_linkbuilder - INFO - Planilha lida com sucesso. Total de 264 linhas
+2025-04-22 17:53:09,958 - seo_linkbuilder - INFO - Estimando custos por categoria...
+2025-04-22 17:53:09,967 - seo_linkbuilder - INFO - Processadas 150 linhas válidas para categorização
+2025-04-22 17:59:01,281 - seo_linkbuilder - INFO - Iniciando script SEO-LinkBuilder - 2025-04-22 17:59:01
+2025-04-22 17:59:01,285 - googleapiclient.discovery_cache - INFO - file_cache is only supported with oauth2client<4.0.0
+2025-04-22 17:59:01,290 - seo_linkbuilder.sheets - INFO - Serviço do Google Sheets inicializado com sucesso
+2025-04-22 17:59:01,290 - seo_linkbuilder - INFO - SheetsHandler inicializado com sucesso
+2025-04-22 17:59:01,291 - seo_linkbuilder - INFO - Verificando períodos disponíveis na planilha...
+2025-04-22 17:59:02,881 - seo_linkbuilder.sheets - INFO - Começando a partir da linha 674
+2025-04-22 17:59:02,882 - seo_linkbuilder.sheets - INFO - Modo 'apenas_dados' ativado: retornando todos os dados sem filtrar por data
+2025-04-22 17:59:02,882 - seo_linkbuilder.sheets - INFO - Lidos 264 registros da planilha de um total de 264
+2025-04-22 17:59:02,882 - seo_linkbuilder - ERROR - Erro ao verificar períodos disponíveis: name 'FORMATO_DATA' is not defined
+2025-04-22 17:59:09,845 - seo_linkbuilder - INFO - Selecionado: Janeiro de 2026
+2025-04-22 17:59:09,846 - seo_linkbuilder.gemini - INFO - API do Gemini inicializada com sucesso. Modelo: gemini-1.5-flash
+2025-04-22 17:59:09,849 - googleapiclient.discovery_cache - INFO - file_cache is only supported with oauth2client<4.0.0
+2025-04-22 17:59:09,854 - googleapiclient.discovery_cache - INFO - file_cache is only supported with oauth2client<4.0.0
+2025-04-22 17:59:09,861 - seo_linkbuilder.docs - INFO - Serviços do Google Docs e Drive inicializados com sucesso
+2025-04-22 17:59:09,861 - seo_linkbuilder - INFO - Handlers inicializados com sucesso
+2025-04-22 17:59:10,280 - seo_linkbuilder.sheets - INFO - Começando a partir da linha 674
+2025-04-22 17:59:10,281 - seo_linkbuilder.sheets - INFO - Modo 'apenas_dados' ativado: retornando todos os dados sem filtrar por data
+2025-04-22 17:59:10,281 - seo_linkbuilder.sheets - INFO - Lidos 264 registros da planilha de um total de 264
+2025-04-22 17:59:10,282 - seo_linkbuilder - INFO - Planilha lida com sucesso. Total de 264 linhas
+2025-04-22 17:59:10,282 - seo_linkbuilder - INFO - Estimando custos por categoria...
+2025-04-22 17:59:10,293 - seo_linkbuilder - INFO - Processadas 150 linhas válidas para categorização
+2025-04-22 18:03:19,110 - seo_linkbuilder - INFO - Iniciando script SEO-LinkBuilder - 2025-04-22 18:03:19
+2025-04-22 18:03:19,115 - googleapiclient.discovery_cache - INFO - file_cache is only supported with oauth2client<4.0.0
+2025-04-22 18:03:19,120 - seo_linkbuilder.sheets - INFO - Serviço do Google Sheets inicializado com sucesso
+2025-04-22 18:03:19,121 - seo_linkbuilder - INFO - SheetsHandler inicializado com sucesso
+2025-04-22 18:03:19,121 - seo_linkbuilder - INFO - Verificando períodos disponíveis na planilha...
+2025-04-22 18:03:20,238 - seo_linkbuilder.sheets - INFO - Começando a partir da linha 674
+2025-04-22 18:03:20,239 - seo_linkbuilder.sheets - INFO - Modo 'apenas_dados' ativado: retornando todos os dados sem filtrar por data
+2025-04-22 18:03:20,239 - seo_linkbuilder.sheets - INFO - Lidos 264 registros da planilha de um total de 264
+2025-04-22 18:03:20,239 - seo_linkbuilder - ERROR - Erro ao verificar períodos disponíveis: name 'FORMATO_DATA' is not defined
+2025-04-22 18:03:25,342 - seo_linkbuilder - INFO - Selecionado: Janeiro de 2026
+2025-04-22 18:03:25,343 - seo_linkbuilder.gemini - INFO - API do Gemini inicializada com sucesso. Modelo: gemini-1.5-flash
+2025-04-22 18:03:25,346 - googleapiclient.discovery_cache - INFO - file_cache is only supported with oauth2client<4.0.0
+2025-04-22 18:03:25,351 - googleapiclient.discovery_cache - INFO - file_cache is only supported with oauth2client<4.0.0
+2025-04-22 18:03:25,356 - seo_linkbuilder.docs - INFO - Serviços do Google Docs e Drive inicializados com sucesso
+2025-04-22 18:03:25,356 - seo_linkbuilder - INFO - Handlers inicializados com sucesso
+2025-04-22 18:03:25,765 - seo_linkbuilder.sheets - INFO - Começando a partir da linha 674
+2025-04-22 18:03:25,766 - seo_linkbuilder.sheets - INFO - Filtrando por período: 01/2026
+2025-04-22 18:03:25,772 - seo_linkbuilder.sheets - INFO - Valores únicos na coluna data: ['2025/04' '2025/05'] 
+2025-04-22 18:03:25,773 - seo_linkbuilder.sheets - INFO - Buscando datas no formato YYYY/MM: 2026/01
+2025-04-22 18:03:25,780 - seo_linkbuilder.sheets - WARNING - Nenhuma linha encontrada para o período 01/2026 em nenhum formato
+2025-04-22 18:03:25,781 - seo_linkbuilder - WARNING - Nenhum dado encontrado para o período 01/2026!
+2025-04-22 18:03:26,211 - seo_linkbuilder.sheets - INFO - Começando a partir da linha 674
+2025-04-22 18:03:26,212 - seo_linkbuilder.sheets - INFO - Modo 'apenas_dados' ativado: retornando todos os dados sem filtrar por data
+2025-04-22 18:03:26,212 - seo_linkbuilder.sheets - INFO - Lidos 264 registros da planilha de um total de 264
+2025-04-22 18:03:53,910 - seo_linkbuilder - INFO - Iniciando script SEO-LinkBuilder - 2025-04-22 18:03:53
+2025-04-22 18:03:53,916 - googleapiclient.discovery_cache - INFO - file_cache is only supported with oauth2client<4.0.0
+2025-04-22 18:03:53,918 - seo_linkbuilder.sheets - INFO - Serviço do Google Sheets inicializado com sucesso
+2025-04-22 18:03:53,919 - seo_linkbuilder - INFO - SheetsHandler inicializado com sucesso
+2025-04-22 18:03:53,919 - seo_linkbuilder - INFO - Verificando períodos disponíveis na planilha...
+2025-04-22 18:03:54,987 - seo_linkbuilder.sheets - INFO - Começando a partir da linha 674
+2025-04-22 18:03:54,989 - seo_linkbuilder.sheets - INFO - Modo 'apenas_dados' ativado: retornando todos os dados sem filtrar por data
+2025-04-22 18:03:54,989 - seo_linkbuilder.sheets - INFO - Lidos 264 registros da planilha de um total de 264
+2025-04-22 18:03:54,990 - seo_linkbuilder - ERROR - Erro ao verificar períodos disponíveis: name 'FORMATO_DATA' is not defined
+2025-04-22 18:04:01,728 - seo_linkbuilder - INFO - Selecionado: Março de 2026
+2025-04-22 18:04:01,729 - seo_linkbuilder.gemini - INFO - API do Gemini inicializada com sucesso. Modelo: gemini-1.5-flash
+2025-04-22 18:04:01,732 - googleapiclient.discovery_cache - INFO - file_cache is only supported with oauth2client<4.0.0
+2025-04-22 18:04:01,737 - googleapiclient.discovery_cache - INFO - file_cache is only supported with oauth2client<4.0.0
+2025-04-22 18:04:01,743 - seo_linkbuilder.docs - INFO - Serviços do Google Docs e Drive inicializados com sucesso
+2025-04-22 18:04:01,743 - seo_linkbuilder - INFO - Handlers inicializados com sucesso
+2025-04-22 18:04:02,175 - seo_linkbuilder.sheets - INFO - Começando a partir da linha 674
+2025-04-22 18:04:02,175 - seo_linkbuilder.sheets - INFO - Filtrando por período: 03/2026
+2025-04-22 18:04:02,176 - seo_linkbuilder.sheets - INFO - Valores únicos na coluna data: ['2025/04' '2025/05'] 
+2025-04-22 18:04:02,177 - seo_linkbuilder.sheets - INFO - Buscando datas no formato YYYY/MM: 2026/03
+2025-04-22 18:04:02,180 - seo_linkbuilder.sheets - WARNING - Nenhuma linha encontrada para o período 03/2026 em nenhum formato
+2025-04-22 18:04:02,182 - seo_linkbuilder - WARNING - Nenhum dado encontrado para o período 03/2026!
+2025-04-22 18:04:02,823 - seo_linkbuilder.sheets - INFO - Começando a partir da linha 674
+2025-04-22 18:04:02,824 - seo_linkbuilder.sheets - INFO - Modo 'apenas_dados' ativado: retornando todos os dados sem filtrar por data
+2025-04-22 18:04:02,824 - seo_linkbuilder.sheets - INFO - Lidos 264 registros da planilha de um total de 264
+2025-04-22 18:04:27,755 - seo_linkbuilder - INFO - Iniciando script SEO-LinkBuilder - 2025-04-22 18:04:27
+2025-04-22 18:04:27,760 - googleapiclient.discovery_cache - INFO - file_cache is only supported with oauth2client<4.0.0
+2025-04-22 18:04:27,770 - seo_linkbuilder.sheets - INFO - Serviço do Google Sheets inicializado com sucesso
+2025-04-22 18:04:27,771 - seo_linkbuilder - INFO - SheetsHandler inicializado com sucesso
+2025-04-22 18:04:27,771 - seo_linkbuilder - INFO - Verificando períodos disponíveis na planilha...
+2025-04-22 18:04:29,114 - seo_linkbuilder.sheets - INFO - Começando a partir da linha 674
+2025-04-22 18:04:29,115 - seo_linkbuilder.sheets - INFO - Modo 'apenas_dados' ativado: retornando todos os dados sem filtrar por data
+2025-04-22 18:04:29,115 - seo_linkbuilder.sheets - INFO - Lidos 264 registros da planilha de um total de 264
+2025-04-22 18:04:29,116 - seo_linkbuilder - ERROR - Erro ao verificar períodos disponíveis: name 'FORMATO_DATA' is not defined
+2025-04-22 18:04:34,928 - seo_linkbuilder - INFO - Selecionado: Maio de 2025
+2025-04-22 18:04:34,930 - seo_linkbuilder.gemini - INFO - API do Gemini inicializada com sucesso. Modelo: gemini-1.5-flash
+2025-04-22 18:04:34,934 - googleapiclient.discovery_cache - INFO - file_cache is only supported with oauth2client<4.0.0
+2025-04-22 18:04:34,939 - googleapiclient.discovery_cache - INFO - file_cache is only supported with oauth2client<4.0.0
+2025-04-22 18:04:34,945 - seo_linkbuilder.docs - INFO - Serviços do Google Docs e Drive inicializados com sucesso
+2025-04-22 18:04:34,945 - seo_linkbuilder - INFO - Handlers inicializados com sucesso
+2025-04-22 18:04:35,367 - seo_linkbuilder.sheets - INFO - Começando a partir da linha 674
+2025-04-22 18:04:35,368 - seo_linkbuilder.sheets - INFO - Filtrando por período: 05/2025
+2025-04-22 18:04:35,369 - seo_linkbuilder.sheets - INFO - Valores únicos na coluna data: ['2025/04' '2025/05'] 
+2025-04-22 18:04:35,370 - seo_linkbuilder.sheets - INFO - Buscando datas no formato YYYY/MM: 2025/05
+2025-04-22 18:04:35,405 - seo_linkbuilder.sheets - INFO - Filtrado para 114 linhas usando formato YYYY/MM (regex): '2025[/-]05'
+2025-04-22 18:04:35,406 - seo_linkbuilder.sheets - INFO - Lidos 114 registros da planilha de um total de 264
+2025-04-22 18:04:35,408 - seo_linkbuilder - INFO - Planilha filtrada para 05/2025 lida com sucesso. Total de 114 linhas
+2025-04-22 18:04:35,829 - seo_linkbuilder.sheets - INFO - Começando a partir da linha 674
+2025-04-22 18:04:35,830 - seo_linkbuilder.sheets - INFO - Modo 'apenas_dados' ativado: retornando todos os dados sem filtrar por data
+2025-04-22 18:04:35,830 - seo_linkbuilder.sheets - INFO - Lidos 264 registros da planilha de um total de 264
+2025-04-22 18:04:35,830 - seo_linkbuilder - INFO - Planilha completa lida com sucesso. Total de 264 linhas
+2025-04-22 18:04:35,831 - seo_linkbuilder - INFO - Estimando custos por categoria...
+2025-04-22 18:04:35,834 - seo_linkbuilder - INFO - Processadas 0 linhas válidas para categorização
+2025-04-22 18:04:35,834 - seo_linkbuilder - WARNING - Nenhuma linha válida encontrada para categorização
+2025-04-22 18:04:35,834 - seo_linkbuilder - WARNING - Nenhuma categoria com itens encontrada
+2025-04-22 18:04:35,835 - seo_linkbuilder - WARNING - Nenhuma categoria selecionada. Retornando DataFrame vazio.
+2025-04-22 18:04:35,835 - seo_linkbuilder - WARNING - Nenhuma linha restante após filtragem. Encerrando.
+2025-04-22 18:20:34,409 - seo_linkbuilder - INFO - Iniciando script SEO-LinkBuilder - 2025-04-22 18:20:34
+2025-04-22 18:20:34,417 - googleapiclient.discovery_cache - INFO - file_cache is only supported with oauth2client<4.0.0
+2025-04-22 18:20:34,427 - seo_linkbuilder.sheets - INFO - Serviço do Google Sheets inicializado com sucesso
+2025-04-22 18:20:34,428 - seo_linkbuilder - INFO - SheetsHandler inicializado com sucesso
+2025-04-22 18:20:34,428 - seo_linkbuilder - ERROR - Erro durante a seleção da planilha: name 'SPREADSHEET_ID' is not defined
+2025-04-22 18:20:34,428 - seo_linkbuilder - ERROR - Detalhes do erro:
+Traceback (most recent call last):
+  File "C:\Python-Projetos\SEO-LinkBuilder\main.py", line 968, in apresentar_menu_planilha
+    print(f"\nPlanilha padrão atual: {SPREADSHEET_ID} (aba: {SHEET_NAME})")
+                                      ^^^^^^^^^^^^^^
+NameError: name 'SPREADSHEET_ID' is not defined
+2025-04-22 18:21:04,408 - seo_linkbuilder - INFO - Iniciando script SEO-LinkBuilder - 2025-04-22 18:21:04
+2025-04-22 18:21:04,413 - googleapiclient.discovery_cache - INFO - file_cache is only supported with oauth2client<4.0.0
+2025-04-22 18:21:04,417 - seo_linkbuilder.sheets - INFO - Serviço do Google Sheets inicializado com sucesso
+2025-04-22 18:21:04,418 - seo_linkbuilder - INFO - SheetsHandler inicializado com sucesso
+2025-04-22 18:21:13,984 - seo_linkbuilder - INFO - Verificando acesso à planilha 13246548...
+2025-04-22 18:21:15,028 - seo_linkbuilder.sheets - ERROR - Erro ao listar abas da planilha 13246548: <HttpError 404 when requesting https://sheets.googleapis.com/v4/spreadsheets/13246548?alt=json returned "Requested entity was not found.". Details: "Requested entity was not found.">
+2025-04-22 18:21:15,028 - seo_linkbuilder - WARNING - Não foi possível acessar a planilha 13246548 ou ela não tem abas. Verificar permissões.
+2025-04-22 18:21:22,678 - seo_linkbuilder - INFO - Selecionada planilha ID: 13246548, aba: main
+2025-04-22 18:21:25,785 - seo_linkbuilder - INFO - Verificando períodos disponíveis na planilha...
+2025-04-22 18:21:26,646 - seo_linkbuilder.sheets - INFO - Começando a partir da linha 674
+2025-04-22 18:21:26,647 - seo_linkbuilder.sheets - INFO - Modo 'apenas_dados' ativado: retornando todos os dados sem filtrar por data
+2025-04-22 18:21:26,647 - seo_linkbuilder.sheets - INFO - Lidos 264 registros da planilha de um total de 264
+2025-04-22 18:21:26,650 - seo_linkbuilder - INFO - Encontrados 150 registros para Abril de 2025
+2025-04-22 18:21:26,651 - seo_linkbuilder - INFO - Encontrados 114 registros para Maio de 2025
+2025-04-22 18:23:51,360 - seo_linkbuilder - INFO - Iniciando script SEO-LinkBuilder - 2025-04-22 18:23:51
+2025-04-22 18:23:51,365 - googleapiclient.discovery_cache - INFO - file_cache is only supported with oauth2client<4.0.0
+2025-04-22 18:23:51,370 - seo_linkbuilder.sheets - INFO - Serviço do Google Sheets inicializado com sucesso
+2025-04-22 18:23:51,370 - seo_linkbuilder - INFO - SheetsHandler inicializado com sucesso
+2025-04-22 18:24:06,405 - seo_linkbuilder - INFO - Verificando acesso à planilha 18547856...
+2025-04-22 18:24:07,304 - seo_linkbuilder.sheets - ERROR - Erro ao listar abas da planilha 18547856: <HttpError 404 when requesting https://sheets.googleapis.com/v4/spreadsheets/18547856?alt=json returned "Requested entity was not found.". Details: "Requested entity was not found.">
+2025-04-22 18:24:07,305 - seo_linkbuilder - WARNING - Não foi possível acessar a planilha 18547856 ou ela não tem abas.
+2025-04-22 18:24:32,259 - seo_linkbuilder - INFO - Iniciando script SEO-LinkBuilder - 2025-04-22 18:24:32
+2025-04-22 18:24:32,264 - googleapiclient.discovery_cache - INFO - file_cache is only supported with oauth2client<4.0.0
+2025-04-22 18:24:32,267 - seo_linkbuilder.sheets - INFO - Serviço do Google Sheets inicializado com sucesso
+2025-04-22 18:24:32,267 - seo_linkbuilder - INFO - SheetsHandler inicializado com sucesso
+2025-04-22 18:24:45,836 - seo_linkbuilder - INFO - Verificando acesso à planilha iwrygfiwfjpr3wug89eru0t4eiptrpbur...
+2025-04-22 18:24:46,592 - seo_linkbuilder.sheets - ERROR - Erro ao listar abas da planilha iwrygfiwfjpr3wug89eru0t4eiptrpbur: <HttpError 404 when requesting https://sheets.googleapis.com/v4/spreadsheets/iwrygfiwfjpr3wug89eru0t4eiptrpbur?alt=json returned "Requested entity was not found.". Details: "Requested entity was not found.">
+2025-04-22 18:24:46,593 - seo_linkbuilder - WARNING - Não foi possível acessar a planilha iwrygfiwfjpr3wug89eru0t4eiptrpbur ou ela não tem abas.
+2025-04-22 18:29:26,893 - seo_linkbuilder - INFO - Iniciando script SEO-LinkBuilder - 2025-04-22 18:29:26
+2025-04-22 18:29:26,899 - googleapiclient.discovery_cache - INFO - file_cache is only supported with oauth2client<4.0.0
+2025-04-22 18:29:26,903 - seo_linkbuilder.sheets - INFO - Serviço do Google Sheets inicializado com sucesso
+2025-04-22 18:29:26,903 - seo_linkbuilder - INFO - SheetsHandler inicializado com sucesso
+2025-04-22 18:33:29,654 - seo_linkbuilder - INFO - Iniciando script SEO-LinkBuilder - 2025-04-22 18:33:29
+2025-04-22 18:33:29,659 - googleapiclient.discovery_cache - INFO - file_cache is only supported with oauth2client<4.0.0
+2025-04-22 18:33:29,664 - seo_linkbuilder.sheets - INFO - Serviço do Google Sheets inicializado com sucesso
+2025-04-22 18:33:29,664 - seo_linkbuilder - INFO - SheetsHandler inicializado com sucesso
+2025-04-22 18:34:31,527 - seo_linkbuilder - INFO - Verificando acesso à planilha padrão 12NxIBzKhNdxCMm2ggGQdPmlKWAFYuLUzvA6N0cDP1Fo...
+2025-04-22 18:34:33,296 - seo_linkbuilder.sheets - INFO - Encontradas 6 abas na planilha 12NxIBzKhNdxCMm2ggGQdPmlKWAFYuLUzvA6N0cDP1Fo
+2025-04-22 18:34:33,297 - seo_linkbuilder - INFO - Usando planilha padrão: 12NxIBzKhNdxCMm2ggGQdPmlKWAFYuLUzvA6N0cDP1Fo, aba: new
+2025-04-22 18:34:33,297 - seo_linkbuilder.gemini - INFO - API do Gemini inicializada com sucesso. Modelo: gemini-1.5-flash
+2025-04-22 18:34:33,301 - googleapiclient.discovery_cache - INFO - file_cache is only supported with oauth2client<4.0.0
+2025-04-22 18:34:33,305 - googleapiclient.discovery_cache - INFO - file_cache is only supported with oauth2client<4.0.0
+2025-04-22 18:34:33,309 - seo_linkbuilder.docs - INFO - Serviços do Google Docs e Drive inicializados com sucesso
+2025-04-22 18:34:33,310 - seo_linkbuilder - INFO - Handlers inicializados com sucesso
+2025-04-22 18:34:33,928 - seo_linkbuilder.sheets - INFO - Removendo linha de cabeçalho, restam 937 linhas
+2025-04-22 18:34:33,931 - seo_linkbuilder.sheets - INFO - Filtrado para 934 linhas com IDs válidos de 937 linhas
+2025-04-22 18:34:33,939 - seo_linkbuilder.sheets - INFO - Lidos 934 registros da planilha de um total de 937
+2025-04-22 18:34:33,939 - seo_linkbuilder - INFO - Planilha lida com sucesso. Total de 934 linhas com IDs válidos
+2025-04-22 18:34:33,940 - seo_linkbuilder - INFO - Estimando custos por categoria...
+2025-04-22 18:34:34,002 - seo_linkbuilder - INFO - Processadas 932 linhas válidas para categorização
+2025-04-22 18:35:01,997 - seo_linkbuilder - INFO - Iniciando script SEO-LinkBuilder - 2025-04-22 18:35:01
+2025-04-22 18:35:02,002 - googleapiclient.discovery_cache - INFO - file_cache is only supported with oauth2client<4.0.0
+2025-04-22 18:35:02,007 - seo_linkbuilder.sheets - INFO - Serviço do Google Sheets inicializado com sucesso
+2025-04-22 18:35:02,007 - seo_linkbuilder - INFO - SheetsHandler inicializado com sucesso
+2025-04-22 18:35:15,604 - seo_linkbuilder - INFO - Verificando acesso à planilha 12NxIBzKhNdxCMm2ggGQdPmlKWAFYuLUzvA6N0cDP1Fo...
+2025-04-22 18:35:16,451 - seo_linkbuilder.sheets - INFO - Encontradas 6 abas na planilha 12NxIBzKhNdxCMm2ggGQdPmlKWAFYuLUzvA6N0cDP1Fo
+2025-04-22 18:35:27,800 - seo_linkbuilder - INFO - Selecionada planilha ID: 12NxIBzKhNdxCMm2ggGQdPmlKWAFYuLUzvA6N0cDP1Fo, aba: Página9
+2025-04-22 18:35:34,108 - seo_linkbuilder.gemini - INFO - API do Gemini inicializada com sucesso. Modelo: gemini-1.5-flash
+2025-04-22 18:35:34,111 - googleapiclient.discovery_cache - INFO - file_cache is only supported with oauth2client<4.0.0
+2025-04-22 18:35:34,117 - googleapiclient.discovery_cache - INFO - file_cache is only supported with oauth2client<4.0.0
+2025-04-22 18:35:34,121 - seo_linkbuilder.docs - INFO - Serviços do Google Docs e Drive inicializados com sucesso
+2025-04-22 18:35:34,122 - seo_linkbuilder - INFO - Handlers inicializados com sucesso
+2025-04-22 18:35:34,456 - seo_linkbuilder.sheets - INFO - Removendo linha de cabeçalho, restam 1 linhas
+2025-04-22 18:35:34,458 - seo_linkbuilder.sheets - INFO - Filtrado para 1 linhas com IDs válidos de 1 linhas
+2025-04-22 18:35:34,458 - seo_linkbuilder.sheets - INFO - Lidos 1 registros da planilha de um total de 1
+2025-04-22 18:35:34,459 - seo_linkbuilder - INFO - Planilha lida com sucesso. Total de 1 linhas com IDs válidos
+2025-04-22 18:35:34,459 - seo_linkbuilder - INFO - Estimando custos por categoria...
+2025-04-22 18:35:34,460 - seo_linkbuilder - INFO - Processadas 1 linhas válidas para categorização
+2025-04-22 18:35:41,586 - seo_linkbuilder - INFO - Selecionados todos os 1 itens (custo estimado: R$0.00)
+2025-04-22 18:35:41,586 - seo_linkbuilder - INFO - Todas as categorias foram selecionadas. Retornando DataFrame completo.
+2025-04-22 18:35:41,587 - seo_linkbuilder - INFO - Serão processadas 1 linhas
+2025-04-22 18:35:41,587 - seo_linkbuilder - INFO - Custo estimado total: $0.0007 USD (aproximadamente R$0.00)
+2025-04-22 18:35:45,808 - seo_linkbuilder - INFO - EXECUTANDO EM MODO DE TESTE - Apenas a primeira linha será processada
+2025-04-22 18:35:45,809 - seo_linkbuilder - INFO - Processando linha 1/1: ID 555 - Sem título
+2025-04-22 18:35:45,809 - seo_linkbuilder - INFO - Gerando conteúdo com o Gemini para 'bet'...
+2025-04-22 18:35:45,810 - seo_linkbuilder.gemini - INFO - Template de prompt carregado com sucesso
+2025-04-22 18:35:45,810 - seo_linkbuilder.gemini - INFO - Template de prompt carregado
+2025-04-22 18:35:45,811 - seo_linkbuilder.gemini - INFO - Categoria 'bet' encontrada para palavra-âncora 'bet'
+2025-04-22 18:35:46,009 - seo_linkbuilder.gemini - INFO - Prompt construído com 1428 tokens estimados
+2025-04-22 18:35:46,009 - seo_linkbuilder.gemini - INFO - Site: 'caio.com.br'
+2025-04-22 18:35:46,010 - seo_linkbuilder.gemini - INFO - Tema: 'apostas em caio.com.br'
+2025-04-22 18:35:46,010 - seo_linkbuilder.gemini - INFO - Palavra-âncora que DEVE ser inserida naturalmente: 'bet'
+2025-04-22 18:35:46,011 - seo_linkbuilder.gemini - INFO - URL-âncora para a palavra: 'https://www.estrelabet.bet.br'
+2025-04-22 18:35:46,011 - seo_linkbuilder.gemini - INFO - Título: 'Sem título'
+2025-04-22 18:35:46,012 - seo_linkbuilder.gemini - INFO - Usando temperatura: 0.4 para gerar conteúdo único
+2025-04-22 18:35:46,012 - seo_linkbuilder.gemini - INFO - Chamando a API Gemini para gerar conteúdo...
+2025-04-22 18:35:50,600 - seo_linkbuilder.gemini - WARNING - Texto gerado tem apenas 377 palavras. Tentando gerar um texto mais longo (tentativa 1/3)
+2025-04-22 18:35:54,477 - seo_linkbuilder.gemini - INFO - Gerado novo conteúdo com 399 palavras e contendo a palavra-âncora.
+2025-04-22 18:35:54,478 - seo_linkbuilder.gemini - WARNING - Texto gerado tem apenas 399 palavras. Tentando gerar um texto mais longo (tentativa 2/3)
+2025-04-22 18:35:58,937 - seo_linkbuilder.gemini - INFO - Gerado novo conteúdo com 459 palavras e contendo a palavra-âncora.
+2025-04-22 18:35:58,938 - seo_linkbuilder.gemini - WARNING - Texto gerado tem apenas 459 palavras. Tentando gerar um texto mais longo (tentativa 3/3)
+2025-04-22 18:36:03,175 - seo_linkbuilder.gemini - WARNING - O novo conteúdo não era melhor que o anterior.
+2025-04-22 18:36:03,177 - seo_linkbuilder.gemini - INFO - Resposta final contém 21 linhas
+2025-04-22 18:36:03,178 - seo_linkbuilder.gemini - INFO - Primeira linha: 'Aventura nos Cassinos Online: Como Jogar com Sabed...'
+2025-04-22 18:36:03,178 - seo_linkbuilder.gemini - INFO - Terceira linha: 'A emoção dos jogos de cassino online é inegável, c...'
+2025-04-22 18:36:03,180 - seo_linkbuilder.gemini - INFO - Resposta gerada com 766 tokens e 2919 caracteres
+2025-04-22 18:36:03,180 - seo_linkbuilder.gemini - INFO - Número de palavras no texto gerado: 459
+2025-04-22 18:36:03,180 - seo_linkbuilder.gemini - WARNING - ALERTA: Texto gerado tem menos de 470 ou mais de 550 palavras (459)
+2025-04-22 18:36:03,181 - seo_linkbuilder.gemini - INFO - Custo estimado: $0.000740 USD
+2025-04-22 18:36:03,184 - seo_linkbuilder.gemini - WARNING - Foram substituídos 2 termos proibidos no conteúdo: lucros, lucros
+2025-04-22 18:36:03,184 - seo_linkbuilder.gemini - INFO - Iniciando processo para criar link da palavra-âncora 'bet' para URL 'https://www.estrelabet.bet.br'...
+2025-04-22 18:36:03,237 - seo_linkbuilder.utils - INFO - Contexto da palavra-âncora: '...riorizada acima de tudo.  Os jogadores que buscam bet devem saber que a principal motivação deve ser o ...'
+2025-04-22 18:36:03,240 - seo_linkbuilder - INFO - Título gerado: Aventura nos Cassinos Online: Como Jogar com Sabedoria
+2025-04-22 18:36:03,241 - seo_linkbuilder - INFO - Criando documento '555 - caio.com.br - bet'...
+2025-04-22 18:36:04,834 - seo_linkbuilder.docs - INFO - Documento criado com ID: 1yGMEszGCJ79VgHvUQOpSGzrOgrS7htk0GGiTBfH0N8s
+2025-04-22 18:36:04,835 - seo_linkbuilder.docs - INFO - Tamanho do conteúdo: 2945 caracteres
+2025-04-22 18:36:04,835 - seo_linkbuilder.docs - INFO - Número de linhas no texto: 21
+2025-04-22 18:36:04,836 - seo_linkbuilder.docs - INFO - Primeira linha (título): Aventura nos Cassinos Online: Como Jogar com Sabed...
+2025-04-22 18:36:04,836 - seo_linkbuilder.docs - INFO - Informações de link: palavra='bet', URL=https://www.estrelabet.bet.br
+2025-04-22 18:36:04,837 - seo_linkbuilder.utils - INFO - Link aplicado à palavra 'bet' no parágrafo 2 posição 519-522
+2025-04-22 18:36:04,837 - seo_linkbuilder.docs - INFO - Gerados 29 requests para a API do Docs
+2025-04-22 18:36:05,332 - seo_linkbuilder.docs - INFO - Conteúdo inserido no documento 1yGMEszGCJ79VgHvUQOpSGzrOgrS7htk0GGiTBfH0N8s
+2025-04-22 18:36:05,961 - seo_linkbuilder.docs - INFO - Título formatado com tamanho 17pt
+2025-04-22 18:36:07,335 - seo_linkbuilder.docs - INFO - Documento 1yGMEszGCJ79VgHvUQOpSGzrOgrS7htk0GGiTBfH0N8s movido para a pasta 15stBSwwd-zybDlzWYOPHHKxvPPO_0ueU
+2025-04-22 18:36:07,335 - seo_linkbuilder - INFO - [MODO TESTE] URL gerada (não atualizada na planilha): https://docs.google.com/document/d/1yGMEszGCJ79VgHvUQOpSGzrOgrS7htk0GGiTBfH0N8s/edit
+2025-04-22 18:36:07,335 - seo_linkbuilder - INFO - [MODO TESTE] Título gerado (não atualizado na planilha): Aventura nos Cassinos Online: Como Jogar com Sabedoria
+2025-04-22 18:36:08,336 - seo_linkbuilder - INFO - 
+==================================================
+2025-04-22 18:36:08,337 - seo_linkbuilder - INFO - RESUMO DE EXECUÇÃO - 2025-04-22 18:36:08
+2025-04-22 18:36:08,337 - seo_linkbuilder - INFO - Total de artigos processados: 1
+2025-04-22 18:36:08,338 - seo_linkbuilder - INFO - Tokens de entrada: 1428
+2025-04-22 18:36:08,338 - seo_linkbuilder - INFO - Tokens de saída: 766
+2025-04-22 18:36:08,338 - seo_linkbuilder - INFO - Custo total estimado: $0.0007 USD (aproximadamente R$0.00)
+2025-04-22 18:36:08,338 - seo_linkbuilder - INFO - ==================================================
+2025-04-22 18:36:08,339 - seo_linkbuilder - INFO - Modo de teste ativo. Verificações de duplicidade, similaridade e termos proibidos serão ignoradas.
+2025-04-22 18:39:05,633 - seo_linkbuilder - INFO - Iniciando script SEO-LinkBuilder - 2025-04-22 18:39:05
+2025-04-22 18:39:05,644 - googleapiclient.discovery_cache - INFO - file_cache is only supported with oauth2client<4.0.0
+2025-04-22 18:39:05,656 - seo_linkbuilder.sheets - INFO - Serviço do Google Sheets inicializado com sucesso
+2025-04-22 18:39:05,660 - seo_linkbuilder - INFO - SheetsHandler inicializado com sucesso
+2025-04-22 18:39:44,110 - seo_linkbuilder - INFO - Operação cancelada pelo usuário.
+2025-04-22 18:39:44,110 - seo_linkbuilder - ERROR - Não foi possível selecionar uma planilha válida. Encerrando.
+2025-04-22 18:40:06,098 - seo_linkbuilder - INFO - Iniciando script SEO-LinkBuilder - 2025-04-22 18:40:06
+2025-04-22 18:40:06,106 - googleapiclient.discovery_cache - INFO - file_cache is only supported with oauth2client<4.0.0
+2025-04-22 18:40:06,109 - seo_linkbuilder.sheets - INFO - Serviço do Google Sheets inicializado com sucesso
+2025-04-22 18:40:06,109 - seo_linkbuilder - INFO - SheetsHandler inicializado com sucesso
+2025-04-22 18:40:27,163 - seo_linkbuilder - INFO - Verificando acesso à planilha 12NxIBzKhNdxCMm2ggGQdPmlKWAFYuLUzvA6N0cDP1Fo...
+2025-04-22 18:40:28,355 - seo_linkbuilder.sheets - INFO - Encontradas 6 abas na planilha 12NxIBzKhNdxCMm2ggGQdPmlKWAFYuLUzvA6N0cDP1Fo
+2025-04-22 18:40:34,532 - seo_linkbuilder - INFO - Selecionada planilha ID: 12NxIBzKhNdxCMm2ggGQdPmlKWAFYuLUzvA6N0cDP1Fo, aba: Página9
+2025-04-22 18:40:36,808 - seo_linkbuilder.gemini - INFO - API do Gemini inicializada com sucesso. Modelo: gemini-1.5-flash
+2025-04-22 18:40:36,812 - googleapiclient.discovery_cache - INFO - file_cache is only supported with oauth2client<4.0.0
+2025-04-22 18:40:36,819 - googleapiclient.discovery_cache - INFO - file_cache is only supported with oauth2client<4.0.0
+2025-04-22 18:40:36,823 - seo_linkbuilder.docs - INFO - Serviços do Google Docs e Drive inicializados com sucesso
+2025-04-22 18:40:36,824 - seo_linkbuilder - INFO - Handlers inicializados com sucesso
+2025-04-22 18:40:37,197 - seo_linkbuilder.sheets - INFO - Removendo linha de cabeçalho, restam 1 linhas
+2025-04-22 18:40:37,199 - seo_linkbuilder.sheets - INFO - Filtrado para 1 linhas com IDs válidos de 1 linhas
+2025-04-22 18:40:37,199 - seo_linkbuilder.sheets - INFO - Lidos 1 registros da planilha de um total de 1
+2025-04-22 18:40:37,200 - seo_linkbuilder - INFO - Planilha lida com sucesso. Total de 1 linhas com IDs válidos
+2025-04-22 18:40:37,200 - seo_linkbuilder - INFO - Estimando custos por categoria...
+2025-04-22 18:40:37,201 - seo_linkbuilder - INFO - Processadas 1 linhas válidas para categorização
+2025-04-22 18:40:40,623 - seo_linkbuilder - INFO - Selecionados todos os 1 itens (custo estimado: R$0.00)
+2025-04-22 18:40:40,624 - seo_linkbuilder - INFO - Todas as categorias foram selecionadas. Retornando DataFrame completo.
+2025-04-22 18:40:40,624 - seo_linkbuilder - INFO - Serão processadas 1 linhas
+2025-04-22 18:40:40,625 - seo_linkbuilder - INFO - Custo estimado total: $0.0007 USD (aproximadamente R$0.00)
+2025-04-22 18:40:43,463 - seo_linkbuilder - INFO - EXECUTANDO EM MODO DE TESTE - Apenas a primeira linha será processada
+2025-04-22 18:40:43,464 - seo_linkbuilder - INFO - Processando linha 1/1: ID 555 - Sem título
+2025-04-22 18:40:43,464 - seo_linkbuilder - INFO - Gerando conteúdo com o Gemini para 'bet'...
+2025-04-22 18:40:43,465 - seo_linkbuilder.gemini - INFO - Template de prompt carregado com sucesso
+2025-04-22 18:40:43,465 - seo_linkbuilder.gemini - INFO - Template de prompt carregado
+2025-04-22 18:40:43,466 - seo_linkbuilder.gemini - INFO - Categoria 'bet' encontrada para palavra-âncora 'bet'
+2025-04-22 18:40:43,639 - seo_linkbuilder.gemini - INFO - Prompt construído com 1428 tokens estimados
+2025-04-22 18:40:43,639 - seo_linkbuilder.gemini - INFO - Site: 'caio.com.br'
+2025-04-22 18:40:43,640 - seo_linkbuilder.gemini - INFO - Tema: 'apostas em caio.com.br'
+2025-04-22 18:40:43,640 - seo_linkbuilder.gemini - INFO - Palavra-âncora que DEVE ser inserida naturalmente: 'bet'
+2025-04-22 18:40:43,640 - seo_linkbuilder.gemini - INFO - URL-âncora para a palavra: 'https://www.estrelabet.bet.br'
+2025-04-22 18:40:43,641 - seo_linkbuilder.gemini - INFO - Título: 'Sem título'
+2025-04-22 18:40:43,641 - seo_linkbuilder.gemini - INFO - Usando temperatura: 0.6000000000000001 para gerar conteúdo único
+2025-04-22 18:40:43,641 - seo_linkbuilder.gemini - INFO - Chamando a API Gemini para gerar conteúdo...
+2025-04-22 18:40:47,658 - seo_linkbuilder.gemini - WARNING - Texto gerado tem apenas 374 palavras. Tentando gerar um texto mais longo (tentativa 1/3)
+2025-04-22 18:40:51,736 - seo_linkbuilder.gemini - INFO - Gerado novo conteúdo com 439 palavras e contendo a palavra-âncora.
+2025-04-22 18:40:51,737 - seo_linkbuilder.gemini - WARNING - Texto gerado tem apenas 439 palavras. Tentando gerar um texto mais longo (tentativa 2/3)
+2025-04-22 18:40:55,882 - seo_linkbuilder.gemini - INFO - Gerado novo conteúdo com 448 palavras e contendo a palavra-âncora.
+2025-04-22 18:40:55,883 - seo_linkbuilder.gemini - WARNING - Texto gerado tem apenas 448 palavras. Tentando gerar um texto mais longo (tentativa 3/3)
+2025-04-22 18:40:59,879 - seo_linkbuilder.gemini - WARNING - O novo conteúdo não era melhor que o anterior.
+2025-04-22 18:40:59,880 - seo_linkbuilder.gemini - INFO - Resposta final contém 22 linhas
+2025-04-22 18:40:59,880 - seo_linkbuilder.gemini - INFO - Primeira linha: 'Aventura nos Cassinos Online: Como Jogar com Sabed...'
+2025-04-22 18:40:59,881 - seo_linkbuilder.gemini - INFO - Terceira linha: 'Apostar em jogos de cassino online pode ser uma ex...'
+2025-04-22 18:40:59,882 - seo_linkbuilder.gemini - INFO - Resposta gerada com 738 tokens e 2823 caracteres
+2025-04-22 18:40:59,883 - seo_linkbuilder.gemini - INFO - Número de palavras no texto gerado: 448
+2025-04-22 18:40:59,883 - seo_linkbuilder.gemini - WARNING - ALERTA: Texto gerado tem menos de 470 ou mais de 550 palavras (448)
+2025-04-22 18:40:59,884 - seo_linkbuilder.gemini - INFO - Custo estimado: $0.000726 USD
+2025-04-22 18:40:59,887 - seo_linkbuilder.gemini - WARNING - Foram substituídos 1 termos proibidos no conteúdo: ganhos
+2025-04-22 18:40:59,887 - seo_linkbuilder.gemini - INFO - Iniciando processo para criar link da palavra-âncora 'bet' para URL 'https://www.estrelabet.bet.br'...
+2025-04-22 18:40:59,898 - seo_linkbuilder.utils - INFO - Contexto da palavra-âncora: '... mágica para o sucesso, e os jogadores que buscam bet devem saber que a sorte desempenha um papel signi...'
+2025-04-22 18:40:59,902 - seo_linkbuilder - INFO - Título gerado: Aventura nos Cassinos Online: Como Jogar com Sabedoria
+2025-04-22 18:40:59,903 - seo_linkbuilder - INFO - Criando documento '555 - caio.com.br - bet'...
+2025-04-22 18:41:01,285 - seo_linkbuilder.docs - INFO - Documento criado com ID: 1aY5KPryMkso8VEzwnHq1MVJ1pSOqVV25g81uX-EAin4
+2025-04-22 18:41:01,286 - seo_linkbuilder.docs - INFO - Tamanho do conteúdo: 2837 caracteres
+2025-04-22 18:41:01,288 - seo_linkbuilder.docs - INFO - Número de linhas no texto: 22
+2025-04-22 18:41:01,288 - seo_linkbuilder.docs - INFO - Primeira linha (título): Aventura nos Cassinos Online: Como Jogar com Sabed...
+2025-04-22 18:41:01,288 - seo_linkbuilder.docs - INFO - Informações de link: palavra='bet', URL=https://www.estrelabet.bet.br
+2025-04-22 18:41:01,289 - seo_linkbuilder.utils - INFO - Link aplicado à palavra 'bet' no parágrafo 2 posição 624-627
+2025-04-22 18:41:01,289 - seo_linkbuilder.docs - INFO - Gerados 29 requests para a API do Docs
+2025-04-22 18:41:01,773 - seo_linkbuilder.docs - INFO - Conteúdo inserido no documento 1aY5KPryMkso8VEzwnHq1MVJ1pSOqVV25g81uX-EAin4
+2025-04-22 18:41:02,599 - seo_linkbuilder.docs - INFO - Título formatado com tamanho 17pt
+2025-04-22 18:41:03,881 - seo_linkbuilder.docs - INFO - Documento 1aY5KPryMkso8VEzwnHq1MVJ1pSOqVV25g81uX-EAin4 movido para a pasta 15stBSwwd-zybDlzWYOPHHKxvPPO_0ueU
+2025-04-22 18:41:03,882 - seo_linkbuilder - INFO - [MODO TESTE] URL gerada (não atualizada na planilha): https://docs.google.com/document/d/1aY5KPryMkso8VEzwnHq1MVJ1pSOqVV25g81uX-EAin4/edit
+2025-04-22 18:41:03,883 - seo_linkbuilder - INFO - [MODO TESTE] Título gerado (não atualizado na planilha): Aventura nos Cassinos Online: Como Jogar com Sabedoria
+2025-04-22 18:41:04,884 - seo_linkbuilder - INFO - 
+==================================================
+2025-04-22 18:41:04,885 - seo_linkbuilder - INFO - RESUMO DE EXECUÇÃO - 2025-04-22 18:41:04
+2025-04-22 18:41:04,886 - seo_linkbuilder - INFO - Total de artigos processados: 1
+2025-04-22 18:41:04,886 - seo_linkbuilder - INFO - Tokens de entrada: 1428
+2025-04-22 18:41:04,887 - seo_linkbuilder - INFO - Tokens de saída: 738
+2025-04-22 18:41:04,887 - seo_linkbuilder - INFO - Custo total estimado: $0.0007 USD (aproximadamente R$0.00)
+2025-04-22 18:41:04,888 - seo_linkbuilder - INFO - ==================================================
+2025-04-22 18:41:04,888 - seo_linkbuilder - INFO - Modo de teste ativo. Verificações de duplicidade, similaridade e termos proibidos serão ignoradas.
+2025-04-22 18:43:28,768 - seo_linkbuilder - INFO - Iniciando script SEO-LinkBuilder - 2025-04-22 18:43:28
+2025-04-22 18:43:28,772 - googleapiclient.discovery_cache - INFO - file_cache is only supported with oauth2client<4.0.0
+2025-04-22 18:43:28,775 - seo_linkbuilder.sheets - INFO - Serviço do Google Sheets inicializado com sucesso
+2025-04-22 18:43:28,775 - seo_linkbuilder - INFO - SheetsHandler inicializado com sucesso
+2025-04-22 18:43:46,516 - seo_linkbuilder - INFO - Verificando acesso à planilha 12NxIBzKhNdxCMm2ggGQdPmlKWAFYuLUzvA6N0cDP1Fo...
+2025-04-22 18:43:47,589 - seo_linkbuilder.sheets - INFO - Encontradas 6 abas na planilha 12NxIBzKhNdxCMm2ggGQdPmlKWAFYuLUzvA6N0cDP1Fo
+2025-04-22 18:43:57,893 - seo_linkbuilder - INFO - Selecionada planilha ID: 12NxIBzKhNdxCMm2ggGQdPmlKWAFYuLUzvA6N0cDP1Fo, aba: Página9
+2025-04-22 18:43:59,833 - seo_linkbuilder.gemini - INFO - API do Gemini inicializada com sucesso. Modelo: gemini-1.5-flash
+2025-04-22 18:43:59,838 - googleapiclient.discovery_cache - INFO - file_cache is only supported with oauth2client<4.0.0
+2025-04-22 18:43:59,843 - googleapiclient.discovery_cache - INFO - file_cache is only supported with oauth2client<4.0.0
+2025-04-22 18:43:59,848 - seo_linkbuilder.docs - INFO - Serviços do Google Docs e Drive inicializados com sucesso
+2025-04-22 18:43:59,849 - seo_linkbuilder - INFO - Handlers inicializados com sucesso
+2025-04-22 18:44:00,183 - seo_linkbuilder.sheets - INFO - Removendo linha de cabeçalho, restam 1 linhas
+2025-04-22 18:44:00,185 - seo_linkbuilder.sheets - INFO - Filtrado para 1 linhas com IDs válidos de 1 linhas
+2025-04-22 18:44:00,185 - seo_linkbuilder.sheets - INFO - Lidos 1 registros da planilha de um total de 1
+2025-04-22 18:44:00,186 - seo_linkbuilder - INFO - Planilha lida com sucesso. Total de 1 linhas com IDs válidos
+2025-04-22 18:44:00,186 - seo_linkbuilder - INFO - Estimando custos por categoria...
+2025-04-22 18:44:00,187 - seo_linkbuilder - INFO - Processadas 1 linhas válidas para categorização
+2025-04-22 18:44:03,383 - seo_linkbuilder - INFO - Selecionados todos os 1 itens (custo estimado: R$0.00)
+2025-04-22 18:44:03,384 - seo_linkbuilder - INFO - Todas as categorias foram selecionadas. Retornando DataFrame completo.
+2025-04-22 18:44:03,385 - seo_linkbuilder - INFO - Serão processadas 1 linhas
+2025-04-22 18:44:03,385 - seo_linkbuilder - INFO - Custo estimado total: $0.0007 USD (aproximadamente R$0.00)
+2025-04-22 18:44:05,023 - seo_linkbuilder - INFO - EXECUTANDO EM MODO DE TESTE - Apenas a primeira linha será processada
+2025-04-22 18:44:05,024 - seo_linkbuilder - INFO - Processando linha 1/1: ID 555 - Sem título
+2025-04-22 18:44:05,024 - seo_linkbuilder - INFO - Gerando conteúdo com o Gemini para 'bet'...
+2025-04-22 18:44:05,025 - seo_linkbuilder.gemini - INFO - Template de prompt carregado com sucesso
+2025-04-22 18:44:05,026 - seo_linkbuilder.gemini - INFO - Template de prompt carregado
+2025-04-22 18:44:05,026 - seo_linkbuilder.gemini - INFO - Categoria 'bet' encontrada para palavra-âncora 'bet'
+2025-04-22 18:44:05,183 - seo_linkbuilder.gemini - INFO - Prompt construído com 1428 tokens estimados
+2025-04-22 18:44:05,184 - seo_linkbuilder.gemini - INFO - Site: 'caio.com.br'
+2025-04-22 18:44:05,184 - seo_linkbuilder.gemini - INFO - Tema: 'apostas em caio.com.br'
+2025-04-22 18:44:05,185 - seo_linkbuilder.gemini - INFO - Palavra-âncora que DEVE ser inserida naturalmente: 'bet'
+2025-04-22 18:44:05,185 - seo_linkbuilder.gemini - INFO - URL-âncora para a palavra: 'https://www.estrelabet.bet.br'
+2025-04-22 18:44:05,186 - seo_linkbuilder.gemini - INFO - Título: 'Sem título'
+2025-04-22 18:44:05,186 - seo_linkbuilder.gemini - INFO - Usando temperatura: 0.30000000000000004 para gerar conteúdo único
+2025-04-22 18:44:05,187 - seo_linkbuilder.gemini - INFO - Chamando a API Gemini para gerar conteúdo...
+2025-04-22 18:44:08,703 - seo_linkbuilder.gemini - WARNING - Texto gerado tem apenas 350 palavras. Tentando gerar um texto mais longo (tentativa 1/3)
+2025-04-22 18:44:12,956 - seo_linkbuilder.gemini - INFO - Gerado novo conteúdo com 464 palavras e contendo a palavra-âncora.
+2025-04-22 18:44:12,956 - seo_linkbuilder.gemini - WARNING - Texto gerado tem apenas 464 palavras. Tentando gerar um texto mais longo (tentativa 2/3)
+2025-04-22 18:44:16,903 - seo_linkbuilder.gemini - WARNING - O novo conteúdo não era melhor que o anterior.
+2025-04-22 18:44:16,904 - seo_linkbuilder.gemini - WARNING - Texto gerado tem apenas 464 palavras. Tentando gerar um texto mais longo (tentativa 3/3)
+2025-04-22 18:44:21,097 - seo_linkbuilder.gemini - WARNING - O novo conteúdo não era melhor que o anterior.
+2025-04-22 18:44:21,098 - seo_linkbuilder.gemini - INFO - Resposta final contém 25 linhas
+2025-04-22 18:44:21,099 - seo_linkbuilder.gemini - INFO - Primeira linha: 'Aventura nos Cassinos Online: Um Guia para o Jogo ...'
+2025-04-22 18:44:21,100 - seo_linkbuilder.gemini - INFO - Terceira linha: 'Apostar em jogos de cassino online pode ser uma ex...'
+2025-04-22 18:44:21,102 - seo_linkbuilder.gemini - INFO - Resposta gerada com 795 tokens e 3018 caracteres
+2025-04-22 18:44:21,103 - seo_linkbuilder.gemini - INFO - Número de palavras no texto gerado: 464
+2025-04-22 18:44:21,103 - seo_linkbuilder.gemini - WARNING - ALERTA: Texto gerado tem menos de 470 ou mais de 550 palavras (464)
+2025-04-22 18:44:21,104 - seo_linkbuilder.gemini - INFO - Custo estimado: $0.000754 USD
+2025-04-22 18:44:21,107 - seo_linkbuilder.gemini - WARNING - Foram substituídos 3 termos proibidos no conteúdo: lucros, enriquecer, garantido
+2025-04-22 18:44:21,108 - seo_linkbuilder.gemini - INFO - Iniciando processo para criar link da palavra-âncora 'bet' para URL 'https://www.estrelabet.bet.br'...
+2025-04-22 18:44:21,120 - seo_linkbuilder.utils - INFO - Contexto da palavra-âncora: '...va reside no equilíbrio.  Os jogadores que buscam bet devem saber que o sucesso não é possível e que as...'
+2025-04-22 18:44:21,124 - seo_linkbuilder - INFO - Título gerado: Aventura nos Cassinos Online: Um Guia para o Jogo Consciente
+2025-04-22 18:44:21,125 - seo_linkbuilder - INFO - Criando documento '555 - caio.com.br - bet'...
+2025-04-22 18:44:22,498 - seo_linkbuilder.docs - INFO - Documento criado com ID: 14zzSZkpEhErBT00yPuhYX_zDayFUBPuCZvUhO19ykMw
+2025-04-22 18:44:22,499 - seo_linkbuilder.docs - INFO - Tamanho do conteúdo: 3044 caracteres
+2025-04-22 18:44:22,499 - seo_linkbuilder.docs - INFO - Número de linhas no texto: 25
+2025-04-22 18:44:22,499 - seo_linkbuilder.docs - INFO - Primeira linha (título): Aventura nos Cassinos Online: Um Guia para o Jogo ...
+2025-04-22 18:44:22,500 - seo_linkbuilder.docs - INFO - Informações de link: palavra='bet', URL=https://www.estrelabet.bet.br
+2025-04-22 18:44:22,500 - seo_linkbuilder.utils - INFO - Link aplicado à palavra 'bet' no parágrafo 2 posição 502-505
+2025-04-22 18:44:22,500 - seo_linkbuilder.docs - INFO - Gerados 34 requests para a API do Docs
+2025-04-22 18:44:22,940 - seo_linkbuilder.docs - INFO - Conteúdo inserido no documento 14zzSZkpEhErBT00yPuhYX_zDayFUBPuCZvUhO19ykMw
+2025-04-22 18:44:23,482 - seo_linkbuilder.docs - INFO - Título formatado com tamanho 17pt
+2025-04-22 18:44:24,894 - seo_linkbuilder.docs - INFO - Documento 14zzSZkpEhErBT00yPuhYX_zDayFUBPuCZvUhO19ykMw movido para a pasta 15stBSwwd-zybDlzWYOPHHKxvPPO_0ueU
+2025-04-22 18:44:24,896 - seo_linkbuilder - INFO - [MODO TESTE] URL gerada (não atualizada na planilha): https://docs.google.com/document/d/14zzSZkpEhErBT00yPuhYX_zDayFUBPuCZvUhO19ykMw/edit
+2025-04-22 18:44:24,896 - seo_linkbuilder - INFO - [MODO TESTE] Título gerado (não atualizado na planilha): Aventura nos Cassinos Online: Um Guia para o Jogo Consciente
+2025-04-22 18:44:25,897 - seo_linkbuilder - INFO - 
+==================================================
+2025-04-22 18:44:25,898 - seo_linkbuilder - INFO - RESUMO DE EXECUÇÃO - 2025-04-22 18:44:25
+2025-04-22 18:44:25,898 - seo_linkbuilder - INFO - Total de artigos processados: 1
+2025-04-22 18:44:25,899 - seo_linkbuilder - INFO - Tokens de entrada: 1428
+2025-04-22 18:44:25,900 - seo_linkbuilder - INFO - Tokens de saída: 795
+2025-04-22 18:44:25,900 - seo_linkbuilder - INFO - Custo total estimado: $0.0008 USD (aproximadamente R$0.00)
+2025-04-22 18:44:25,901 - seo_linkbuilder - INFO - ==================================================
+2025-04-22 18:44:25,901 - seo_linkbuilder - INFO - Modo de teste ativo. Verificações de duplicidade, similaridade e termos proibidos serão ignoradas.
+2025-04-22 18:45:46,097 - seo_linkbuilder - INFO - Iniciando script SEO-LinkBuilder - 2025-04-22 18:45:46
+2025-04-22 18:45:46,105 - googleapiclient.discovery_cache - INFO - file_cache is only supported with oauth2client<4.0.0
+2025-04-22 18:45:46,109 - seo_linkbuilder.sheets - INFO - Serviço do Google Sheets inicializado com sucesso
+2025-04-22 18:45:46,109 - seo_linkbuilder - INFO - SheetsHandler inicializado com sucesso
+2025-04-22 18:45:51,858 - seo_linkbuilder - INFO - Verificando acesso à planilha padrão 12NxIBzKhNdxCMm2ggGQdPmlKWAFYuLUzvA6N0cDP1Fo...
+2025-04-22 18:45:52,893 - seo_linkbuilder.sheets - INFO - Encontradas 6 abas na planilha 12NxIBzKhNdxCMm2ggGQdPmlKWAFYuLUzvA6N0cDP1Fo
+2025-04-22 18:45:52,894 - seo_linkbuilder - INFO - Usando planilha padrão: 12NxIBzKhNdxCMm2ggGQdPmlKWAFYuLUzvA6N0cDP1Fo, aba: new
+2025-04-22 18:45:52,894 - seo_linkbuilder.gemini - INFO - API do Gemini inicializada com sucesso. Modelo: gemini-1.5-flash
+2025-04-22 18:45:52,900 - googleapiclient.discovery_cache - INFO - file_cache is only supported with oauth2client<4.0.0
+2025-04-22 18:45:52,907 - googleapiclient.discovery_cache - INFO - file_cache is only supported with oauth2client<4.0.0
+2025-04-22 18:45:52,912 - seo_linkbuilder.docs - INFO - Serviços do Google Docs e Drive inicializados com sucesso
+2025-04-22 18:45:52,913 - seo_linkbuilder - INFO - Handlers inicializados com sucesso
+2025-04-22 18:45:53,317 - seo_linkbuilder.sheets - INFO - Removendo linha de cabeçalho, restam 937 linhas
+2025-04-22 18:45:53,320 - seo_linkbuilder.sheets - INFO - Filtrado para 46 linhas com IDs válidos de 937 linhas
+2025-04-22 18:45:53,320 - seo_linkbuilder.sheets - INFO - Lidos 46 registros da planilha de um total de 937
+2025-04-22 18:45:53,321 - seo_linkbuilder - INFO - Planilha lida com sucesso. Total de 46 linhas com IDs válidos
+2025-04-22 18:45:53,321 - seo_linkbuilder - INFO - Estimando custos por categoria...
+2025-04-22 18:45:53,324 - seo_linkbuilder - INFO - Processadas 2 linhas válidas para categorização
+2025-04-22 18:46:09,699 - seo_linkbuilder - INFO - Operação cancelada pelo usuário
+2025-04-22 18:46:09,700 - seo_linkbuilder - INFO - Operação cancelada pelo usuário. Encerrando.
+2025-04-22 18:46:19,018 - seo_linkbuilder - INFO - Iniciando script SEO-LinkBuilder - 2025-04-22 18:46:19
+2025-04-22 18:46:19,024 - googleapiclient.discovery_cache - INFO - file_cache is only supported with oauth2client<4.0.0
+2025-04-22 18:46:19,027 - seo_linkbuilder.sheets - INFO - Serviço do Google Sheets inicializado com sucesso
+2025-04-22 18:46:19,028 - seo_linkbuilder - INFO - SheetsHandler inicializado com sucesso
+2025-04-22 18:46:33,867 - seo_linkbuilder - INFO - Verificando acesso à planilha 12NxIBzKhNdxCMm2ggGQdPmlKWAFYuLUzvA6N0cDP1Fo...
+2025-04-22 18:46:34,653 - seo_linkbuilder.sheets - INFO - Encontradas 6 abas na planilha 12NxIBzKhNdxCMm2ggGQdPmlKWAFYuLUzvA6N0cDP1Fo
+2025-04-22 18:46:39,275 - seo_linkbuilder - INFO - Selecionada planilha ID: 12NxIBzKhNdxCMm2ggGQdPmlKWAFYuLUzvA6N0cDP1Fo, aba: Página9
+2025-04-22 18:46:42,339 - seo_linkbuilder - ERROR - Erro ao salvar configuração: 'utf-8' codec can't decode byte 0xe1 in position 320: invalid continuation byte
+2025-04-22 18:46:42,340 - seo_linkbuilder.gemini - INFO - API do Gemini inicializada com sucesso. Modelo: gemini-1.5-flash
+2025-04-22 18:46:42,344 - googleapiclient.discovery_cache - INFO - file_cache is only supported with oauth2client<4.0.0
+2025-04-22 18:46:42,349 - googleapiclient.discovery_cache - INFO - file_cache is only supported with oauth2client<4.0.0
+2025-04-22 18:46:42,354 - seo_linkbuilder.docs - INFO - Serviços do Google Docs e Drive inicializados com sucesso
+2025-04-22 18:46:42,354 - seo_linkbuilder - INFO - Handlers inicializados com sucesso
+2025-04-22 18:46:42,597 - seo_linkbuilder.sheets - INFO - Removendo linha de cabeçalho, restam 1 linhas
+2025-04-22 18:46:42,598 - seo_linkbuilder.sheets - INFO - Filtrado para 1 linhas com IDs válidos de 1 linhas
+2025-04-22 18:46:42,598 - seo_linkbuilder.sheets - INFO - Lidos 1 registros da planilha de um total de 1
+2025-04-22 18:46:42,599 - seo_linkbuilder - INFO - Planilha lida com sucesso. Total de 1 linhas com IDs válidos
+2025-04-22 18:46:42,599 - seo_linkbuilder - INFO - Estimando custos por categoria...
+2025-04-22 18:46:42,599 - seo_linkbuilder - INFO - Processadas 1 linhas válidas para categorização
+2025-04-22 18:46:48,342 - seo_linkbuilder - INFO - Selecionados todos os 1 itens (custo estimado: R$0.00)
+2025-04-22 18:46:48,343 - seo_linkbuilder - INFO - Todas as categorias foram selecionadas. Retornando DataFrame completo.
+2025-04-22 18:46:48,343 - seo_linkbuilder - INFO - Serão processadas 1 linhas
+2025-04-22 18:46:48,344 - seo_linkbuilder - INFO - Custo estimado total: $0.0007 USD (aproximadamente R$0.00)
+2025-04-22 18:46:52,635 - seo_linkbuilder - INFO - EXECUTANDO EM MODO DE TESTE - Apenas a primeira linha será processada
+2025-04-22 18:46:52,636 - seo_linkbuilder - INFO - Processando linha 1/1: ID 555 - Sem título
+2025-04-22 18:46:52,636 - seo_linkbuilder - INFO - Gerando conteúdo com o Gemini para 'bet'...
+2025-04-22 18:46:52,637 - seo_linkbuilder.gemini - INFO - Template de prompt carregado com sucesso
+2025-04-22 18:46:52,637 - seo_linkbuilder.gemini - INFO - Template de prompt carregado
+2025-04-22 18:46:52,638 - seo_linkbuilder.gemini - INFO - Categoria 'bet' encontrada para palavra-âncora 'bet'
+2025-04-22 18:46:52,807 - seo_linkbuilder.gemini - INFO - Prompt construído com 1428 tokens estimados
+2025-04-22 18:46:52,808 - seo_linkbuilder.gemini - INFO - Site: 'caio.com.br'
+2025-04-22 18:46:52,808 - seo_linkbuilder.gemini - INFO - Tema: 'apostas em caio.com.br'
+2025-04-22 18:46:52,809 - seo_linkbuilder.gemini - INFO - Palavra-âncora que DEVE ser inserida naturalmente: 'bet'
+2025-04-22 18:46:52,809 - seo_linkbuilder.gemini - INFO - URL-âncora para a palavra: 'https://www.estrelabet.bet.br'
+2025-04-22 18:46:52,810 - seo_linkbuilder.gemini - INFO - Título: 'Sem título'
+2025-04-22 18:46:52,810 - seo_linkbuilder.gemini - INFO - Usando temperatura: 0.2 para gerar conteúdo único
+2025-04-22 18:46:52,810 - seo_linkbuilder.gemini - INFO - Chamando a API Gemini para gerar conteúdo...
+2025-04-22 18:46:56,969 - seo_linkbuilder.gemini - WARNING - Texto gerado tem apenas 383 palavras. Tentando gerar um texto mais longo (tentativa 1/3)
+2025-04-22 18:47:01,055 - seo_linkbuilder.gemini - INFO - Gerado novo conteúdo com 436 palavras e contendo a palavra-âncora.
+2025-04-22 18:47:01,056 - seo_linkbuilder.gemini - WARNING - Texto gerado tem apenas 436 palavras. Tentando gerar um texto mais longo (tentativa 2/3)
+2025-04-22 18:47:05,359 - seo_linkbuilder.gemini - INFO - Gerado novo conteúdo com 468 palavras e contendo a palavra-âncora.
+2025-04-22 18:47:05,360 - seo_linkbuilder.gemini - WARNING - Texto gerado tem apenas 468 palavras. Tentando gerar um texto mais longo (tentativa 3/3)
+2025-04-22 18:47:09,122 - seo_linkbuilder.gemini - WARNING - O novo conteúdo não era melhor que o anterior.
+2025-04-22 18:47:09,122 - seo_linkbuilder.gemini - INFO - Resposta final contém 21 linhas
+2025-04-22 18:47:09,123 - seo_linkbuilder.gemini - INFO - Primeira linha: 'Aventura nos Cassinos Online: Dicas para um Jogo C...'
+2025-04-22 18:47:09,123 - seo_linkbuilder.gemini - INFO - Terceira linha: 'Apostar em jogos de cassino online pode ser uma ex...'
+2025-04-22 18:47:09,124 - seo_linkbuilder.gemini - INFO - Resposta gerada com 763 tokens e 2961 caracteres
+2025-04-22 18:47:09,125 - seo_linkbuilder.gemini - INFO - Número de palavras no texto gerado: 468
+2025-04-22 18:47:09,125 - seo_linkbuilder.gemini - WARNING - ALERTA: Texto gerado tem menos de 470 ou mais de 550 palavras (468)
+2025-04-22 18:47:09,125 - seo_linkbuilder.gemini - INFO - Custo estimado: $0.000739 USD
+2025-04-22 18:47:09,128 - seo_linkbuilder.gemini - WARNING - Foram substituídos 5 termos proibidos no conteúdo: ganhar dinheiro, ganhar dinheiro, ganhar, enriquecer, garantia
+2025-04-22 18:47:09,128 - seo_linkbuilder.gemini - INFO - Iniciando processo para criar link da palavra-âncora 'bet' para URL 'https://www.estrelabet.bet.br'...
+2025-04-22 18:47:09,141 - seo_linkbuilder.utils - INFO - Contexto da palavra-âncora: '...ara um jogo responsável.  Os jogadores que buscam bet devem saber que as chances de aproveitar e perder...'
+2025-04-22 18:47:09,144 - seo_linkbuilder - INFO - Título gerado: Aventura nos Cassinos Online: Dicas para um Jogo Consciente
+2025-04-22 18:47:09,145 - seo_linkbuilder - INFO - Criando documento '555 - caio.com.br - bet'...
+2025-04-22 18:47:10,745 - seo_linkbuilder.docs - INFO - Documento criado com ID: 1vIv-haXcBYjR4_3J5zZutKp6MwjpxkYXybM2kA8EjbM
+2025-04-22 18:47:10,746 - seo_linkbuilder.docs - INFO - Tamanho do conteúdo: 3012 caracteres
+2025-04-22 18:47:10,746 - seo_linkbuilder.docs - INFO - Número de linhas no texto: 21
+2025-04-22 18:47:10,746 - seo_linkbuilder.docs - INFO - Primeira linha (título): Aventura nos Cassinos Online: Dicas para um Jogo C...
+2025-04-22 18:47:10,747 - seo_linkbuilder.docs - INFO - Informações de link: palavra='bet', URL=https://www.estrelabet.bet.br
+2025-04-22 18:47:10,747 - seo_linkbuilder.utils - INFO - Link aplicado à palavra 'bet' no parágrafo 2 posição 562-565
+2025-04-22 18:47:10,747 - seo_linkbuilder.docs - INFO - Gerados 29 requests para a API do Docs
+2025-04-22 18:47:11,169 - seo_linkbuilder.docs - INFO - Conteúdo inserido no documento 1vIv-haXcBYjR4_3J5zZutKp6MwjpxkYXybM2kA8EjbM
+2025-04-22 18:47:11,647 - seo_linkbuilder.docs - INFO - Título formatado com tamanho 17pt
+2025-04-22 18:47:12,909 - seo_linkbuilder.docs - INFO - Documento 1vIv-haXcBYjR4_3J5zZutKp6MwjpxkYXybM2kA8EjbM movido para a pasta 15stBSwwd-zybDlzWYOPHHKxvPPO_0ueU
+2025-04-22 18:47:12,909 - seo_linkbuilder - INFO - [MODO TESTE] URL gerada (não atualizada na planilha): https://docs.google.com/document/d/1vIv-haXcBYjR4_3J5zZutKp6MwjpxkYXybM2kA8EjbM/edit
+2025-04-22 18:47:12,910 - seo_linkbuilder - INFO - [MODO TESTE] Título gerado (não atualizado na planilha): Aventura nos Cassinos Online: Dicas para um Jogo Consciente
+2025-04-22 18:47:13,910 - seo_linkbuilder - INFO - 
+==================================================
+2025-04-22 18:47:13,911 - seo_linkbuilder - INFO - RESUMO DE EXECUÇÃO - 2025-04-22 18:47:13
+2025-04-22 18:47:13,911 - seo_linkbuilder - INFO - Total de artigos processados: 1
+2025-04-22 18:47:13,912 - seo_linkbuilder - INFO - Tokens de entrada: 1428
+2025-04-22 18:47:13,912 - seo_linkbuilder - INFO - Tokens de saída: 763
+2025-04-22 18:47:13,912 - seo_linkbuilder - INFO - Custo total estimado: $0.0007 USD (aproximadamente R$0.00)
+2025-04-22 18:47:13,913 - seo_linkbuilder - INFO - ==================================================
+2025-04-22 18:47:13,913 - seo_linkbuilder - INFO - Modo de teste ativo. Verificações de duplicidade, similaridade e termos proibidos serão ignoradas.

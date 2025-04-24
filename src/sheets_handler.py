@@ -242,7 +242,7 @@ class SheetsHandler:
         Atualiza a URL do documento criado na coluna correspondente da planilha.
         
         Args:
-            indice_linha: Índice da linha a ser atualizada (relativo ao DataFrame filtrado)
+            indice_linha: Índice da linha a ser atualizada (baseado em 0, da planilha original)
             url_documento: URL do documento do Google Docs
             spreadsheet_id: ID da planilha. Se None, usa o ID configurado no .env
             sheet_name: Nome da aba. Se None, usa o nome configurado no .env
@@ -255,9 +255,7 @@ class SheetsHandler:
             id_planilha = spreadsheet_id or SPREADSHEET_ID
             nome_aba = sheet_name or SHEET_NAME
             
-            # Verificamos se o índice pode já ser real (baseado em 0)
-            # Na maioria dos casos, estamos recebendo o índice_real, que corresponde à linha na planilha
-            # O índice na planilha é o índice + 2 (1 para linha de cabeçalho + 1 para índice baseado em 1)
+            # Calcula a linha na planilha (índice original + 2)
             linha_sheets = indice_linha + 2
             
             # Mapeia diretamente para a coluna J (URL do documento)
@@ -266,9 +264,9 @@ class SheetsHandler:
             # Prepara o range para atualização 
             range_atualizacao = f"{nome_aba}!{coluna_url}{linha_sheets}"
             
-            self.logger.info(f"Atualizando URL do documento na planilha {id_planilha}, aba '{nome_aba}'")
-            self.logger.info(f"Range: {range_atualizacao} (célula {coluna_url}{linha_sheets})")
-            self.logger.info(f"Índice original: {indice_linha}, índice ajustado: {linha_sheets}")
+            self.logger.info(f"Preparando para atualizar URL na Planilha: {id_planilha}")
+            self.logger.info(f"Aba: '{nome_aba}', Célula: {coluna_url}{linha_sheets} (Range: {range_atualizacao})")
+            self.logger.info(f"Índice Original Linha (base 0): {indice_linha}")
             self.logger.info(f"URL a ser inserida: {url_documento}")
             
             # Verifica se a aba existe antes de tentar atualizar
@@ -283,28 +281,27 @@ class SheetsHandler:
                     aba_encontrada = True
             
             if not aba_encontrada:
-                self.logger.error(f"Aba '{nome_aba}' não encontrada na planilha. Abas disponíveis: {nomes_abas}")
+                self.logger.error(f"Aba '{nome_aba}' não encontrada na planilha {id_planilha}. Abas disponíveis: {nomes_abas}")
                 return False
             
             # Atualiza a célula
             resultado = self.service.spreadsheets().values().update(
                 spreadsheetId=id_planilha,
                 range=range_atualizacao,
-                valueInputOption="USER_ENTERED",  # Alterado para USER_ENTERED para processar links corretamente
+                valueInputOption="USER_ENTERED",
                 body={"values": [[url_documento]]}
             ).execute()
             
             if 'updatedRange' in resultado:
-                self.logger.info(f"URL atualizada com sucesso na range: {resultado['updatedRange']}")
+                self.logger.info(f"✓ URL atualizada com sucesso na range: {resultado['updatedRange']}")
             else:
                 self.logger.warning(f"URL atualizada, mas sem confirmação da range específica.")
             
-            self.logger.info(f"URL do documento atualizada com sucesso na planilha")
             self.logger.debug(f"Detalhes do resultado da atualização: {resultado}")
             return True
         
         except Exception as e:
-            self.logger.error(f"Erro ao atualizar URL do documento na linha {indice_linha}: {e}")
+            self.logger.error(f"Erro ao atualizar URL do documento na linha original {indice_linha} (Planilha {id_planilha}, Aba '{nome_aba}', Célula {coluna_url}{linha_sheets}): {e}")
             self.logger.exception("Detalhes do erro:")
             return False
 
@@ -313,7 +310,7 @@ class SheetsHandler:
         Atualiza o título do documento na coluna correspondente da planilha.
         
         Args:
-            indice_linha: Índice da linha a ser atualizada (relativo ao DataFrame filtrado)
+            indice_linha: Índice da linha a ser atualizada (baseado em 0, da planilha original)
             titulo: Título do documento gerado
             spreadsheet_id: ID da planilha. Se None, usa o ID configurado no .env
             sheet_name: Nome da aba. Se None, usa o nome configurado no .env
@@ -326,9 +323,7 @@ class SheetsHandler:
             id_planilha = spreadsheet_id or SPREADSHEET_ID
             nome_aba = sheet_name or SHEET_NAME
             
-            # Verificamos se o índice pode já ser real (baseado em 0)
-            # Na maioria dos casos, estamos recebendo o índice_real, que corresponde à linha na planilha
-            # O índice na planilha é o índice + 2 (1 para linha de cabeçalho + 1 para índice baseado em 1)
+            # Calcula a linha na planilha (índice original + 2)
             linha_sheets = indice_linha + 2
             
             # Mapeia diretamente para a coluna I (Tema/Título)
@@ -337,10 +332,10 @@ class SheetsHandler:
             # Prepara o range para atualização
             range_atualizacao = f"{nome_aba}!{coluna_titulo}{linha_sheets}"
             
-            self.logger.info(f"Atualizando título do documento na planilha {id_planilha}, aba '{nome_aba}'")
-            self.logger.info(f"Range: {range_atualizacao} (célula {coluna_titulo}{linha_sheets})")
-            self.logger.info(f"Índice original: {indice_linha}, índice ajustado: {linha_sheets}")
-            self.logger.info(f"Título a ser inserido: {titulo}")
+            self.logger.info(f"Preparando para atualizar Título na Planilha: {id_planilha}")
+            self.logger.info(f"Aba: '{nome_aba}', Célula: {coluna_titulo}{linha_sheets} (Range: {range_atualizacao})")
+            self.logger.info(f"Índice Original Linha (base 0): {indice_linha}")
+            self.logger.info(f"Título a ser inserido: '{titulo}'")
             
             # Verifica se a aba existe antes de tentar atualizar
             abas = self.obter_abas_disponiveis(id_planilha)
@@ -354,27 +349,26 @@ class SheetsHandler:
                     aba_encontrada = True
             
             if not aba_encontrada:
-                self.logger.error(f"Aba '{nome_aba}' não encontrada na planilha. Abas disponíveis: {nomes_abas}")
+                self.logger.error(f"Aba '{nome_aba}' não encontrada na planilha {id_planilha}. Abas disponíveis: {nomes_abas}")
                 return False
             
             # Atualiza a célula
             resultado = self.service.spreadsheets().values().update(
                 spreadsheetId=id_planilha,
                 range=range_atualizacao,
-                valueInputOption="USER_ENTERED",  # Alterado para USER_ENTERED para garantir formatação correta
+                valueInputOption="USER_ENTERED",
                 body={"values": [[titulo]]}
             ).execute()
             
             if 'updatedRange' in resultado:
-                self.logger.info(f"Título atualizado com sucesso na range: {resultado['updatedRange']}")
+                self.logger.info(f"✓ Título atualizado com sucesso na range: {resultado['updatedRange']}")
             else:
                 self.logger.warning(f"Título atualizado, mas sem confirmação da range específica.")
             
-            self.logger.info(f"Título do documento atualizado com sucesso na planilha")
             self.logger.debug(f"Detalhes do resultado da atualização: {resultado}")
             return True
         
         except Exception as e:
-            self.logger.error(f"Erro ao atualizar título do documento na linha {indice_linha}: {e}")
+            self.logger.error(f"Erro ao atualizar título do documento na linha original {indice_linha} (Planilha {id_planilha}, Aba '{nome_aba}', Célula {coluna_titulo}{linha_sheets}): {e}")
             self.logger.exception("Detalhes do erro:")
             return False 
