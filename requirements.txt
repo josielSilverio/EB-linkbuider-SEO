@@ -3,4 +3,8 @@ google-auth-httplib2
 google-auth-oauthlib
 google-generativeai
 pandas
-python-dotenv 
+python-dotenv
+numpy
+scikit-learn
+streamlit
+tiktoken 

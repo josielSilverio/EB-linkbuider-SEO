@@ -11,6 +11,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import re
 import dotenv
+import json
 
 from src.utils import configurar_logging
 from src.sheets_handler import SheetsHandler
@@ -25,6 +26,29 @@ from src.config import (
     SPREADSHEET_ID,
     SHEET_NAME
 )
+
+# Caminho para salvar a última seleção
+LAST_SELECTION_FILE = "data/.last_selection.json"
+
+def carregar_ultima_selecao() -> Dict:
+    """Carrega a última seleção de planilha/aba do arquivo JSON."""
+    if os.path.exists(LAST_SELECTION_FILE):
+        try:
+            with open(LAST_SELECTION_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception as e:
+            logging.warning(f"Erro ao carregar última seleção de {LAST_SELECTION_FILE}: {e}")
+    return {}
+
+def salvar_ultima_selecao(selecao: Dict):
+    """Salva a seleção atual no arquivo JSON."""
+    try:
+        # Cria o diretório data se não existir
+        os.makedirs(os.path.dirname(LAST_SELECTION_FILE), exist_ok=True)
+        with open(LAST_SELECTION_FILE, 'w', encoding='utf-8') as f:
+            json.dump(selecao, f, indent=4)
+    except Exception as e:
+        logging.error(f"Erro ao salvar última seleção em {LAST_SELECTION_FILE}: {e}")
 
 def verificar_titulos_duplicados(sheets: SheetsHandler, gemini: GeminiHandler, docs: DocsHandler, modo_teste: bool = False):
     """
@@ -376,7 +400,7 @@ def verificar_similaridade_conteudos(sheets: SheetsHandler, gemini: GeminiHandle
                     logger.info(f"==== FIM DA ATUALIZAÇÃO DA PLANILHA ====")
                     
                 except Exception as e:
-                    logger.error(f"Erro ao atualizar planilha para linha original {doc_reescrever['indice']} (linha sheet {linha_planilha}): {e}")
+                    logger.error(f"Erro ao atualizar planilha para linha original {indice_original_linha} (linha sheet {linha_planilha}): {e}")
                     logger.exception("Detalhes do erro:")
                 
                 # Pausa para não sobrecarregar as APIs
@@ -911,14 +935,8 @@ def apresentar_menu_meses(sheets: SheetsHandler = None) -> Tuple[str, str]:
 
 def apresentar_menu_planilha(sheets: SheetsHandler = None) -> Tuple[str, str]:
     """
-    Apresenta um menu interativo para o usuário escolher qual planilha e aba deseja trabalhar,
-    permitindo a inserção direta do ID da planilha e nome da aba.
-    
-    Args:
-        sheets: Instância opcional de SheetsHandler
-        
-    Returns:
-        Tupla com (spreadsheet_id, sheet_name) selecionados ou (None, None) se a planilha não for acessível
+    Apresenta um menu interativo para o usuário selecionar a planilha e a aba a serem processadas.
+    Usa a última seleção salva como padrão.
     """
     logger = logging.getLogger('seo_linkbuilder')
     
@@ -926,116 +944,134 @@ def apresentar_menu_planilha(sheets: SheetsHandler = None) -> Tuple[str, str]:
         try:
             sheets = SheetsHandler()
         except Exception as e:
-            logger.error(f"Erro ao inicializar SheetsHandler: {e}")
-            # Retorna os valores padrão do .env
-            return (SPREADSHEET_ID, SHEET_NAME)
-    
-    try:
-        print("\n" + "="*60)
-        print("CONFIGURAÇÃO DA PLANILHA".center(60))
-        print("="*60)
-        
-        # Oferece opção para usar a planilha padrão
-        print(f"\nPlanilha padrão atual: {SPREADSHEET_ID} (aba: {SHEET_NAME})")
-        
-        usar_padrao = input("\nDeseja usar a planilha padrão? (S/N): ").strip().upper()
-        if usar_padrao == 'S':
-            # Verificar se a planilha padrão é acessível
-            try:
-                logger.info(f"Verificando acesso à planilha padrão {SPREADSHEET_ID}...")
-                abas = sheets.obter_abas_disponiveis(SPREADSHEET_ID)
-                if not abas:
-                    logger.error(f"Não foi possível acessar a planilha padrão {SPREADSHEET_ID}")
-                    print(f"\nErro: Não foi possível acessar a planilha padrão.")
-                    print("Verifique se o ID está correto e se você tem permissão de acesso.")
-                    return (None, None)
-                    
-                logger.info(f"Usando planilha padrão: {SPREADSHEET_ID}, aba: {SHEET_NAME}")
-                return (SPREADSHEET_ID, SHEET_NAME)
-            except Exception as e:
-                logger.error(f"Erro ao verificar planilha padrão {SPREADSHEET_ID}: {e}")
-                print(f"\nErro ao verificar planilha padrão: {e}")
-                print("Verifique se o ID está correto e se você tem permissão de acesso.")
-                return (None, None)
-        
-        # Loop para permitir múltiplas tentativas
-        while True:
-            # Solicita entrada direta do ID da planilha
-            print("\nInsira o ID da planilha do Google Sheets")
-            print("(Ex: 1AbCdEfGhIjKlMnOpQrStUvWxYz0123456789)")
-            print("Ou digite 'X' para sair")
-            spreadsheet_id = input("ID da planilha: ").strip()
+            logger.error(f"Erro ao inicializar SheetsHandler para menu: {e}")
+            return SPREADSHEET_ID, SHEET_NAME # Retorna padrões do .env em caso de erro
+
+    # Carrega a última seleção
+    ultima_selecao = carregar_ultima_selecao()
+    ultimo_spreadsheet_id = ultima_selecao.get("spreadsheet_id", SPREADSHEET_ID)
+    ultima_sheet_name = ultima_selecao.get("sheet_name", SHEET_NAME)
+
+    # 1. Selecionar Planilha
+    while True:
+        try:
+            logger.info("Buscando planilhas disponíveis...")
+            planilhas = sheets.obter_planilhas_disponiveis()
+            if not planilhas:
+                logger.warning("Nenhuma planilha encontrada ou erro ao buscar. Usando ID padrão do .env.")
+                spreadsheet_id_selecionado = SPREADSHEET_ID
+                break
+
+            print("\n=== Selecione a Planilha ===")
+            planilhas_dict = {str(i+1): p for i, p in enumerate(planilhas)}
             
-            if spreadsheet_id.upper() == 'X':
-                logger.info("Operação cancelada pelo usuário.")
-                print("\nOperação cancelada pelo usuário.")
-                return (None, None)
-                
-            if not spreadsheet_id:
-                print("\nID de planilha vazio. Por favor, tente novamente.")
-                continue
+            # Encontra o índice da última planilha selecionada, se existir
+            indice_padrao = None
+            for i, p in enumerate(planilhas):
+                if p['id'] == ultimo_spreadsheet_id:
+                    indice_padrao = str(i + 1)
+                    print(f"Padrão (última seleção): [{indice_padrao}] {p['name']} ({p['id']})")
+                    break
             
-            # Verifica se a planilha existe e é acessível
-            try:
-                logger.info(f"Verificando acesso à planilha {spreadsheet_id}...")
-                abas = sheets.obter_abas_disponiveis(spreadsheet_id)
-                if not abas:
-                    logger.warning(f"Não foi possível acessar a planilha {spreadsheet_id} ou ela não tem abas.")
-                    print(f"\nAlerta: Não foi possível acessar a planilha ou ela não tem abas.")
-                    print("Verifique se o ID está correto e se você tem permissão de acesso.")
-                    tentar_novamente = input("Deseja tentar outro ID? (S/N): ").strip().upper()
-                    if tentar_novamente == 'S':
-                        continue
-                    else:
-                        return (None, None)
-                
-                # Se chegou aqui, a planilha é acessível
+            # Mostra as opções
+            for idx, p_info in planilhas_dict.items():
+                 if idx != indice_padrao: # Não repete o padrão
+                     print(f"[{idx}] {p_info['name']} ({p_info['id']})")
+
+            print(f"[Enter] Usar padrão '{planilhas_dict[indice_padrao]['name']}'" if indice_padrao else "[P] Usar ID padrão do .env")
+            print("[A] Atualizar lista")
+            
+            escolha_planilha = input("Digite o número da planilha desejada ou [P/A/Enter]: ").strip()
+
+            if escolha_planilha == '' and indice_padrao:
+                spreadsheet_id_selecionado = ultimo_spreadsheet_id
+                logger.info(f"Usando última planilha selecionada: {planilhas_dict[indice_padrao]['name']}")
+                break
+            elif escolha_planilha.lower() == 'p':
+                 spreadsheet_id_selecionado = SPREADSHEET_ID
+                 logger.info(f"Usando ID de planilha padrão do .env: {SPREADSHEET_ID}")
+                 # Verifica se o ID padrão existe na lista
+                 if not any(p['id'] == spreadsheet_id_selecionado for p in planilhas):
+                      logger.warning(f"ID padrão {spreadsheet_id_selecionado} não encontrado na lista de planilhas disponíveis.")
+                 break
+            elif escolha_planilha.lower() == 'a':
+                logger.info("Atualizando lista de planilhas...")
+                continue # Reinicia o loop para buscar planilhas novamente
+            elif escolha_planilha in planilhas_dict:
+                spreadsheet_id_selecionado = planilhas_dict[escolha_planilha]['id']
+                logger.info(f"Planilha selecionada: {planilhas_dict[escolha_planilha]['name']}")
+                break
+            else:
+                logger.error("Seleção inválida. Tente novamente.")
+        except Exception as e:
+            logger.error(f"Erro ao selecionar planilha: {e}. Usando ID padrão.")
+            spreadsheet_id_selecionado = SPREADSHEET_ID
+            break
+
+    # 2. Selecionar Aba
+    while True:
+        try:
+            logger.info(f"Buscando abas na planilha {spreadsheet_id_selecionado}...")
+            abas = sheets.obter_abas_disponiveis(spreadsheet_id_selecionado)
+            if not abas:
+                logger.warning("Nenhuma aba encontrada ou erro ao buscar. Usando nome padrão do .env.")
+                sheet_name_selecionado = SHEET_NAME
                 break
                 
-            except Exception as e:
-                logger.error(f"Erro ao verificar planilha {spreadsheet_id}: {e}")
-                print(f"\nErro ao verificar planilha: {e}")
-                tentar_novamente = input("Deseja tentar outro ID? (S/N): ").strip().upper()
-                if tentar_novamente == 'S':
-                    continue
-                else:
-                    return (None, None)
-        
-        # Solicita entrada direta do nome da aba
-        print("\nInsira o nome da aba da planilha")
-        if abas:
-            print(f"Abas disponíveis: {', '.join([aba['titulo'] for aba in abas])}")
-        
-        sheet_name = input("Nome da aba: ").strip()
-        
-        if not sheet_name:
-            if abas:
-                sheet_name = abas[0]['titulo']
-                logger.info(f"Nome de aba vazio. Usando primeira aba disponível: {sheet_name}")
-                print(f"\nNome de aba vazio. Usando primeira aba disponível: {sheet_name}")
+            print(f"\n=== Selecione a Aba na Planilha '{spreadsheet_id_selecionado}' ===")
+            abas_dict = {str(i+1): a for i, a in enumerate(abas)}
+
+            # Encontra o índice da última aba selecionada, se existir
+            indice_padrao_aba = None
+            if spreadsheet_id_selecionado == ultimo_spreadsheet_id: # Só usa padrão se a planilha for a mesma
+                for i, a in enumerate(abas):
+                    if a['titulo'] == ultima_sheet_name:
+                        indice_padrao_aba = str(i + 1)
+                        print(f"Padrão (última seleção): [{indice_padrao_aba}] {a['titulo']}")
+                        break
+
+            # Mostra as opções
+            for idx, a_info in abas_dict.items():
+                if idx != indice_padrao_aba:
+                    print(f"[{idx}] {a_info['titulo']}")
+
+            print(f"[Enter] Usar padrão '{abas_dict[indice_padrao_aba]['titulo']}'" if indice_padrao_aba else "[P] Usar nome padrão do .env")
+            print("[A] Atualizar lista")
+
+            escolha_aba = input("Digite o número da aba desejada ou [P/A/Enter]: ").strip()
+
+            if escolha_aba == '' and indice_padrao_aba:
+                sheet_name_selecionado = ultima_sheet_name
+                logger.info(f"Usando última aba selecionada: {abas_dict[indice_padrao_aba]['titulo']}")
+                break
+            elif escolha_aba.lower() == 'p':
+                 sheet_name_selecionado = SHEET_NAME
+                 logger.info(f"Usando nome de aba padrão do .env: {SHEET_NAME}")
+                 # Verifica se o nome padrão existe na lista
+                 if not any(a['titulo'] == sheet_name_selecionado for a in abas):
+                      logger.warning(f"Nome padrão {sheet_name_selecionado} não encontrado na lista de abas disponíveis.")
+                 break
+            elif escolha_aba.lower() == 'a':
+                logger.info("Atualizando lista de abas...")
+                continue # Reinicia o loop para buscar abas novamente
+            elif escolha_aba in abas_dict:
+                sheet_name_selecionado = abas_dict[escolha_aba]['titulo']
+                logger.info(f"Aba selecionada: {sheet_name_selecionado}")
+                break
             else:
-                logger.error(f"Nenhuma aba disponível e nome não fornecido.")
-                print(f"\nErro: Nenhuma aba disponível e nome não fornecido.")
-                return (None, None)
-        
-        # Verificar se a aba especificada existe
-        aba_existe = any(aba['titulo'] == sheet_name for aba in abas)
-        if not aba_existe:
-            logger.warning(f"A aba '{sheet_name}' não foi encontrada na planilha.")
-            print(f"\nAviso: A aba '{sheet_name}' não foi encontrada na planilha.")
-            usar_mesmo_assim = input("Deseja usar este nome de aba mesmo assim? (S/N): ").strip().upper()
-            if usar_mesmo_assim != 'S':
-                return (None, None)
-        
-        logger.info(f"Selecionada planilha ID: {spreadsheet_id}, aba: {sheet_name}")
-        print(f"\nVocê selecionou: Planilha ID: {spreadsheet_id}, Aba: {sheet_name}")
-        
-        return (spreadsheet_id, sheet_name)
-    
-    except Exception as e:
-        logger.error(f"Erro durante a seleção da planilha: {e}")
-        logger.exception("Detalhes do erro:")
-        return (None, None)
+                logger.error("Seleção inválida. Tente novamente.")
+        except Exception as e:
+            logger.error(f"Erro ao selecionar aba: {e}. Usando nome padrão.")
+            sheet_name_selecionado = SHEET_NAME
+            break
+
+    # Salva a seleção atual
+    salvar_ultima_selecao({
+        "spreadsheet_id": spreadsheet_id_selecionado,
+        "sheet_name": sheet_name_selecionado
+    })
+
+    return spreadsheet_id_selecionado, sheet_name_selecionado
 
 def processar_linha(linha, indice, df, df_original, modo_teste, spreadsheet_id, sheet_name):
     """
@@ -1138,269 +1174,261 @@ def extrair_titulo(conteudo):
 
 def main(limite_linhas: int = None, modo_teste: bool = False, categorias_selecionadas: Dict = None, quantidade_especifica: int = None):
     """
-    Função principal que orquestra o fluxo de trabalho.
-    
-    Args:
-        limite_linhas: Opcional. Limita o processamento a este número de linhas.
-                      Se for None, processa todas as linhas.
-        modo_teste: Se True, executa apenas para a primeira linha e não atualiza a planilha.
-        categorias_selecionadas: Dicionário com as categorias selecionadas pelo usuário.
-        quantidade_especifica: Quantidade específica de itens a processar.
+    Função principal que orquestra a leitura da planilha, geração de conteúdo e criação de documentos.
     """
-    # Configura logging
-    logger = configurar_logging()
+    logger = configurar_logging(logging.INFO)
     logger.info(f"Iniciando script SEO-LinkBuilder - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     
-    # Inicializa o sheets handler
+    if modo_teste:
+        logger.warning("=== MODO DE TESTE ATIVADO ===")
+        logger.warning("Nenhuma alteração será feita na planilha ou nos documentos do Google Drive.")
+    
     try:
+        # Inicializa handlers
         sheets = SheetsHandler()
-        logger.info("SheetsHandler inicializado com sucesso")
-    except Exception as e:
-        logger.error(f"Erro ao inicializar SheetsHandler: {e}")
-        logger.exception("Detalhes do erro:")
-        return
-    
-    # Selecionar a planilha e aba
-    spreadsheet_id, sheet_name = apresentar_menu_planilha(sheets)
-    
-    # Verificar se a planilha foi selecionada com sucesso
-    if spreadsheet_id is None or sheet_name is None:
-        logger.error("Não foi possível selecionar uma planilha válida. Encerrando.")
-        print("\nNão foi possível selecionar uma planilha válida. Encerrando.")
-        return
-    
-    # Inicializa os handlers restantes
-    try:
         gemini = GeminiHandler()
         docs = DocsHandler()
         
-        logger.info("Handlers inicializados com sucesso")
-    except Exception as e:
-        logger.error(f"Erro ao inicializar handlers: {e}")
-        logger.exception("Detalhes do erro:")
-        return
-    
-    # Lê a planilha filtrando apenas por IDs válidos
-    try:
-        df = sheets.ler_planilha(spreadsheet_id=spreadsheet_id, sheet_name=sheet_name)
+        # 1. Apresenta o menu para selecionar Planilha e Aba
+        spreadsheet_id_selecionado, sheet_name_selecionado = apresentar_menu_planilha(sheets)
         
-        if df.empty:
+        # Atualiza as configurações globais (opcional, mas pode ser útil)
+        # Não recomendado alterar diretamente, mas para consistência interna:
+        global SPREADSHEET_ID, SHEET_NAME
+        SPREADSHEET_ID = spreadsheet_id_selecionado
+        SHEET_NAME = sheet_name_selecionado
+        logger.info(f"Processando Planilha: {SPREADSHEET_ID}, Aba: {SHEET_NAME}")
+
+        # 2. Verifica títulos duplicados (independente do mês ou categoria)
+        # verificar_titulos_duplicados(sheets, gemini, docs, modo_teste) # Desativado temporariamente
+
+        # 3. Verifica similaridade de conteúdos (independente do mês ou categoria)
+        # verificar_similaridade_conteudos(sheets, gemini, docs, modo_teste=modo_teste) # Desativado temporariamente
+
+        # 4. Corrige termos proibidos (independente do mês ou categoria)
+        # corrigir_termos_proibidos(sheets, docs, modo_teste) # Desativado temporariamente
+
+        # 5. Lê a planilha com base na seleção
+        logger.info(f"Lendo dados da planilha '{sheet_name_selecionado}' ({spreadsheet_id_selecionado})...")
+        df_original = sheets.ler_planilha(
+            spreadsheet_id=spreadsheet_id_selecionado, 
+            sheet_name=sheet_name_selecionado,
+            apenas_dados=(categorias_selecionadas is None) # Lê tudo se não houver filtro de categoria
+        )
+        
+        if df_original.empty:
             logger.warning(f"Nenhuma linha com ID válido encontrada na planilha!")
             print(f"\n⚠️ AVISO: Nenhuma linha com ID válido encontrada na planilha.")
             print("Verifique se a planilha contém dados com IDs válidos.")
             return
             
-        total_linhas = len(df)
+        total_linhas = len(df_original)
         logger.info(f"Planilha lida com sucesso. Total de {total_linhas} linhas com IDs válidos")
             
-    except Exception as e:
-        logger.error(f"Erro ao ler planilha: {e}")
-        logger.exception("Detalhes do erro:")
-        return
-    
-    # Estimar custos por categoria
-    categorias = estimar_custo_por_categoria(sheets, df)
-    
-    # Se não foram fornecidas categorias, apresentar menu para seleção
-    if categorias_selecionadas is None:
-        categorias_selecionadas = apresentar_menu_categorias(categorias)
+        # Estimar custos por categoria
+        categorias = estimar_custo_por_categoria(sheets, df_original)
         
-        # Se o usuário cancelou a operação
+        # Se não foram fornecidas categorias, apresentar menu para seleção
         if categorias_selecionadas is None:
+            categorias_selecionadas = apresentar_menu_categorias(categorias)
+            
+            # Se o usuário cancelou a operação
+            if categorias_selecionadas is None:
+                logger.info("Operação cancelada pelo usuário. Encerrando.")
+                return
+        
+        # Filtrar DataFrame com base nas categorias selecionadas
+        if 'quantidade_especifica' in categorias_selecionadas:
+            quantidade_especifica = categorias_selecionadas['quantidade_especifica']
+            # Selecionar aleatoriamente a quantidade solicitada
+            if quantidade_especifica >= len(df_original):
+                logger.info(f"A quantidade solicitada ({quantidade_especifica}) é maior ou igual ao total disponível ({len(df_original)}). Usando todo o DataFrame.")
+                df_filtrado = df_original
+            else:
+                logger.info(f"Selecionando {quantidade_especifica} itens aleatoriamente.")
+                df_filtrado = df_original.sample(n=quantidade_especifica, random_state=42)
+        else:
+            df_filtrado = filtrar_dataframe_por_categorias(df_original, sheets, categorias_selecionadas)
+        
+        # Aplicar limite de linhas se fornecido
+        if limite_linhas is not None:
+            df_filtrado = df_filtrado.head(limite_linhas)
+        
+        # Verificar se ainda há linhas após a filtragem
+        total_linhas = len(df_filtrado)
+        if total_linhas == 0:
+            logger.warning("Nenhuma linha restante após filtragem. Encerrando.")
+            return
+        
+        logger.info(f"Serão processadas {total_linhas} linhas")
+        
+        # Estimar custo total
+        tokens_entrada_medio = 1700  # Valor médio aproximado
+        tokens_saida_medio = 500  # Valor médio aproximado para 500 palavras
+        custo_estimado_por_item = estimar_custo_gemini(tokens_entrada_medio, tokens_saida_medio)
+        custo_estimado_total = custo_estimado_por_item * total_linhas
+        
+        logger.info(f"Custo estimado total: ${custo_estimado_total:.4f} USD (aproximadamente R${custo_estimado_total*5:.2f})")
+        
+        # Confirmar execução
+        confirmacao = input(f"\nProcessar {total_linhas} itens com custo estimado de R${custo_estimado_total*5:.2f}? (S/N): ").strip().upper()
+        if confirmacao != 'S':
             logger.info("Operação cancelada pelo usuário. Encerrando.")
             return
-    
-    # Filtrar DataFrame com base nas categorias selecionadas
-    if 'quantidade_especifica' in categorias_selecionadas:
-        quantidade_especifica = categorias_selecionadas['quantidade_especifica']
-        # Selecionar aleatoriamente a quantidade solicitada
-        if quantidade_especifica >= len(df):
-            logger.info(f"A quantidade solicitada ({quantidade_especifica}) é maior ou igual ao total disponível ({len(df)}). Usando todo o DataFrame.")
-            df_filtrado = df
-        else:
-            logger.info(f"Selecionando {quantidade_especifica} itens aleatoriamente.")
-            df_filtrado = df.sample(n=quantidade_especifica, random_state=42)
-    else:
-        df_filtrado = filtrar_dataframe_por_categorias(df, sheets, categorias_selecionadas)
-    
-    # Aplicar limite de linhas se fornecido
-    if limite_linhas is not None:
-        df_filtrado = df_filtrado.head(limite_linhas)
-    
-    # Verificar se ainda há linhas após a filtragem
-    total_linhas = len(df_filtrado)
-    if total_linhas == 0:
-        logger.warning("Nenhuma linha restante após filtragem. Encerrando.")
-        return
-    
-    logger.info(f"Serão processadas {total_linhas} linhas")
-    
-    # Estimar custo total
-    tokens_entrada_medio = 1700  # Valor médio aproximado
-    tokens_saida_medio = 500  # Valor médio aproximado para 500 palavras
-    custo_estimado_por_item = estimar_custo_gemini(tokens_entrada_medio, tokens_saida_medio)
-    custo_estimado_total = custo_estimado_por_item * total_linhas
-    
-    logger.info(f"Custo estimado total: ${custo_estimado_total:.4f} USD (aproximadamente R${custo_estimado_total*5:.2f})")
-    
-    # Confirmar execução
-    confirmacao = input(f"\nProcessar {total_linhas} itens com custo estimado de R${custo_estimado_total*5:.2f}? (S/N): ").strip().upper()
-    if confirmacao != 'S':
-        logger.info("Operação cancelada pelo usuário. Encerrando.")
-        return
-    
-    # Modo teste usa apenas a primeira linha
-    if modo_teste:
-        df_filtrado = df_filtrado.iloc[:1]
-        logger.info("EXECUTANDO EM MODO DE TESTE - Apenas a primeira linha será processada")
-    
-    # Métricas de custo
-    custo_total = 0.0
-    tokens_entrada_total = 0
-    tokens_saida_total = 0
-    
-    # Processa cada linha
-    for i, (idx, linha) in enumerate(df_filtrado.iterrows()):
-        try:
-            # Acesso direto às colunas ao invés de extrair_dados_linha
-            id_campanha = str(linha[COLUNAS['id']]) if COLUNAS['id'] < len(linha) else 'Sem-ID'
-            site = str(linha[COLUNAS['site']]) if COLUNAS['site'] < len(linha) else 'Sem site'
-            palavra_ancora = str(linha[COLUNAS['palavra_ancora']]) if COLUNAS['palavra_ancora'] < len(linha) else 'Sem palavra-âncora'
-            url_ancora = str(linha[COLUNAS['url_ancora']]) if COLUNAS['url_ancora'] < len(linha) else 'Sem URL'
-            titulo_original = str(linha[COLUNAS['titulo']]) if COLUNAS['titulo'] < len(linha) and linha[COLUNAS['titulo']] else 'Sem título'
-
-            # Obter o índice original da linha ANTES da filtragem
-            # 'idx' é o índice no df_filtrado, 'linha_original' é o índice no df original (baseado em 0)
-            if 'linha_original' not in linha:
-                 logger.error(f"Coluna 'linha_original' não encontrada na linha com ID {id_campanha}. Pulando atualização da planilha.")
-                 continue # Pula para a próxima iteração se não encontrar o índice original
-
-            indice_original_linha = int(linha['linha_original'])
-            
-            # Cria um dicionário de dados para passar para o Gemini
-            dados = {
-                'id': id_campanha,
-                'site': site,
-                'palavra_ancora': palavra_ancora,
-                'url_ancora': url_ancora,
-                'titulo': titulo_original, # Usar o título original aqui
-                'tema': 'Sem tema',  # Tema não existe na estrutura atual
-            }
-            
-            # Pula linhas que parecem ser cabeçalho
-            if palavra_ancora.lower() in ('palavra_ancora', 'palavra ancora', ''):
-                logger.info(f"Pulando linha {i+1}/{len(df_filtrado)} que parece ser cabeçalho ou está vazia")
-                continue
-            
-            logger.info(f"Processando linha {i+1}/{len(df_filtrado)}: ID {id_campanha} - {titulo_original} (Índice Original Planilha: {indice_original_linha})")
-            
-            # Gera o conteúdo usando o Gemini
-            logger.info(f"Gerando conteúdo com o Gemini para '{palavra_ancora}'...")
-            conteudo, metricas, info_link = gemini.gerar_conteudo(dados)
-            
-            # Atualiza métricas
-            custo_total += metricas['custo_estimado']
-            tokens_entrada_total += metricas['tokens_entrada']
-            tokens_saida_total += metricas['tokens_saida']
-            
-            # Extrai o título real do conteúdo gerado (primeira linha)
-            titulo_gerado = extrair_titulo(conteudo) # Usar função para extrair título
-            logger.info(f"Título gerado: {titulo_gerado}")
-            
-            # Gera o nome do arquivo usando o ID em vez da data
+        
+        # Modo teste usa apenas a primeira linha
+        if modo_teste:
+            df_filtrado = df_filtrado.iloc[:1]
+            logger.info("EXECUTANDO EM MODO DE TESTE - Apenas a primeira linha será processada")
+        
+        # Métricas de custo
+        custo_total = 0.0
+        tokens_entrada_total = 0
+        tokens_saida_total = 0
+        
+        # Processa cada linha
+        for i, (idx, linha) in enumerate(df_filtrado.iterrows()):
             try:
-                nome_arquivo = gerar_nome_arquivo(id_campanha, site, palavra_ancora)
-            except Exception as e:
-                logger.error(f"Erro ao gerar nome de arquivo: {e}")
-                # Fallback para um nome simples
-                nome_arquivo = f"{id_campanha} - {site} - Artigo"
-            
-            # Cria o documento no Google Docs
-            logger.info(f"Criando documento '{nome_arquivo}'...")
-            document_id, document_url = docs.criar_documento(titulo_gerado, conteudo, nome_arquivo, info_link)
-            
-            # Atualiza a URL e o título na planilha (se não estiver em modo de teste)
-            if not modo_teste:
+                # Acesso direto às colunas ao invés de extrair_dados_linha
+                id_campanha = str(linha[COLUNAS['id']]) if COLUNAS['id'] < len(linha) else 'Sem-ID'
+                site = str(linha[COLUNAS['site']]) if COLUNAS['site'] < len(linha) else 'Sem site'
+                palavra_ancora = str(linha[COLUNAS['palavra_ancora']]) if COLUNAS['palavra_ancora'] < len(linha) else 'Sem palavra-âncora'
+                url_ancora = str(linha[COLUNAS['url_ancora']]) if COLUNAS['url_ancora'] < len(linha) else 'Sem URL'
+                titulo_original = str(linha[COLUNAS['titulo']]) if COLUNAS['titulo'] < len(linha) and linha[COLUNAS['titulo']] else 'Sem título'
+
+                # Obter o número real da linha da planilha
+                if 'sheet_row_num' not in linha:
+                     logger.error(f"Coluna 'sheet_row_num' não encontrada na linha com ID {id_campanha}. Pulando atualização da planilha.")
+                     continue
+                sheet_row_num = int(linha['sheet_row_num'])
+                
+                # Cria um dicionário de dados para passar para o Gemini
+                dados = {
+                    'id': id_campanha,
+                    'site': site,
+                    'palavra_ancora': palavra_ancora,
+                    'url_ancora': url_ancora,
+                    'titulo': titulo_original, # Usar o título original aqui
+                    'tema': 'Sem tema',  # Tema não existe na estrutura atual
+                }
+                
+                # Pula linhas que parecem ser cabeçalho
+                if palavra_ancora.lower() in ('palavra_ancora', 'palavra ancora', ''):
+                    logger.info(f"Pulando linha {i+1}/{len(df_filtrado)} que parece ser cabeçalho ou está vazia (sheet_row: {sheet_row_num})")
+                    continue
+                
+                logger.info(f"Processando linha {i+1}/{len(df_filtrado)}: ID {id_campanha} - {titulo_original} (Sheet Row: {sheet_row_num})")
+                
+                # Gera o conteúdo usando o Gemini
+                logger.info(f"Gerando conteúdo com o Gemini para '{palavra_ancora}'...")
+                conteudo, metricas, info_link = gemini.gerar_conteudo(dados)
+                
+                # Atualiza métricas
+                custo_total += metricas['custo_estimado']
+                tokens_entrada_total += metricas['tokens_entrada']
+                tokens_saida_total += metricas['tokens_saida']
+                
+                # Extrai o título real do conteúdo gerado (primeira linha)
+                titulo_gerado = extrair_titulo(conteudo) # Usar função para extrair título
+                logger.info(f"Título gerado: {titulo_gerado}")
+                
+                # Gera o nome do arquivo usando o ID em vez da data
                 try:
-                    # Calcula o número da linha na planilha (índice original + 2 para offset de cabeçalho e base 1)
-                    linha_planilha = indice_original_linha + 2
-                    
-                    # Imprime detalhes de diagnóstico ANTES de atualizar
-                    logger.info(f"==== INFORMAÇÕES DE ATUALIZAÇÃO DA PLANILHA ====")
-                    logger.info(f"ID da Planilha: {spreadsheet_id}")
-                    logger.info(f"Nome da Aba: {sheet_name}")
-                    logger.info(f"Índice Original da Linha (base 0): {indice_original_linha}")
-                    logger.info(f"Linha na planilha a ser atualizada (base 1): {linha_planilha}")
-                    
-                    # Atualiza o título (coluna I)
-                    coluna_titulo = 'I' # Coluna do título
-                    titulo_range = f"{sheet_name}!{coluna_titulo}{linha_planilha}"
-                    logger.info(f"Tentando atualizar Título na célula {coluna_titulo}{linha_planilha} (Range: {titulo_range}) com valor: '{titulo_gerado}'")
-                    
-                    sheets.service.spreadsheets().values().update(
-                        spreadsheetId=spreadsheet_id,
-                        range=titulo_range,
-                        valueInputOption="USER_ENTERED", 
-                        body={"values": [[titulo_gerado]]}
-                    ).execute()
-                    
-                    logger.info(f"✓ Título atualizado com sucesso em {titulo_range}!")
-                    
-                    # Atualiza a URL (coluna J)
-                    coluna_url = 'J' # Coluna da URL
-                    url_range = f"{sheet_name}!{coluna_url}{linha_planilha}"
-                    logger.info(f"Tentando atualizar URL na célula {coluna_url}{linha_planilha} (Range: {url_range}) com valor: '{document_url}'")
-                    
-                    sheets.service.spreadsheets().values().update(
-                        spreadsheetId=spreadsheet_id,
-                        range=url_range,
-                        valueInputOption="USER_ENTERED",
-                        body={"values": [[document_url]]}
-                    ).execute()
-                    
-                    logger.info(f"✓ URL atualizada com sucesso em {url_range}!")
-                    logger.info(f"==== FIM DA ATUALIZAÇÃO DA PLANILHA ====")
-                    
+                    nome_arquivo = gerar_nome_arquivo(id_campanha, site, palavra_ancora)
                 except Exception as e:
-                    logger.error(f"Erro ao atualizar planilha para linha original {indice_original_linha} (linha sheet {linha_planilha}): {e}")
-                    logger.exception("Detalhes do erro:")
-            else:
-                logger.info(f"[MODO TESTE] URL gerada (não atualizada na planilha): {document_url}")
-                logger.info(f"[MODO TESTE] Título gerado (não atualizado na planilha): {titulo_gerado}")
-            
-            # Pausa para não sobrecarregar as APIs
-            time.sleep(1)
-            
-        except Exception as e:
-            # Log do erro incluindo o índice original se disponível
-            indice_orig_erro = linha.get('linha_original', 'N/A')
-            logger.error(f"Erro ao processar linha {i+1} (Índice Original Planilha: {indice_orig_erro}): {e}")
-            logger.exception("Detalhes completos do erro:")
-            continue
-    
-    # Exibe resumo
-    logger.info(f"\n{'='*50}")
-    logger.info(f"RESUMO DE EXECUÇÃO - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    logger.info(f"Total de artigos processados: {len(df_filtrado)}")
-    logger.info(f"Tokens de entrada: {tokens_entrada_total}")
-    logger.info(f"Tokens de saída: {tokens_saida_total}")
-    logger.info(f"Custo total estimado: ${custo_total:.4f} USD (aproximadamente R${custo_total*5:.2f})")
-    logger.info(f"{'='*50}")
-    
-    # Verifica e corrige títulos duplicados, similaridade e termos proibidos (somente se não estiver em modo de teste)
-    if not modo_teste and limite_linhas is None:
-        logger.info("Iniciando verificação de títulos duplicados...")
-        verificar_titulos_duplicados(sheets, gemini, docs, modo_teste=False)
+                    logger.error(f"Erro ao gerar nome de arquivo: {e}")
+                    # Fallback para um nome simples
+                    nome_arquivo = f"{id_campanha} - {site} - Artigo"
+                
+                # Cria o documento no Google Docs
+                logger.info(f"Criando documento '{nome_arquivo}'...")
+                document_id, document_url = docs.criar_documento(titulo_gerado, conteudo, nome_arquivo, info_link)
+                
+                # Atualiza a URL e o título na planilha (se não estiver em modo de teste)
+                if not modo_teste:
+                    try:
+                        # Usa sheet_row_num diretamente
+                        linha_planilha = sheet_row_num
+                        
+                        # Imprime detalhes de diagnóstico ANTES de atualizar
+                        logger.info(f"==== INFORMAÇÕES DE ATUALIZAÇÃO DA PLANILHA ====")
+                        logger.info(f"ID da Planilha: {SPREADSHEET_ID}")
+                        logger.info(f"Nome da Aba: {SHEET_NAME}")
+                        logger.info(f"Índice Original da Linha (0-based data): {linha.name}") # Log do índice do DF
+                        logger.info(f"Linha na planilha a ser atualizada (1-based): {linha_planilha}")
+                        
+                        # Atualiza o título (coluna I)
+                        coluna_titulo = 'I' # Coluna do título
+                        titulo_range = f"{SHEET_NAME}!{coluna_titulo}{linha_planilha}"
+                        logger.info(f"Tentando atualizar Título na célula {coluna_titulo}{linha_planilha} (Range: {titulo_range}) com valor: '{titulo_gerado}'")
+                        
+                        atualizado_titulo = sheets.atualizar_titulo_documento(
+                            sheet_row_num=linha_planilha, # Passa o número correto
+                            titulo=titulo_gerado,
+                            spreadsheet_id=SPREADSHEET_ID,
+                            sheet_name=SHEET_NAME
+                        )
+                        
+                        logger.info(f"✓ Título atualizado com sucesso em {titulo_range}!")
+                        
+                        # Atualiza a URL (coluna J)
+                        coluna_url = 'J' # Coluna da URL
+                        url_range = f"{SHEET_NAME}!{coluna_url}{linha_planilha}"
+                        logger.info(f"Tentando atualizar URL na célula {coluna_url}{linha_planilha} (Range: {url_range}) com valor: '{document_url}'")
+                        
+                        atualizado_url = sheets.atualizar_url_documento(
+                            sheet_row_num=linha_planilha, # Passa o número correto
+                            url_documento=document_url,
+                            spreadsheet_id=SPREADSHEET_ID,
+                            sheet_name=SHEET_NAME
+                        )
+                        
+                        logger.info(f"✓ URL atualizada com sucesso em {url_range}!")
+                        logger.info(f"==== FIM DA ATUALIZAÇÃO DA PLANILHA ====")
+                        
+                    except Exception as e:
+                        logger.error(f"Erro ao atualizar planilha para linha {sheet_row_num}: {e}")
+                        logger.exception("Detalhes do erro:")
+                else:
+                    logger.info(f"[MODO TESTE] URL gerada (não atualizada na planilha): {document_url}")
+                    logger.info(f"[MODO TESTE] Título gerado (não atualizado na planilha): {titulo_gerado}")
+                
+                # Pausa para não sobrecarregar as APIs
+                time.sleep(1)
+                
+            except Exception as e:
+                # Log do erro incluindo o índice original se disponível
+                indice_orig_erro = linha.get('linha_original', 'N/A')
+                logger.error(f"Erro ao processar linha {i+1} (Índice Original Planilha: {indice_orig_erro}): {e}")
+                logger.exception("Detalhes completos do erro:")
+                continue
         
-        logger.info("Iniciando verificação de similaridade entre conteúdos...")
-        verificar_similaridade_conteudos(sheets, gemini, docs, limiar_similaridade=0.4, modo_teste=False)
+        # Exibe resumo
+        logger.info(f"\n{'='*50}")
+        logger.info(f"RESUMO DE EXECUÇÃO - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        logger.info(f"Total de artigos processados: {len(df_filtrado)}")
+        logger.info(f"Tokens de entrada: {tokens_entrada_total}")
+        logger.info(f"Tokens de saída: {tokens_saida_total}")
+        logger.info(f"Custo total estimado: ${custo_total:.4f} USD (aproximadamente R${custo_total*5:.2f})")
+        logger.info(f"{'='*50}")
         
-        logger.info("Iniciando verificação de termos proibidos...")
-        corrigir_termos_proibidos(sheets, docs, modo_teste=False)
-    elif not modo_teste:
-        logger.info("Processamento com limite de linhas. Verificações de duplicidade, similaridade e termos proibidos serão ignoradas.")
-    else:
-        logger.info("Modo de teste ativo. Verificações de duplicidade, similaridade e termos proibidos serão ignoradas.")
+        # Verifica e corrige títulos duplicados, similaridade e termos proibidos (somente se não estiver em modo de teste)
+        if not modo_teste and limite_linhas is None:
+            logger.info("Iniciando verificação de títulos duplicados...")
+            verificar_titulos_duplicados(sheets, gemini, docs, modo_teste=False)
+            
+            logger.info("Iniciando verificação de similaridade entre conteúdos...")
+            verificar_similaridade_conteudos(sheets, gemini, docs, limiar_similaridade=0.4, modo_teste=False)
+            
+            logger.info("Iniciando verificação de termos proibidos...")
+            corrigir_termos_proibidos(sheets, docs, modo_teste=False)
+        elif not modo_teste:
+            logger.info("Processamento com limite de linhas. Verificações de duplicidade, similaridade e termos proibidos serão ignoradas.")
+        else:
+            logger.info("Modo de teste ativo. Verificações de duplicidade, similaridade e termos proibidos serão ignoradas.")
+    except Exception as e:
+        logger.error(f"Erro durante a execução do script: {e}")
+        logger.exception("Detalhes do erro:")
 
 if __name__ == "__main__":
     import argparse

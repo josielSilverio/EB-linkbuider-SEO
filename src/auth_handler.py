@@ -65,7 +65,7 @@ def nova_autenticacao():
     try:
         flow = InstalledAppFlow.from_client_secrets_file(
             CREDENTIALS_FILE_PATH, SCOPES)
-        creds = flow.run_local_server(port=0)
+        creds = flow.run_local_server(port=8080)
         return creds
     except Exception as e:
         logging.error(f"Erro durante autenticação: {e}")
