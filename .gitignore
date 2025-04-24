@@ -1,19 +1,42 @@
-# Virtual environment
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# Virtual environments
 venv/
-
-# Credentials
-credentials.json
-credentials/
-*.json
-
-# Environment variables
+env/
+ENV/
 .env
 
 # IDE specific files
-.vscode/
 .idea/
+.vscode/
+*.swp
+*.swo
 
-# Python cache
-__pycache__/
-*.pyc
-*.pyo 
+# Logs
+*.log
+
+# Credentials and secrets
+credentials.json
+token.json
+token.pickle
+
+# Local configuration
+*.ini
+config.local.py
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Local data files
+data/.last_selection.json 
