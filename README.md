@@ -225,3 +225,107 @@ Para que o script funcione corretamente, a planilha selecionada deve ter colunas
 ## Contribuições
 
 Contribuições são bem-vindas! Sinta-se à vontade para abrir *issues* e *pull requests*. 
+
+## Manual dos Scripts: Entendendo os Arquivos
+
+Aqui está um guia rápido sobre os principais arquivos de script (`.py`) neste projeto, para que servem e o que você pode querer ajustar:
+
+### 📄 `main.py` - O Maestro da Orquestra
+
+*   **Para que serve?** É o ponto de entrada principal. Ele coordena todo o processo: chama os menus, lê a planilha através do `sheets_handler`, filtra os dados com base na sua escolha, chama o `gemini_handler` para gerar o texto, usa o `docs_handler` para criar os documentos e, finalmente, atualiza a planilha.
+*   **Funções Principais:**
+    *   `main()`: A função principal que executa todo o fluxo.
+    *   `apresentar_menu_planilha()`: Mostra o menu para você escolher a planilha e a aba.
+    *   `estimar_custo_por_categoria()`: Calcula o custo estimado para cada grupo de palavras-chave.
+    *   `apresentar_menu_categorias()`: Mostra o menu para escolher quais categorias ou quantidade processar.
+    *   `filtrar_dataframe_por_categorias()`: Seleciona as linhas da planilha com base na sua escolha no menu.
+    *   `verificar_titulos_duplicados()`, `verificar_similaridade_conteudos()`, `corrigir_termos_proibidos()`: Funções de controle de qualidade executadas no final (se não usar `--limite`).
+*   **O que você pode alterar (e por quê):**
+    *   **Textos dos Menus:** Você pode editar os textos (`print` e `input`) dentro das funções `apresentar_menu_*` para mudar como os menus aparecem para você.
+    *   **Confirmação de Custo:** Alterar o texto da pergunta `input()` que pede confirmação antes de processar.
+    *   **Lógica de Processamento:** Modificar o loop `for i, (idx, linha) in enumerate(df_filtrado.iterrows()):` se precisar processar as linhas de forma diferente (mas cuidado para manter a lógica de atualização correta!).
+    *   **Controle de Qualidade:** Comentar (`#`) as chamadas para `verificar_titulos_duplicados`, `verificar_similaridade_conteudos` ou `corrigir_termos_proibidos` no final da função `main` se não quiser executar essas verificações (por exemplo, para acelerar o processo).
+
+### ⚙️ `src/config.py` - O Painel de Controle
+
+*   **Para que serve?** Este arquivo carrega as configurações do seu arquivo `.env` e define constantes importantes usadas em todo o projeto, como os nomes das colunas da planilha ou o formato do nome do arquivo.
+*   **Elementos Principais:**
+    *   Carregamento das variáveis do `.env` (como `SPREADSHEET_ID`, `SHEET_NAME`, `DRIVE_FOLDER_ID`, chaves de API, configurações do Gemini).
+    *   `COLUNAS`: **Muito importante!** Mapeia nomes como `'id'`, `'palavra_ancora'`, `'titulo'` para os *números* das colunas na sua planilha (A=0, B=1, C=2, ...).
+    *   `NOME_ARQUIVO_PADRAO`: Define como o nome dos arquivos do Google Docs será montado.
+    *   `GEMINI_PRECO_ENTRADA`, `GEMINI_PRECO_SAIDA`: Preços usados para estimar o custo.
+    *   `gerar_nome_arquivo()`: Função que cria o nome do arquivo com base no padrão.
+    *   `estimar_custo_gemini()`: Função que calcula o custo estimado de uma chamada Gemini.
+*   **O que você pode alterar (e por quê):**
+    *   **Mapeamento de Colunas (`COLUNAS`):** **Se a estrutura da sua planilha mudar**, você *PRECISA* atualizar os números (índices) neste dicionário para que o script leia e escreva nas colunas corretas.
+    *   **Padrão de Nome de Arquivo (`NOME_ARQUIVO_PADRAO`):** Altere a string de formato (ex: `"{id} - {ancora}"`) se quiser que os nomes dos documentos gerados sejam diferentes.
+    *   **Preços do Gemini:** Atualize os valores `GEMINI_PRECO_*` se o Google alterar os preços, para manter as estimativas de custo precisas (é carregado do `.env`, então altere lá).
+    *   **Lógica de `gerar_nome_arquivo()`:** Se precisar de uma lógica mais complexa para nomes de arquivo do que o padrão permite, você pode modificar esta função.
+    *   **Configurações Padrão:** Os valores padrão (ex: `"gemini-1.5-pro"` se a variável não estiver no `.env`) podem ser alterados aqui, mas é melhor definir tudo no `.env`.
+
+### 🔑 `src/auth_handler.py` - O Porteiro das APIs
+
+*   **Para que serve?** Cuida da parte chata de fazer login na sua conta Google de forma segura (OAuth2) para permitir que o script acesse Sheets, Docs e Drive em seu nome. Ele gerencia o token de acesso.
+*   **Funções Principais:**
+    *   `obter_credenciais()`: Lida com o fluxo de login, pedindo sua autorização no navegador na primeira vez ou quando o token expira, e salva/lê o `token.json`.
+    *   `criar_servico_sheets()`, `criar_servico_docs()`, `criar_servico_drive()`: Usam as credenciais obtidas para criar os objetos que permitem interagir com cada API.
+*   **O que você pode alterar (e por quê):**
+    *   **Escopos (`SCOPES`):** A lista `SCOPES` define quais permissões o script pede (ler/escrever planilhas, documentos, drive). Você *poderia* alterar isso se precisasse de mais ou menos permissões, mas geralmente as atuais são as necessárias.
+    *   **Nome do Arquivo de Token:** Você pode mudar o nome `'credentials/token.json'` se quiser salvar o token em outro lugar, mas normalmente não há motivo.
+    *   **Caminho das Credenciais:** O caminho para `credentials.json` é lido do `config.py` (que lê do `.env`). Altere no `.env` se necessário.
+
+### 📊 `src/sheets_handler.py` - O Arquivista da Planilha
+
+*   **Para que serve?** É responsável por toda a comunicação com o Google Sheets: ler os dados da aba que você escolheu e escrever de volta a URL do documento e o título gerado na linha correta.
+*   **Funções Principais:**
+    *   `SheetsHandler()`: A classe que inicializa o serviço.
+    *   `ler_planilha()`: Lê os dados da planilha, remove cabeçalho, filtra linhas com ID inválido e, crucialmente, adiciona a coluna `linha_original` para saber a posição real de cada linha.
+    *   `atualizar_url_documento()`: Escreve a URL na coluna correta (J por padrão) da linha original.
+    *   `atualizar_titulo_documento()`: Escreve o título na coluna correta (I por padrão) da linha original.
+    *   `obter_abas_disponiveis()`: Usada pelo menu para listar as abas.
+*   **O que você pode alterar (e por quê):**
+    *   **Range de Leitura (`ler_planilha`):** A linha `range=f"{nome_aba}!A:O"` define que ele lê as colunas de A até O. Se precisar de mais ou menos colunas, ajuste aqui (mas lembre-se de atualizar o `COLUNAS` no `config.py` se a posição das colunas usadas mudar).
+    *   **Validação de ID (`is_valid_id` dentro de `ler_planilha`):** Se seus IDs tiverem um formato específico ou se houver outros textos na coluna de ID que você quer ignorar, pode ajustar a lógica desta sub-função.
+    *   **Colunas de Atualização (`atualizar_*`):** As letras das colunas onde o Título (`'I'`) e a URL (`'J'`) são escritos estão definidas diretamente nestas funções. Se precisar mudar essas colunas de destino na sua planilha, altere essas letras aqui.
+
+### ✨ `src/gemini_handler.py` - O Escritor Criativo (IA)
+
+*   **Para que serve?** Este módulo conversa com a API do Google Gemini. Ele pega os dados da planilha, monta uma instrução (prompt) e pede ao Gemini para gerar o texto do artigo.
+*   **Funções Principais:**
+    *   `GeminiHandler()`: A classe que inicializa a API Gemini com suas configurações.
+    *   `gerar_conteudo()`: A função principal que recebe os dados, chama `_construir_prompt` e envia para o Gemini.
+    *   `carregar_prompt_template()`: Lê o arquivo `data/prompt.txt`.
+    *   `_construir_prompt()`: Substitui os placeholders (como `{palavra_ancora}`) no template do prompt com os dados da linha atual.
+    *   `verificar_conteudo_proibido()`: Procura por termos inadequados no texto gerado e os substitui.
+*   **O que você pode alterar (e por quê):**
+    *   **Edição do Prompt:** A maneira mais comum de alterar a saída do Gemini é **editando o arquivo `data/prompt.txt`**. Mude as instruções, o tom, o estilo, etc., diretamente lá.
+    *   **Construção do Prompt (`_construir_prompt`):** Se você adicionar novas colunas na planilha com informações que quer passar para o Gemini, precisará adicionar novos placeholders no `prompt.txt` e atualizar esta função para incluir esses novos dados no prompt final.
+    *   **Configurações de Geração (no `.env`):** Altere `GEMINI_MODEL`, `GEMINI_MAX_OUTPUT_TOKENS` e `GEMINI_TEMPERATURE` no seu arquivo `.env` para usar outro modelo, controlar o tamanho máximo da resposta ou ajustar a criatividade/aleatoriedade do texto.
+    *   **Configurações de Segurança (`safety_settings`):** Você pode ajustar os níveis de bloqueio para diferentes categorias de conteúdo potencialmente prejudicial, mas cuidado para não ser restritivo demais.
+    *   **Termos Proibidos (`TERMOS_PROIBIDOS`):** Adicione ou remova palavras da lista `TERMOS_PROIBIDOS` dentro da função `verificar_conteudo_proibido` para controlar quais termos são automaticamente filtrados/substituídos.
+
+### 📑 `src/docs_handler.py` - O Editor e Organizador de Documentos
+
+*   **Para que serve?** Ele cria os novos arquivos no Google Docs, insere o texto gerado pelo Gemini, aplica alguma formatação básica (títulos, negrito, links) e salva o documento na pasta correta do Google Drive.
+*   **Funções Principais:**
+    *   `DocsHandler()`: A classe que inicializa os serviços do Docs e Drive.
+    *   `criar_documento()`: Cria um novo Google Doc em branco na pasta definida no `.env` (`DRIVE_FOLDER_ID`).
+    *   `atualizar_documento()`: Usado pelas funções de controle de qualidade para substituir o conteúdo de um documento existente.
+    *   `formatar_documento()`: Chama a função `converter_markdown_para_docs` (do `utils.py`) para preparar os comandos de formatação e os aplica ao documento.
+    *   `obter_conteudo_documento()`: Usado pelas funções de controle de qualidade para ler o texto de um documento existente.
+*   **O que você pode alterar (e por quê):**
+    *   **Pasta do Drive (no `.env`):** Altere o `DRIVE_FOLDER_ID` no arquivo `.env` para salvar os documentos em uma pasta diferente.
+    *   **Formatação de Documento:** A maior parte da lógica de formatação está na função `converter_markdown_para_docs` em `src/utils.py`. Se quiser mudar tamanhos de fonte, negrito, estilos de título, cores de link, etc., você precisará modificar as estruturas de `requests` criadas naquela função.
+
+### 🛠️ `src/utils.py` - A Caixa de Ferramentas
+
+*   **Para que serve?** Contém funções auxiliares usadas por outros módulos. Coisas como configurar os logs, processar texto, contar tokens, etc.
+*   **Funções Principais:**
+    *   `configurar_logging()`: Define como as mensagens de log são exibidas (no console e no arquivo `.log`) e garante o uso de UTF-8.
+    *   `converter_markdown_para_docs()`: Pega o texto simples gerado pelo Gemini e o transforma nos comandos que a API do Google Docs entende para criar títulos, parágrafos e aplicar o link âncora.
+    *   `contar_tokens()`: Estima quantos tokens um texto usará na API Gemini (útil para prever custos).
+    *   `substituir_links_markdown()`: Encontra a `palavra_ancora` no texto gerado para que a função de formatação saiba onde inserir o link.
+*   **O que você pode alterar (e por quê):**
+    *   **Formato do Log (`configurar_logging`):** Altere a string `format=` se quiser que as mensagens de log tenham uma aparência diferente.
+    *   **Lógica de Conversão (`converter_markdown_para_docs`):** Se o Gemini começar a gerar texto com marcações diferentes (além de simples parágrafos e talvez títulos implícitos) ou se você quiser formatar listas, etc., teria que aprimorar a lógica aqui para identificar e converter essas estruturas.
+    *   **Lógica de Encontrar Link (`substituir_links_markdown`):** Se a forma como o Gemini insere a palavra-âncora mudar ou se você tiver requisitos mais complexos para onde o link deve ir, pode ajustar a lógica de busca nesta função. 
