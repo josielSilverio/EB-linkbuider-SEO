@@ -169,27 +169,38 @@ class SheetsHandler:
             df_data['sheet_row_num'] = df_data.index + 1 # Correção: Simplesmente índice + 1
             self.logger.debug(f"Coluna 'sheet_row_num' adicionada. Exemplo (primeiras 5 linhas de dados): {df_data[['sheet_row_num']].head().to_string()}")
             
-            df_para_filtrar = df_data.copy() # Copia para filtro
-            
-            # Aplica filtro de ID se necessário
-            if not apenas_dados and len(df_para_filtrar.columns) > COLUNAS.get("id", -1):
-                coluna_id = COLUNAS["id"]
-                
+            df_a_filtrar_id = df_data.copy() # Copia antes de qualquer filtro
+            coluna_id = COLUNAS.get("id", -1)
+            if not apenas_dados and coluna_id != -1 and coluna_id < len(df_a_filtrar_id.columns):
                 def is_valid_id(id_value):
                     if not id_value: return False
                     id_str = str(id_value).strip().lower()
                     return bool(id_str and id_str not in ['id', 'identificador', 'código', 'code', 'none', 'nan', '#n/a', 'n/a'])
 
-                if not df_para_filtrar.empty:
-                    mascara = df_para_filtrar[coluna_id].apply(is_valid_id)
-                    df_filtrado = df_para_filtrar[mascara]
-                    self.logger.info(f"Filtrado para {len(df_filtrado)} linhas com IDs válidos de {len(df_para_filtrar)} linhas de dados")
-                    df_final = df_filtrado
+                if not df_a_filtrar_id.empty:
+                    mascara_id = df_a_filtrar_id[coluna_id].apply(is_valid_id)
+                    df_filtrado_id = df_a_filtrar_id[mascara_id]
+                    self.logger.info(f"Filtrado para {len(df_filtrado_id)} linhas com IDs válidos de {len(df_a_filtrar_id)} linhas de dados")
+                    df_para_filtrar_url = df_filtrado_id
                 else:
-                    df_final = df_para_filtrar # Dataframe já estava vazio
+                    df_para_filtrar_url = df_a_filtrar_id # Dataframe já estava vazio
             else:
-                self.logger.info("Modo 'apenas_dados' ativado OU coluna ID não configurada/encontrada. Retornando todas as linhas lidas.")
-                df_final = df_para_filtrar
+                self.logger.info("Modo 'apenas_dados' ativado OU coluna ID não configurada/encontrada. Pulando filtro de ID.")
+                df_para_filtrar_url = df_a_filtrar_id
+
+            # Aplica filtro para pular linhas com URL já preenchida (Coluna J)
+            df_final = df_para_filtrar_url.copy() # Copia antes do filtro de URL
+            coluna_url = COLUNAS.get("url_documento", -1)
+            if coluna_url != -1 and coluna_url < len(df_final.columns):
+                # Mantém linhas onde a coluna URL está vazia ou nula
+                mascara_url = df_final[coluna_url].isnull() | (df_final[coluna_url].astype(str).str.strip() == '')
+                df_filtrado_url = df_final[mascara_url]
+                linhas_puladas = len(df_final) - len(df_filtrado_url)
+                if linhas_puladas > 0:
+                    self.logger.info(f"Puladas {linhas_puladas} linhas que já possuem URL na coluna {coluna_url}.")
+                df_final = df_filtrado_url
+            else:
+                 self.logger.warning(f"Coluna url_documento (índice {coluna_url}) não configurada ou fora dos limites. Não foi possível pular linhas já processadas.")
 
             # Aplica limite de linhas, se especificado
             if limite_linhas and len(df_final) > limite_linhas:

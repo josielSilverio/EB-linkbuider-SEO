@@ -24,7 +24,8 @@ from src.config import (
     GEMINI_MAX_OUTPUT_TOKENS, 
     MESES,
     SPREADSHEET_ID,
-    SHEET_NAME
+    SHEET_NAME,
+    DRIVE_FOLDER_ID
 )
 
 # Caminho para salvar a última seleção
@@ -1012,6 +1013,7 @@ def processar_linha(linha, indice, df, df_original, modo_teste, spreadsheet_id, 
     Processa uma linha específica da planilha.
     Extrai dados, gera o conteúdo com a API e salva no Google Drive.
     """
+    logger = logging.getLogger('seo_linkbuilder') # Get the logger instance
     try:
         # Extrai os dados da linha
         id_campanha = str(df.iloc[indice][COLUNAS["id"]])
@@ -1108,6 +1110,47 @@ def extrair_titulo(conteudo):
     titulo_padrao = ' '.join(palavras) + '...'
     return titulo_padrao
 
+def apresentar_menu_pasta_drive() -> str:
+    """
+    Apresenta um menu para confirmar ou alterar a pasta de destino no Google Drive.
+    """
+    logger = logging.getLogger('seo_linkbuilder')
+    # Obtém o ID da pasta configurado atualmente (via .env ou padrão do config.py)
+    current_folder_id = DRIVE_FOLDER_ID
+
+    print("\n" + "="*60)
+    print("SELEÇÃO DA PASTA DE DESTINO NO GOOGLE DRIVE".center(60))
+    print("="*60)
+    
+    if not current_folder_id:
+        logger.warning("Nenhum DRIVE_FOLDER_ID configurado no .env ou config.py!")
+        print("\n⚠️ AVISO: Nenhuma pasta de destino padrão está configurada.")
+        while True:
+            novo_id = input("Por favor, insira o ID da pasta do Google Drive onde deseja salvar os documentos: ").strip()
+            if novo_id:
+                logger.info(f"Usando pasta do Drive com ID inserido: {novo_id}")
+                return novo_id
+            else:
+                print("ID da pasta não pode ser vazio.")
+    else:
+        print(f"\nA pasta configurada para salvar os documentos é: {current_folder_id}")
+        
+        while True:
+            confirmacao = input("Deseja usar esta pasta? (S para Sim / N para inserir outro ID): ").strip().upper()
+            if confirmacao == 'S':
+                logger.info(f"Usando pasta do Drive configurada: {current_folder_id}")
+                return current_folder_id
+            elif confirmacao == 'N':
+                while True:
+                    novo_id = input("Insira o novo ID da pasta do Google Drive: ").strip()
+                    if novo_id:
+                        logger.info(f"Usando pasta do Drive com ID inserido: {novo_id}")
+                        return novo_id
+                    else:
+                        print("ID da pasta não pode ser vazio.")
+            else:
+                print("Opção inválida. Digite S ou N.")
+
 def main(limite_linhas: int = None, modo_teste: bool = False, categorias_selecionadas: Dict = None, quantidade_especifica: int = None):
     """
     Função principal que orquestra a leitura da planilha, geração de conteúdo e criação de documentos.
@@ -1124,6 +1167,12 @@ def main(limite_linhas: int = None, modo_teste: bool = False, categorias_selecio
         sheets = SheetsHandler()
         gemini = GeminiHandler()
         docs = DocsHandler()
+        
+        # NOVO: Apresenta menu para selecionar pasta do Drive
+        target_drive_folder_id = apresentar_menu_pasta_drive()
+        if not target_drive_folder_id: # Segurança caso algo dê errado no menu
+             logger.error("ID da pasta do Drive não foi obtido. Encerrando.")
+             return
         
         # 1. Apresenta o menu para selecionar Planilha e Aba
         spreadsheet_id_selecionado, sheet_name_selecionado = apresentar_menu_planilha(sheets)
@@ -1250,6 +1299,9 @@ def main(limite_linhas: int = None, modo_teste: bool = False, categorias_selecio
                 
                 logger.info(f"Processando linha {i+1}/{len(df_filtrado)}: ID {id_campanha} - {titulo_original} (Sheet Row: {sheet_row_num})")
                 
+                # LOG ADICIONAL: Verifica os dados enviados ao Gemini
+                logger.debug(f"Enviando para Gemini - ID: {dados.get('id')}, Ancora: '{dados.get('palavra_ancora')}', Titulo Original: '{dados.get('titulo')}'")
+                
                 # Gera o conteúdo usando o Gemini
                 logger.info(f"Gerando conteúdo com o Gemini para '{palavra_ancora}'...")
                 conteudo, metricas, info_link = gemini.gerar_conteudo(dados)
@@ -1271,9 +1323,15 @@ def main(limite_linhas: int = None, modo_teste: bool = False, categorias_selecio
                     # Fallback para um nome simples
                     nome_arquivo = f"{id_campanha} - {site} - Artigo"
                 
-                # Cria o documento no Google Docs
-                logger.info(f"Criando documento '{nome_arquivo}'...")
-                document_id, document_url = docs.criar_documento(titulo_gerado, conteudo, nome_arquivo, info_link)
+                # Cria o documento no Google Docs, PASSANDO O ID DA PASTA SELECIONADO
+                logger.info(f"Criando documento '{nome_arquivo}' na pasta {target_drive_folder_id}...")
+                document_id, document_url = docs.criar_documento(
+                    titulo_gerado,
+                    conteudo,
+                    nome_arquivo,
+                    info_link,
+                    target_folder_id=target_drive_folder_id # Passa o ID selecionado
+                )
                 
                 # Atualiza a URL e o título na planilha (se não estiver em modo de teste)
                 if not modo_teste:

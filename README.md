@@ -1,4 +1,4 @@
-# SEO-LinkBuilder - Versão 2.0
+# SEO-LinkBuilder - Versão 2.1
 
 Automatização para geração de artigos otimizados para SEO utilizando a API do Google Gemini, Google Sheets, Google Docs e Google Drive, com suporte a múltiplas planilhas e abas.
 

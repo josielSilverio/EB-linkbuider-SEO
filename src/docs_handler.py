@@ -21,7 +21,7 @@ class DocsHandler:
             self.logger.error(f"Erro ao inicializar os serviços: {e}")
             raise
     
-    def criar_documento(self, titulo: str, conteudo: str, nome_arquivo: str, info_link=None) -> Tuple[str, str]:
+    def criar_documento(self, titulo: str, conteudo: str, nome_arquivo: str, info_link=None, target_folder_id: Optional[str] = None) -> Tuple[str, str]:
         """
         Cria um novo documento no Google Docs e o salva na pasta especificada.
         
@@ -30,6 +30,7 @@ class DocsHandler:
             conteudo: Conteúdo em formato natural para o documento
             nome_arquivo: Nome do arquivo para o documento
             info_link: Informações para adicionar link à palavra âncora (opcional)
+            target_folder_id: ID da pasta de destino no Drive (opcional, usa config se None)
         
         Returns:
             Tupla (document_id, document_url)
@@ -75,8 +76,11 @@ class DocsHandler:
             # Formata o título principal (H1) para tamanho configurado
             self._formatar_titulo(document_id, TITULO_TAMANHO)
             
+            # Define a pasta de destino
+            folder_id_destino = target_folder_id if target_folder_id else DRIVE_FOLDER_ID
+            
             # Move o arquivo para a pasta especificada no Drive
-            self._mover_para_pasta(document_id, DRIVE_FOLDER_ID)
+            self._mover_para_pasta(document_id, folder_id_destino)
             
             # Obtém a URL do documento
             document_url = f"https://docs.google.com/document/d/{document_id}/edit"
@@ -149,6 +153,9 @@ class DocsHandler:
             document_id: ID do documento a ser movido
             folder_id: ID da pasta de destino
         """
+        if not folder_id:
+             self.logger.warning(f"Nenhum ID de pasta de destino fornecido para mover o documento {document_id}. O documento permanecerá na raiz.")
+             return
         try:
             # Adiciona a pasta como pai do arquivo
             self.service_drive.files().update(
