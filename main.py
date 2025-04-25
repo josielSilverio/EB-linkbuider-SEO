@@ -370,45 +370,44 @@ def verificar_similaridade_conteudos(sheets: SheetsHandler, gemini: GeminiHandle
                     logger.info(f"Índice Original da Linha (base 0): {doc_reescrever['indice']}")
                     logger.info(f"Linha na planilha a ser atualizada (base 1): {linha_planilha}")
                     
-                    # Atualiza o título (coluna I)
-                    coluna_titulo = 'I' # Coluna do título
+                    # Atualiza Título (Coluna I)
+                    coluna_titulo = 'I'
                     titulo_range = f"{SHEET_NAME}!{coluna_titulo}{linha_planilha}"
                     logger.info(f"Tentando atualizar Título na célula {coluna_titulo}{linha_planilha} (Range: {titulo_range}) com valor: '{titulo_novo}'")
-                    
                     sheets.service.spreadsheets().values().update(
                         spreadsheetId=SPREADSHEET_ID,
                         range=titulo_range,
                         valueInputOption="USER_ENTERED", 
                         body={"values": [[titulo_novo]]}
                     ).execute()
-                    
                     logger.info(f"✓ Título atualizado com sucesso em {titulo_range}!")
                     
                     # Atualiza a URL (coluna J)
-                    coluna_url = 'J' # Coluna da URL
+                    coluna_url = 'J'
                     url_range = f"{SHEET_NAME}!{coluna_url}{linha_planilha}"
                     logger.info(f"Tentando atualizar URL na célula {coluna_url}{linha_planilha} (Range: {url_range}) com valor: '{document_url}'")
-                    
                     sheets.service.spreadsheets().values().update(
                         spreadsheetId=SPREADSHEET_ID,
                         range=url_range,
                         valueInputOption="USER_ENTERED",
                         body={"values": [[document_url]]}
                     ).execute()
-                    
                     logger.info(f"✓ URL atualizada com sucesso em {url_range}!")
                     logger.info(f"==== FIM DA ATUALIZAÇÃO DA PLANILHA ====")
                     
-                except Exception as e:
-                    logger.error(f"Erro ao atualizar planilha para linha original {indice_original_linha} (linha sheet {linha_planilha}): {e}")
+                except Exception as e: # Except correspondente ao try da atualização da planilha
+                    # Usa doc_reescrever['indice'] que está disponível neste escopo
+                    logger.error(f"Erro ao atualizar planilha para linha original {doc_reescrever['indice']} (linha sheet {linha_planilha}): {e}")
                     logger.exception("Detalhes do erro:")
                 
                 # Pausa para não sobrecarregar as APIs
                 time.sleep(1)
                 
-            except Exception as e:
-                logger.error(f"Erro ao reescrever documento: {e}")
-                logger.exception("Detalhes do erro:")
+            except Exception as e: # Except correspondente ao try principal do processamento do par
+                # Log do erro incluindo o índice original se disponível
+                indice_orig_erro = doc_reescrever.get('indice', 'N/A') if 'doc_reescrever' in locals() else 'N/A'
+                logger.error(f"Erro ao reescrever documento similar (Índice Original: {indice_orig_erro}): {e}")
+                logger.exception("Detalhes completos do erro:")
         
         logger.info(f"Verificação e correção de similaridade concluída! Reescritos {len(documentos_ja_selecionados)} documentos.")
                 
@@ -935,137 +934,72 @@ def apresentar_menu_meses(sheets: SheetsHandler = None) -> Tuple[str, str]:
 
 def apresentar_menu_planilha(sheets: SheetsHandler = None) -> Tuple[str, str]:
     """
-    Apresenta um menu interativo para o usuário selecionar a planilha e a aba a serem processadas.
+    Seleciona a aba a ser processada na planilha fixa definida.
     Usa a última seleção salva como padrão.
     """
     logger = logging.getLogger('seo_linkbuilder')
     
+    # Define o ID da planilha fixa
+    spreadsheet_id_selecionado = "12NxIBzKhNdxCMm2ggGQdPmlKWAFYuLUzvA6N0cDP1Fo"
+    logger.info(f"Usando planilha fixa com ID: {spreadsheet_id_selecionado}")
+
     if sheets is None:
         try:
-            sheets = SheetsHandler()
+            sheets = SheetsHandler(spreadsheet_id=spreadsheet_id_selecionado) # Passa o ID fixo
         except Exception as e:
             logger.error(f"Erro ao inicializar SheetsHandler para menu: {e}")
-            return SPREADSHEET_ID, SHEET_NAME # Retorna padrões do .env em caso de erro
+            # Tenta retornar o ID fixo e o nome padrão do .env em caso de erro grave
+            return spreadsheet_id_selecionado, SHEET_NAME 
 
-    # Carrega a última seleção
+    # Carrega a última seleção (apenas para a aba)
     ultima_selecao = carregar_ultima_selecao()
-    ultimo_spreadsheet_id = ultima_selecao.get("spreadsheet_id", SPREADSHEET_ID)
-    ultima_sheet_name = ultima_selecao.get("sheet_name", SHEET_NAME)
+    # Verifica se a última seleção era da mesma planilha fixa
+    if ultima_selecao.get("spreadsheet_id") == spreadsheet_id_selecionado:
+        ultima_sheet_name = ultima_selecao.get("sheet_name", SHEET_NAME)
+    else:
+        # Se a última seleção era de outra planilha, usa o padrão do .env
+        ultima_sheet_name = SHEET_NAME 
 
-    # 1. Selecionar Planilha
-    while True:
-        try:
-            logger.info("Buscando planilhas disponíveis...")
-            planilhas = sheets.obter_planilhas_disponiveis()
-            if not planilhas:
-                logger.warning("Nenhuma planilha encontrada ou erro ao buscar. Usando ID padrão do .env.")
-                spreadsheet_id_selecionado = SPREADSHEET_ID
-                break
-
-            print("\n=== Selecione a Planilha ===")
-            planilhas_dict = {str(i+1): p for i, p in enumerate(planilhas)}
-            
-            # Encontra o índice da última planilha selecionada, se existir
-            indice_padrao = None
-            for i, p in enumerate(planilhas):
-                if p['id'] == ultimo_spreadsheet_id:
-                    indice_padrao = str(i + 1)
-                    print(f"Padrão (última seleção): [{indice_padrao}] {p['name']} ({p['id']})")
-                    break
-            
-            # Mostra as opções
-            for idx, p_info in planilhas_dict.items():
-                 if idx != indice_padrao: # Não repete o padrão
-                     print(f"[{idx}] {p_info['name']} ({p_info['id']})")
-
-            print(f"[Enter] Usar padrão '{planilhas_dict[indice_padrao]['name']}'" if indice_padrao else "[P] Usar ID padrão do .env")
-            print("[A] Atualizar lista")
-            
-            escolha_planilha = input("Digite o número da planilha desejada ou [P/A/Enter]: ").strip()
-
-            if escolha_planilha == '' and indice_padrao:
-                spreadsheet_id_selecionado = ultimo_spreadsheet_id
-                logger.info(f"Usando última planilha selecionada: {planilhas_dict[indice_padrao]['name']}")
-                break
-            elif escolha_planilha.lower() == 'p':
-                 spreadsheet_id_selecionado = SPREADSHEET_ID
-                 logger.info(f"Usando ID de planilha padrão do .env: {SPREADSHEET_ID}")
-                 # Verifica se o ID padrão existe na lista
-                 if not any(p['id'] == spreadsheet_id_selecionado for p in planilhas):
-                      logger.warning(f"ID padrão {spreadsheet_id_selecionado} não encontrado na lista de planilhas disponíveis.")
-                 break
-            elif escolha_planilha.lower() == 'a':
-                logger.info("Atualizando lista de planilhas...")
-                continue # Reinicia o loop para buscar planilhas novamente
-            elif escolha_planilha in planilhas_dict:
-                spreadsheet_id_selecionado = planilhas_dict[escolha_planilha]['id']
-                logger.info(f"Planilha selecionada: {planilhas_dict[escolha_planilha]['name']}")
-                break
-            else:
-                logger.error("Seleção inválida. Tente novamente.")
-        except Exception as e:
-            logger.error(f"Erro ao selecionar planilha: {e}. Usando ID padrão.")
-            spreadsheet_id_selecionado = SPREADSHEET_ID
-            break
-
-    # 2. Selecionar Aba
+    # Selecionar Aba (forma padronizada)
     while True:
         try:
             logger.info(f"Buscando abas na planilha {spreadsheet_id_selecionado}...")
             abas = sheets.obter_abas_disponiveis(spreadsheet_id_selecionado)
             if not abas:
-                logger.warning("Nenhuma aba encontrada ou erro ao buscar. Usando nome padrão do .env.")
-                sheet_name_selecionado = SHEET_NAME
-                break
-                
+                logger.error(f"Nenhuma aba encontrada ou erro ao buscar na planilha {spreadsheet_id_selecionado}. Verifique o ID e as permissões.")
+                # Se não encontrar abas, não há como continuar
+                raise ValueError(f"Nenhuma aba encontrada na planilha {spreadsheet_id_selecionado}")
+
             print(f"\n=== Selecione a Aba na Planilha '{spreadsheet_id_selecionado}' ===")
             abas_dict = {str(i+1): a for i, a in enumerate(abas)}
 
-            # Encontra o índice da última aba selecionada, se existir
-            indice_padrao_aba = None
-            if spreadsheet_id_selecionado == ultimo_spreadsheet_id: # Só usa padrão se a planilha for a mesma
-                for i, a in enumerate(abas):
-                    if a['titulo'] == ultima_sheet_name:
-                        indice_padrao_aba = str(i + 1)
-                        print(f"Padrão (última seleção): [{indice_padrao_aba}] {a['titulo']}")
-                        break
-
-            # Mostra as opções
+            # Mostra as opções numeradas
             for idx, a_info in abas_dict.items():
-                if idx != indice_padrao_aba:
-                    print(f"[{idx}] {a_info['titulo']}")
+                # Indica qual era a última selecionada
+                indicador_padrao = " (Última selecionada)" if a_info['titulo'] == ultima_sheet_name else ""
+                print(f"[{idx}] {a_info['titulo']}{indicador_padrao}")
 
-            print(f"[Enter] Usar padrão '{abas_dict[indice_padrao_aba]['titulo']}'" if indice_padrao_aba else "[P] Usar nome padrão do .env")
-            print("[A] Atualizar lista")
+            escolha_aba = input(f"\nDigite o número da aba desejada (1-{len(abas)}): ").strip()
 
-            escolha_aba = input("Digite o número da aba desejada ou [P/A/Enter]: ").strip()
-
-            if escolha_aba == '' and indice_padrao_aba:
-                sheet_name_selecionado = ultima_sheet_name
-                logger.info(f"Usando última aba selecionada: {abas_dict[indice_padrao_aba]['titulo']}")
-                break
-            elif escolha_aba.lower() == 'p':
-                 sheet_name_selecionado = SHEET_NAME
-                 logger.info(f"Usando nome de aba padrão do .env: {SHEET_NAME}")
-                 # Verifica se o nome padrão existe na lista
-                 if not any(a['titulo'] == sheet_name_selecionado for a in abas):
-                      logger.warning(f"Nome padrão {sheet_name_selecionado} não encontrado na lista de abas disponíveis.")
-                 break
-            elif escolha_aba.lower() == 'a':
-                logger.info("Atualizando lista de abas...")
-                continue # Reinicia o loop para buscar abas novamente
-            elif escolha_aba in abas_dict:
+            if escolha_aba.isdigit() and escolha_aba in abas_dict:
                 sheet_name_selecionado = abas_dict[escolha_aba]['titulo']
                 logger.info(f"Aba selecionada: {sheet_name_selecionado}")
                 break
             else:
-                logger.error("Seleção inválida. Tente novamente.")
-        except Exception as e:
-            logger.error(f"Erro ao selecionar aba: {e}. Usando nome padrão.")
-            sheet_name_selecionado = SHEET_NAME
-            break
+                print(f"Seleção inválida. Por favor, digite um número entre 1 e {len(abas)}.")
+                logger.warning(f"Seleção de aba inválida: '{escolha_aba}'")
 
-    # Salva a seleção atual
+        except Exception as e:
+            logger.error(f"Erro ao selecionar aba: {e}")
+            # Em caso de erro, tenta usar o nome padrão, mas avisa
+            sheet_name_selecionado = SHEET_NAME
+            logger.warning(f"Usando nome de aba padrão do .env devido a erro: {SHEET_NAME}")
+            # Verifica se o nome padrão existe na lista, se a lista foi carregada
+            if abas and not any(a['titulo'] == sheet_name_selecionado for a in abas):
+                 logger.warning(f"Nome padrão '{sheet_name_selecionado}' não encontrado na lista de abas disponíveis.")
+            break # Sai do loop em caso de erro
+
+    # Salva a seleção atual (planilha fixa + aba selecionada)
     salvar_ultima_selecao({
         "spreadsheet_id": spreadsheet_id_selecionado,
         "sheet_name": sheet_name_selecionado
@@ -1152,8 +1086,10 @@ def processar_linha(linha, indice, df, df_original, modo_teste, spreadsheet_id, 
         return True
         
     except Exception as e:
-        logger.error(f"Erro ao processar a linha {indice}: {e}")
-        logger.exception("Detalhes do erro:")
+        # Log do erro incluindo o número da linha da planilha, se disponível
+        sheet_row_num_erro = linha.get('sheet_row_num', 'N/A')
+        logger.error(f"Erro ao processar linha {indice_real} (Sheet Row: {sheet_row_num_erro}): {e}")
+        logger.exception("Detalhes completos do erro:")
         return False
 
 def extrair_titulo(conteudo):
@@ -1397,11 +1333,11 @@ def main(limite_linhas: int = None, modo_teste: bool = False, categorias_selecio
                 time.sleep(1)
                 
             except Exception as e:
-                # Log do erro incluindo o índice original se disponível
-                indice_orig_erro = linha.get('linha_original', 'N/A')
-                logger.error(f"Erro ao processar linha {i+1} (Índice Original Planilha: {indice_orig_erro}): {e}")
+                # Log do erro incluindo o número da linha da planilha, se disponível
+                sheet_row_num_erro = linha.get('sheet_row_num', 'N/A')
+                logger.error(f"Erro ao processar linha {i+1} (Sheet Row: {sheet_row_num_erro}): {e}")
                 logger.exception("Detalhes completos do erro:")
-                continue
+                continue # Continua para a próxima linha em caso de erro
         
         # Exibe resumo
         logger.info(f"\n{'='*50}")

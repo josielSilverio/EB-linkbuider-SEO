@@ -16,7 +16,7 @@ except Exception as e:
 DEFAULT_GOOGLE_API_KEY = "AIzaSyCK8kLwIdwK-MKTrt-JEQ5eTQUB_Ryw9ws"
 DEFAULT_GEMINI_API_KEY = "AIzaSyB-rrVr5TMdLgFYROocyQRFJ21bONrOjHE"
 DEFAULT_CREDENTIALS_PATH = "credentials/credentials.json"
-DEFAULT_DRIVE_FOLDER_ID = "1kYydkHTzlkAujferCVU5NXnnlxvVsB4j"
+DEFAULT_DRIVE_FOLDER_ID = "15B0tBT8UP6kyl7FxvVmuh4VBYZ9f48UG" # Pasta de Documentos josiel.nascimento@estrelabet.com
 DEFAULT_GEMINI_MODEL = "gemini-1.5-flash"
 # Adicione SPREADSHEET_ID e SHEET_NAME padrão se necessário
 # DEFAULT_SPREADSHEET_ID = "SEU_SPREADSHEET_ID_PADRAO"

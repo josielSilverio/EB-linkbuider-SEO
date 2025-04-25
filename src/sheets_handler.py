@@ -136,29 +136,38 @@ class SheetsHandler:
             
             df = pd.DataFrame(valores)
             
-            # Verifica se a primeira linha parece ser um cabeçalho
+            # Verifica se a primeira linha parece ser um cabeçalho (Lógica Refinada)
             header_detected = False
             header_offset = 0
             if len(df) > 0 and df.iloc[0] is not None:
-                first_row_values = [str(v).lower().strip() for v in df.iloc[0].tolist()]
-                # Verifica se contém termos comuns de cabeçalho
-                if 'id' in first_row_values or 'site' in first_row_values or 'ancora' in first_row_values or 'âncora' in first_row_values:
+                first_row = df.iloc[0]
+                # Verifica se colunas específicas contêm os nomes de cabeçalho esperados (case-insensitive)
+                is_id_header = COLUNAS['id'] < len(first_row) and str(first_row[COLUNAS['id']]).strip().lower() == 'id'
+                is_site_header = COLUNAS['site'] < len(first_row) and str(first_row[COLUNAS['site']]).strip().lower() == 'site'
+                # Permite variações para 'ancora'
+                is_ancora_header = COLUNAS['palavra_ancora'] < len(first_row) and str(first_row[COLUNAS['palavra_ancora']]).strip().lower() in ['palavra_ancora', 'palavra ancora', 'ancora', 'âncora']
+
+                # Considera cabeçalho se pelo menos duas colunas chave corresponderem
+                if (is_id_header and is_site_header) or (is_id_header and is_ancora_header) or (is_site_header and is_ancora_header):
                     header_detected = True
                     header_offset = 1
-                    self.logger.info(f"Cabeçalho detectado: {df.iloc[0].tolist()}")
+                    self.logger.info(f"Cabeçalho detectado (baseado nas colunas ID, Site, Âncora): {first_row.tolist()}")
                     df_data = df.iloc[header_offset:] # Remove cabeçalho
                 else:
-                    self.logger.info("Primeira linha não parece ser cabeçalho.")
+                    self.logger.info("Primeira linha não detectada como cabeçalho (verificação específica de colunas).")
                     df_data = df # Não remove nada
+                    header_offset = 0 # Garante que o offset seja 0 se não for detectado cabeçalho
             else:
                  self.logger.warning("DataFrame vazio ou primeira linha nula após leitura.")
                  df_data = df # Continua com o DataFrame original (provavelmente vazio)
+                 header_offset = 0 # Garante que o offset seja 0
 
             # Adiciona o número da linha original da planilha (1-based)
             # O índice de df_data é 0-based a partir do início dos dados
             # Adiciona 1 para tornar 1-based e adiciona header_offset para contar a linha de cabeçalho, se removida
             df_data = df_data.copy() # Para evitar SettingWithCopyWarning
             df_data['sheet_row_num'] = df_data.index + header_offset + 1 
+            self.logger.debug(f"Coluna 'sheet_row_num' adicionada. Exemplo (primeiras 5 linhas de dados): {df_data[['sheet_row_num']].head().to_string()}") # Log de depuração adicionado
             
             df_para_filtrar = df_data.copy() # Copia para filtro
             
