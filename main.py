@@ -1248,11 +1248,6 @@ def main(limite_linhas: int = None, modo_teste: bool = False, categorias_selecio
                     'tema': 'Sem tema',  # Tema não existe na estrutura atual
                 }
                 
-                # Pula linhas que parecem ser cabeçalho
-                if palavra_ancora.lower() in ('palavra_ancora', 'palavra ancora', ''):
-                    logger.info(f"Pulando linha {i+1}/{len(df_filtrado)} que parece ser cabeçalho ou está vazia (sheet_row: {sheet_row_num})")
-                    continue
-                
                 logger.info(f"Processando linha {i+1}/{len(df_filtrado)}: ID {id_campanha} - {titulo_original} (Sheet Row: {sheet_row_num})")
                 
                 # Gera o conteúdo usando o Gemini

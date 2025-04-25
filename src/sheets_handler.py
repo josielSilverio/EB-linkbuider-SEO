@@ -163,11 +163,11 @@ class SheetsHandler:
                  header_offset = 0 # Garante que o offset seja 0
 
             # Adiciona o número da linha original da planilha (1-based)
-            # O índice de df_data é 0-based a partir do início dos dados
-            # Adiciona 1 para tornar 1-based e adiciona header_offset para contar a linha de cabeçalho, se removida
+            # O índice preservado de df_data já reflete a posição original na leitura (0-based se sem header, 1-based se header foi removido)
+            # Apenas adicionamos 1 para obter a numeração de linha da planilha (1-based)
             df_data = df_data.copy() # Para evitar SettingWithCopyWarning
-            df_data['sheet_row_num'] = df_data.index + header_offset + 1 
-            self.logger.debug(f"Coluna 'sheet_row_num' adicionada. Exemplo (primeiras 5 linhas de dados): {df_data[['sheet_row_num']].head().to_string()}") # Log de depuração adicionado
+            df_data['sheet_row_num'] = df_data.index + 1 # Correção: Simplesmente índice + 1
+            self.logger.debug(f"Coluna 'sheet_row_num' adicionada. Exemplo (primeiras 5 linhas de dados): {df_data[['sheet_row_num']].head().to_string()}")
             
             df_para_filtrar = df_data.copy() # Copia para filtro
             
