@@ -329,3 +329,5 @@ Aqui está um guia rápido sobre os principais arquivos de script (`.py`) neste 
     *   **Formato do Log (`configurar_logging`):** Altere a string `format=` se quiser que as mensagens de log tenham uma aparência diferente.
     *   **Lógica de Conversão (`converter_markdown_para_docs`):** Se o Gemini começar a gerar texto com marcações diferentes (além de simples parágrafos e talvez títulos implícitos) ou se você quiser formatar listas, etc., teria que aprimorar a lógica aqui para identificar e converter essas estruturas.
     *   **Lógica de Encontrar Link (`substituir_links_markdown`):** Se a forma como o Gemini insere a palavra-âncora mudar ou se você tiver requisitos mais complexos para onde o link deve ir, pode ajustar a lógica de busca nesta função. 
+
+    eee
