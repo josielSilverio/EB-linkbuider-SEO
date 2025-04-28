@@ -79,6 +79,139 @@ def verificar_conteudo_proibido(texto: str) -> str:
     # Retorna o texto modificado e a lista de termos substituídos
     return texto_modificado, termos_substituidos
 
+    
+
+def extrair_instrucao_especial_jogo(palavra_ancora: str) -> str:
+    """Gera instruções personalizadas de estilo para cada jogo, garantindo conteúdo único e eficaz"""
+    
+    instrucoes_especiais = {
+        # Crash games
+        "aviator": "Destaque a mecânica única de timing e a experiência visual do jogo. Foque em como o jogo combina estratégia pessoal com decisões rápidas. Mencione a curva de voo e o aspecto visual distinto.",
+        "spaceman": "Enfatize o tema espacial e o visual único. Descreva a experiência imersiva e como o jogo se destaca dos outros crash games com sua temática intergaláctica.",
+        "crash": "Destaque o elemento de estratégia e timing. Explique como o jogo oferece uma experiência diferente dos slots tradicionais, com foco na tomada de decisões e controle.",
+        
+        # Slots populares
+        "gates of olympus": "Foque na rica temática mitológica grega. Descreva como o jogo incorpora Zeus e outros elementos da mitologia em sua mecânica. Mencione os multiplicadores e o sistema de rodadas bônus.",
+        "fortune rabbit": "Enfatize a temática asiática e os elementos culturais de sorte. Descreva os símbolos especiais e como eles se conectam com as tradições de fortuna. Mencione as mecânicas de bônus.",
+        "sweet bonanza": "Destaque o visual colorido e a temática de doces. Explique o sistema único de pagamentos em cluster em vez de linhas tradicionais. Mencione as rodadas bônus e multiplicadores.",
+        
+        # Jogos de mesa
+        "blackjack": "Aborde o equilíbrio entre sorte e estratégia. Explique a mecânica básica e por que o jogo atrai tanto jogadores iniciantes quanto experientes. Mencione a importância das decisões estratégicas.",
+        "poker": "Destaque o elemento de habilidade e psicologia. Explique como o jogo se diferencia de outros jogos de cassino pelo componente estratégico. Mencione as variantes mais populares.",
+        "roleta": "Explique a elegância e simplicidade do jogo. Descreva os diferentes tipos de apostas possíveis e como a roleta mantém seu charme através dos séculos. Mencione as diferenças entre as versões."
+    }
+    
+    # Detecta palavras-chave no nome do jogo
+    for palavra_chave, instrucao in instrucoes_especiais.items():
+        if palavra_chave.lower() in palavra_ancora.lower():
+            return instrucao
+    
+    # Instruções padrão baseadas em categorias de jogos
+    if any(termo in palavra_ancora.lower() for termo in ["fortune", "lucky", "tiger", "gold", "gems", "dragon"]):
+        return "Destaque a temática de fortuna e riqueza do jogo. Explique os símbolos especiais e como eles se conectam com o tema principal. Descreva as mecânicas de bônus e o visual distintivo."
+    
+    if any(termo in palavra_ancora.lower() for termo in ["book", "dead", "egypt", "vikings", "aztec"]):
+        return "Enfatize o tema histórico ou mitológico. Explique como o jogo incorpora elementos culturais autênticos em sua mecânica. Descreva os símbolos e recursos especiais que o tornam único."
+    
+    if any(termo in palavra_ancora.lower() for termo in ["fruit", "candy", "sweet", "fish"]):
+        return "Destaque o visual colorido e temático. Explique como o jogo se diferencia com seus símbolos e mecânicas especiais. Descreva a experiência visual e as funcionalidades exclusivas."
+    
+    # Instrução genérica para garantir originalidade
+    return "Destaque o que torna este jogo único entre seus concorrentes. Explique as mecânicas principais, recursos especiais e elementos visuais distintivos. Mantenha o foco nas características específicas deste jogo."
+
+
+def verificar_e_corrigir_titulo(titulo: str) -> str:
+    """
+    Verifica e corrige o comprimento do título, garantindo que tenha entre 9-15 palavras.
+    
+    Args:
+        titulo: O título a ser verificado
+        
+    Returns:
+        Título corrigido ou original se estiver dentro dos limites
+    """
+    if not titulo:
+        return titulo
+    
+    # Remove espaços extras e quebras de linha
+    titulo = re.sub(r'\s+', ' ', titulo).strip()
+    
+    # Conta palavras
+    palavras = titulo.split()
+    num_palavras = len(palavras)
+    
+    # Verifica se está dentro dos limites
+    if 9 <= num_palavras <= 15:
+        return titulo
+    
+    # Correção para títulos muito curtos
+    if num_palavras < 9:
+        # Identifica o tema principal
+        jogo = ""
+        temas = ["olympus", "zeus", "fortuna", "aviator", "blackjack", "roleta", "poker", "slot"]
+        for tema in temas:
+            if tema.lower() in titulo.lower():
+                jogo = tema
+                break
+        
+        # Adiciona qualificadores para expandir o título
+        qualificadores = [
+            "com mecânicas inovadoras e design impressionante",
+            "com recursos exclusivos e jogabilidade envolvente",
+            "uma nova abordagem para jogos de cassino online",
+            "combinando estratégia e chance de maneira equilibrada",
+            "revolucionando a experiência de jogos digitais modernos"
+        ]
+        
+        # Escolhe um qualificador que não repita palavras já presentes
+        random.shuffle(qualificadores)
+        for qualificador in qualificadores:
+            if not any(q.lower() in titulo.lower() for q in qualificador.split()):
+                novo_titulo = f"{titulo}: {qualificador}"
+                if len(novo_titulo.split()) >= 9:
+                    return novo_titulo
+        
+        # Se nenhum qualificador funcionou, adiciona um genérico
+        return f"{titulo}: uma abordagem inovadora para jogos de cassino digitais"
+    
+    # Correção para títulos muito longos
+    else:  # num_palavras > 15
+        # Tenta remover palavras menos importantes mantendo a estrutura
+        artigos_e_conjuncoes = ["e", "o", "a", "os", "as", "um", "uma", "uns", "umas", "com", "para", "que", "de", "do", "da"]
+        adjetivos_comuns = ["incrível", "impressionante", "fantástico", "maravilhoso", "excelente", "surpreendente"]
+        
+        # Primeiro tenta remover adjetivos não essenciais
+        nova_lista = []
+        removidos = 0
+        palavras_para_remover = num_palavras - 15
+        
+        for palavra in palavras:
+            if removidos < palavras_para_remover and palavra.lower() in adjetivos_comuns:
+                removidos += 1
+                continue
+            nova_lista.append(palavra)
+        
+        # Se ainda está longo, tenta remover artigos e conjunções do meio (não do início)
+        if len(nova_lista) > 15:
+            temp_lista = [nova_lista[0]]  # Mantém a primeira palavra
+            removidos = 0
+            palavras_para_remover = len(nova_lista) - 15
+            
+            for palavra in nova_lista[1:]:
+                if removidos < palavras_para_remover and palavra.lower() in artigos_e_conjuncoes:
+                    removidos += 1
+                    continue
+                temp_lista.append(palavra)
+            
+            nova_lista = temp_lista
+        
+        # Se ainda está longo, remove palavras do final (preservando a estrutura principal)
+        if len(nova_lista) > 15:
+            nova_lista = nova_lista[:15]
+        
+        return " ".join(nova_lista)
+
+
 class GeminiHandler:
     def __init__(self):
         # Inicializa o logger
@@ -120,6 +253,71 @@ class GeminiHandler:
         except Exception as e:
             self.logger.error(f"Erro ao carregar template do prompt: {e}")
             raise
+    
+    def _verificar_diversidade_titulos(self, prompt: str, dados: Dict[str, str]) -> str:
+        """
+        Adiciona verificação específica para garantir que os títulos não sigam padrões repetitivos.
+        
+        Args:
+            prompt: O prompt original
+            dados: Dicionário com os dados para o prompt
+        
+        Returns:
+            Prompt modificado com instruções adicionais anti-padrões
+        """
+        # Verifica se temos um titulo já definido
+        if 'titulo' in dados and dados['titulo'] and dados['titulo'].strip():
+            return prompt  # Se já tem título, não precisa modificar
+        
+        # Palavras de início comuns que queremos evitar
+        inicios_comuns = [
+            "segredos", "o poder", "a magia", "o guia", "como", "descubra", 
+            "explorando", "o mundo", "7 dicas", "tudo sobre", "a arte de",
+            "o mito", "a lenda", "desvendando", "jornada"
+        ]
+        
+        # Padrões estruturais comuns a evitar
+        padroes_comuns = [
+            "[substantivo]: uma [jornada/experiência]",
+            "o [substantivo] de [jogo]",
+            "[jogo]: [substantivo] e [substantivo]"
+        ]
+        
+        # Regra obrigatória de comprimento do título
+        regra_comprimento = (
+            "REGRA OBRIGATÓRIA DE COMPRIMENTO DO TÍTULO:\n"
+            "- O título DEVE ter entre 9 e 15 palavras, nem mais nem menos.\n"
+            "- Conte as palavras antes de finalizar o título e ajuste se necessário.\n"
+            "- Esta é uma regra INVIOLÁVEL - títulos muito curtos ou muito longos serão rejeitados.\n"
+        )
+        
+        # Se é um jogo de mitologia ou deuses, adicione instruções específicas
+        palavra_ancora = dados.get('palavra_ancora', '').lower()
+        if any(termo in palavra_ancora for termo in ['olympus', 'zeus', 'thor', 'viking', 'egypt', 'maya', 'aztec']):
+            instrucao_especifica = (
+                "REGRA ESPECIAL PARA ESTE TÍTULO:\n"
+                "- NÃO comece com o nome de deuses, mitologias ou locais míticos\n"
+                "- Evite COMPLETAMENTE começar com as palavras 'Segredos', 'Poder', 'Jornada', 'Mito', 'Guia'\n"
+                "- Crie um título que não se pareça com NENHUM outro já usado para jogos similares\n"
+                "- Obrigatoriamente use uma abordagem que não envolva a palavra 'experiência' ou 'jornada'\n"
+                + regra_comprimento
+            )
+            prompt += "\n" + instrucao_especifica
+        
+        # Para outros tipos de jogos, adicione instruções gerais
+        else:
+            instrucao_geral = (
+                "REGRA ESPECIAL PARA ESTE TÍTULO:\n"
+                "- Use uma estrutura completamente diferente dos exemplos mostrados\n"
+                "- Evite começar com qualquer palavra comum em títulos de artigos\n"
+                "- Crie um título que poderia se destacar em uma revista premium\n"
+                + regra_comprimento
+            )
+            prompt += "\n" + instrucao_geral
+        
+        return prompt
+
+    
     
     def _construir_prompt(self, dados: Dict[str, str], prompt_template: str) -> str:
         """
