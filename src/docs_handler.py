@@ -1,6 +1,7 @@
 # Módulo para interagir com as APIs do Google Docs e Drive
 import logging
 from typing import Dict, List, Tuple, Optional
+import re
 
 from src.config import DRIVE_FOLDER_ID, TITULO_TAMANHO
 from src.auth_handler import obter_credenciais, criar_servico_docs, criar_servico_drive
@@ -20,6 +21,34 @@ class DocsHandler:
         except Exception as e:
             self.logger.error(f"Erro ao inicializar os serviços: {e}")
             raise
+    
+    @staticmethod
+    def extrair_id_da_url(url: str) -> str:
+        """
+        Extrai o ID de um documento ou pasta do Google Drive a partir da URL.
+        
+        Args:
+            url: URL do Google Drive/Docs/Sheets
+            
+        Returns:
+            ID extraído da URL
+        """
+        # Padrões de regex para diferentes formatos de URL do Google
+        padroes = [
+            r"https://drive\.google\.com/drive/folders/([a-zA-Z0-9_-]+)",  # Drive folder URL
+            r"https://drive\.google\.com/drive/u/\d+/folders/([a-zA-Z0-9_-]+)",  # Drive folder with user number
+            r"https://docs\.google\.com/document/d/([a-zA-Z0-9_-]+)",  # Docs URL
+            r"https://docs\.google\.com/spreadsheets/d/([a-zA-Z0-9_-]+)",  # Sheets URL
+            r"^([a-zA-Z0-9_-]{25,})"  # Raw ID (já é um ID)
+        ]
+        
+        for padrao in padroes:
+            match = re.search(padrao, url)
+            if match:
+                return match.group(1)
+        
+        # Se não encontrar nenhum ID válido
+        return ""
     
     def criar_documento(self, titulo: str, conteudo: str, nome_arquivo: str, info_link=None, target_folder_id: Optional[str] = None) -> Tuple[str, str]:
         """
@@ -79,8 +108,19 @@ class DocsHandler:
             # Define a pasta de destino
             folder_id_destino = target_folder_id if target_folder_id else DRIVE_FOLDER_ID
             
+            # Verifica se a pasta existe antes de tentar mover
+            pasta_existe = self._verificar_pasta(folder_id_destino)
+            
+            if not pasta_existe:
+                # A pasta não existe, criar uma nova para armazenar os documentos
+                self.logger.warning(f"A pasta com ID {folder_id_destino} não existe ou você não tem acesso.")
+                folder_id_destino = self._criar_pasta_documentos()
+            
             # Move o arquivo para a pasta especificada no Drive
             self._mover_para_pasta(document_id, folder_id_destino)
+            
+            # Configura as permissões do documento para o usuário atual
+            self._configurar_permissoes_documento(document_id)
             
             # Obtém a URL do documento
             document_url = f"https://docs.google.com/document/d/{document_id}/edit"
@@ -157,18 +197,42 @@ class DocsHandler:
              self.logger.warning(f"Nenhum ID de pasta de destino fornecido para mover o documento {document_id}. O documento permanecerá na raiz.")
              return
         try:
+            # Tenta verificar se a pasta de destino existe
+            try:
+                folder = self.service_drive.files().get(
+                    fileId=folder_id,
+                    fields='id,name,mimeType',
+                    supportsAllDrives=True
+                ).execute()
+                
+                self.logger.info(f"Pasta de destino verificada: ID={folder.get('id')}, Nome={folder.get('name')}")
+                
+                # Verifica se é realmente uma pasta
+                if folder.get('mimeType') != 'application/vnd.google-apps.folder':
+                    self.logger.error(f"O ID {folder_id} não é de uma pasta! MimeType: {folder.get('mimeType')}")
+                    return
+                    
+            except Exception as e:
+                self.logger.error(f"Erro ao verificar a pasta de destino {folder_id}: {e}")
+                self.logger.info("Tentando mover o documento mesmo assim...")
+            
             # Adiciona a pasta como pai do arquivo
-            self.service_drive.files().update(
+            self.logger.info(f"Tentando mover documento {document_id} para a pasta {folder_id}...")
+            
+            resultado = self.service_drive.files().update(
                 fileId=document_id,
                 addParents=folder_id,
                 removeParents='root',  # Remove da pasta raiz/anterior
-                fields='id, parents'
+                fields='id, parents',
+                supportsAllDrives=True  # Suporte para shared drives
             ).execute()
             
-            self.logger.info(f"Documento {document_id} movido para a pasta {folder_id}")
+            self.logger.info(f"Documento {document_id} movido com sucesso para a pasta {folder_id}")
+            self.logger.info(f"Resultado da operação: {resultado}")
         
         except Exception as e:
             self.logger.warning(f"Erro ao mover documento para a pasta: {e}")
+            self.logger.warning(f"Detalhes do erro: Documento ID={document_id}, Pasta ID={folder_id}")
             # Isso não deve interromper o fluxo principal, apenas logamos o erro 
     
     def obter_conteudo_documento(self, document_id: str) -> str:
@@ -331,4 +395,129 @@ class DocsHandler:
             Número de caracteres no documento
         """
         documento = self.service_docs.documents().get(documentId=document_id).execute()
-        return documento.get('body', {}).get('content', [])[-1].get('endIndex', 0) 
+        return documento.get('body', {}).get('content', [])[-1].get('endIndex', 0)
+
+    def _verificar_pasta(self, folder_id: str) -> bool:
+        """
+        Verifica se uma pasta existe e está acessível.
+        
+        Args:
+            folder_id: ID da pasta a verificar
+            
+        Returns:
+            True se a pasta existe e é acessível, False caso contrário
+        """
+        if not folder_id or folder_id == "root":
+            self.logger.info("Usando pasta raiz do Google Drive.")
+            return True
+            
+        try:
+            pasta = self.service_drive.files().get(
+                fileId=folder_id,
+                fields='id,name,mimeType',
+                supportsAllDrives=True
+            ).execute()
+            
+            # Verifica se é realmente uma pasta
+            if pasta.get('mimeType') != 'application/vnd.google-apps.folder':
+                self.logger.warning(f"O ID {folder_id} não é uma pasta! É um: {pasta.get('mimeType')}")
+                return False
+                
+            self.logger.info(f"Pasta de destino verificada: {pasta.get('name')} (ID: {pasta.get('id')})")
+            return True
+            
+        except Exception as e:
+            self.logger.warning(f"Erro ao verificar pasta {folder_id}: {e}")
+            return False
+    
+    def _criar_pasta_documentos(self) -> str:
+        """
+        Cria uma nova pasta para armazenar os documentos.
+        
+        Returns:
+            ID da pasta criada
+        """
+        try:
+            # Cria uma nova pasta com nome datado
+            import datetime
+            agora = datetime.datetime.now()
+            data_atual = agora.strftime("%Y-%m-%d_%H-%M-%S")
+            nome_pasta = f"SEO-LinkBuilder_{data_atual}"
+            
+            file_metadata = {
+                'name': nome_pasta,
+                'mimeType': 'application/vnd.google-apps.folder'
+            }
+            
+            pasta = self.service_drive.files().create(
+                body=file_metadata,
+                fields='id,name,webViewLink'
+            ).execute()
+            
+            pasta_id = pasta.get('id')
+            self.logger.info(f"Nova pasta criada para armazenar documentos: {nome_pasta} (ID: {pasta_id})")
+            self.logger.info(f"Link da pasta: {pasta.get('webViewLink', 'N/A')}")
+            
+            # Atualizar o DRIVE_FOLDER_ID para uso futuro
+            # Nota: Isso apenas atualiza a variável em memória, não o arquivo de configuração
+            global DRIVE_FOLDER_ID
+            DRIVE_FOLDER_ID = pasta_id
+            
+            return pasta_id
+            
+        except Exception as e:
+            self.logger.error(f"Erro ao criar pasta para documentos: {e}")
+            # Em caso de erro, retorna 'root' (pasta raiz do Drive)
+            self.logger.warning("Usando pasta raiz do Drive como alternativa")
+            return "root"
+
+    def _configurar_permissoes_documento(self, document_id: str) -> None:
+        """
+        Configura as permissões do documento para garantir que o proprietário tenha acesso total.
+        
+        Args:
+            document_id: ID do documento a configurar
+        """
+        try:
+            # Verifica quem é o proprietário atual do documento
+            file_info = self.service_drive.files().get(
+                fileId=document_id,
+                fields='owners,permissions',
+                supportsAllDrives=True
+            ).execute()
+            
+            self.logger.info("Configurando permissões do documento...")
+            
+            # Define permissão para qualquer pessoa com o link poder visualizar
+            permission = {
+                'type': 'anyone',
+                'role': 'reader',
+                'allowFileDiscovery': False
+            }
+            
+            result = self.service_drive.permissions().create(
+                fileId=document_id,
+                body=permission,
+                fields='id',
+                sendNotificationEmail=False
+            ).execute()
+            
+            self.logger.info(f"Permissão configurada para acesso via link: {result.get('id')}")
+            
+            # Também podemos configurar permissões específicas para o domínio, se necessário
+            # Exemplo para permissão de domínio:
+            # domain_permission = {
+            #     'type': 'domain',
+            #     'role': 'reader',
+            #     'domain': 'estrelabet.com',
+            #     'allowFileDiscovery': True
+            # }
+            # self.service_drive.permissions().create(
+            #     fileId=document_id,
+            #     body=domain_permission,
+            #     fields='id'
+            # ).execute()
+            
+        except Exception as e:
+            self.logger.warning(f"Erro ao configurar permissões do documento {document_id}: {e}")
+            # Não interrompe o fluxo principal 

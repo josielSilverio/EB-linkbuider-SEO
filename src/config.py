@@ -63,7 +63,7 @@ COLUNAS = {
     'as': 2,                 # C - AS
     'da': 3,                 # D - DA
     'trafego': 4,            # E - Tráfego
-    'valor': 5,              # F - Preço (R$)
+    'valor': 5,               # F - Preço (R$)
     'palavra_ancora': 6,     # G - Âncora
     'url_ancora': 7,         # H - URL de Destino
     'titulo': 8,             # I - Tema 
