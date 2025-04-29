@@ -1423,8 +1423,8 @@ if __name__ == "__main__":
     import argparse
     
     parser = argparse.ArgumentParser(description='SEO-LinkBuilder - Gerador de conteúdo para SEO')
-    parser.add_argument('--limite', type=int, default=10,
-                        help='Número máximo de linhas a processar (padrão: 10)')
+    parser.add_argument('--limite', type=int, default=None, # Mudar default para None
+                        help='Número máximo de linhas a processar (padrão: processar todas)') # Atualizar help
     parser.add_argument('--teste', action='store_true',
                         help='Executa apenas para a primeira linha sem atualizar a planilha')
     parser.add_argument('--todos', action='store_true',

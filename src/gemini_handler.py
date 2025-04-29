@@ -2,6 +2,8 @@
 import os
 import logging
 import google.generativeai as genai
+import re
+import random
 from typing import Dict, Tuple, Optional
 
 from src.config import (
@@ -66,7 +68,6 @@ def verificar_conteudo_proibido(texto: str) -> str:
     termos_substituidos = []
     
     for padrao, substituto in termos_proibidos.items():
-        import re
         # Encontra todas as ocorrências do padrão
         ocorrencias = re.findall(padrao, texto_modificado, re.IGNORECASE)
         
