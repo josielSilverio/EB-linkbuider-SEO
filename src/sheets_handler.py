@@ -202,10 +202,12 @@ class SheetsHandler:
             else:
                  self.logger.warning(f"Coluna url_documento (índice {coluna_url}) não configurada ou fora dos limites. Não foi possível pular linhas já processadas.")
 
-            # Aplica limite de linhas, se especificado
+            # Aplica limite de linhas, se especificado - CORREÇÃO AQUI
             if limite_linhas and len(df_final) > limite_linhas:
-                df_final = df_final.iloc[:limite_linhas]
-                self.logger.info(f"Leitura limitada a {limite_linhas} linhas")
+                # Em vez de pegar as primeiras linhas, pegamos as primeiras N linhas disponíveis
+                # Isso garante que processaremos as próximas linhas em sequência
+                df_final = df_final.sort_values('sheet_row_num').iloc[:limite_linhas]
+                self.logger.info(f"Leitura limitada a {limite_linhas} linhas, começando da primeira linha disponível")
             
             self.logger.info(f"Retornando {len(df_final)} registros para processamento (com coluna sheet_row_num)")
             return df_final
@@ -333,4 +335,4 @@ class SheetsHandler:
         except Exception as e:
             self.logger.error(f"Erro ao atualizar título na linha {sheet_row_num} (Planilha {id_planilha}, Aba '{nome_aba}', Célula {coluna_titulo}{linha_sheets}): {e}")
             # ... (logging da exceção) ...
-            return False 
+            return False

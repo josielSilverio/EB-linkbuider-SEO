@@ -6,61 +6,72 @@ Palavra-âncora: {palavra_ancora}
 URL da âncora: {url_ancora}
 Título do artigo: {titulo}
 
-REGRAS PARA O TÍTULO:
-* SEMPRE crie títulos que atraiam cliques, variando o formato para não ficar previsível
-* Seja criativo, NÃO use sempre o mesmo formato - evite repetições como "Desvendando" ou "5 Dicas"
-* NUNCA use a palavra-âncora no título do artigo
+ESTRATÉGIAS DE REDAÇÃO:
+- Adote o tom de voz jornalístico: informativo, analítico, imparcial e baseado em fatos.
+- Estruture o texto no formato de pirâmide invertida: comece pelo fato mais importante, aprofunde com contexto, dados e análise.
+- Evite chamadas diretas à ação, frases de urgência ou apelos emocionais.
+- Use linguagem clara, objetiva e impessoal. Prefira verbos e substantivos informativos a adjetivos promocionais.
+- Traga contexto histórico, comparativos, curiosidades, tendências e opiniões de especialistas sempre que possível.
+- Inclua perguntas e respostas, análises e explicações detalhadas sobre o funcionamento do jogo/tema.
+- Sempre que possível, cite dados de mercado, pesquisas ou tendências (sem links diretos, apenas menção contextual).
+- Inclua alertas de jogo responsável e menção a riscos, quando pertinente.
+- O título DEVE ter entre 9 e 15 palavras, nem mais nem menos - esta é uma regra OBRIGATÓRIA.
+- Se o jogo tem elemento mitológico, NÃO comece com o nome da mitologia ou deus.
 
-IMPORTANTE: Você DEVE seguir EXATAMENTE este formato de estrutura:
+TÍTULOS JORNALÍSTICOS - REGRAS ESTRITAS DE DIVERSIDADE:
+- PROIBIDO iniciar títulos com as mesmas palavras ou estruturas já utilizadas recentemente.
+- PROIBIDO usar as palavras "Domine", "Fuja", "Desvendando", "Aventura" no início do título.
+- NUNCA use estruturas como "X dicas para...", "Como dominar...", "O guia definitivo..."
+- OBRIGATÓRIO: Cada título deve ter uma estrutura sintática COMPLETAMENTE DIFERENTE dos anteriores.
+- OBRIGATÓRIO: Crie títulos que utilizem uma das seguintes abordagens (escolha apenas UMA por título):
+  * Pergunta intrigante (Por que...? O que acontece quando...?)
+  * Contraste ou comparação (X vs Y: A diferença que importa)
+  * Dados surpreendentes (87% dos jogadores desconhecem este recurso em...)
+  * Revelação (A mecânica oculta que transforma a experiência em...)
+  * Narrativa (A jornada inesperada dos símbolos no slot...)
+  * Análise (Entendendo a matemática por trás do...)
+- Exemplos de estruturas DIVERSIFICADAS:
+  * "Por que a volatilidade em {palavra_ancora} fascina jogadores experientes?"
+  * "Quando a sorte encontra estratégia: O fenômeno {palavra_ancora} explicado"
+  * "Da mesa física às telas: A evolução que transformou {palavra_ancora}"
+  * "O que torna {palavra_ancora} um fenômeno entre apostadores brasileiros?"
+  * "Além dos símbolos: A psicologia das cores em {palavra_ancora}"
+  * "Matemática ou intuição? O dilema dos jogadores de {palavra_ancora}"
 
-1. Comece com o título principal atrativo e diferenciado (seja inovador e único)
-2. Um parágrafo introdutório (2-3 frases) - NÃO COLOQUE A PALAVRA-ÂNCORA AQUI
-3. DEVE inserir a palavra-âncora "{palavra_ancora}" OBRIGATORIAMENTE no segundo ou terceiro parágrafo (nunca no primeiro parágrafo e nunca após o terceiro)
-4. Subtítulo 1 (use variações criativas, não apenas números)
-5. 1-2 parágrafos para o Subtítulo 1
-6. Subtítulo 2
-7. 1-2 parágrafos para o Subtítulo 2
-8. Subtítulo 3
-9. 1-2 parágrafos para o Subtítulo 3
-10. Continue com mais subtítulos e parágrafos conforme necessário
-11. Parágrafo de conclusão que enfatize o jogo responsável
+**ESTRUTURA DO ARTIGO - REGRAS ESTRITAS:**
+- OBRIGATÓRIO: Mínimo de 5 subtítulos (H2) no corpo do texto.
+- OBRIGATÓRIO: Cada subtítulo deve ser seguido por pelo menos 2 parágrafos.
+- OBRIGATÓRIO: Os subtítulos devem seguir uma progressão lógica e complementar.
+- OBRIGATÓRIO: Utilize pelo menos 2 listas com marcadores no texto.
+- Abertura envolvente e direta, apresentando o fato ou contexto principal.
+- Desenvolvimento com dados, contexto histórico, análise, comparativos e curiosidades.
+- Parágrafos curtos, linguagem clara e objetiva.
+- Inclua a palavra-âncora "{palavra_ancora}" de forma natural no segundo ou terceiro parágrafo.
+- Finalize com uma conclusão que resuma os pontos principais ou traga uma reflexão.
+
+SEPARAÇÃO ESTRITA DE TEMAS:
+- OBRIGATÓRIO: Identifique se a palavra-âncora está relacionada a CASSINO ou APOSTAS ESPORTIVAS.
+- Se for relacionada a CASSINO (slots, roleta, blackjack, etc.):
+  * Use APENAS exemplos, termos e contextos de jogos de cassino
+  * NUNCA mencione apostas esportivas, times, campeonatos ou odds
+- Se for relacionada a APOSTAS ESPORTIVAS (futebol, tênis, etc.):
+  * Use APENAS exemplos, termos e contextos de apostas esportivas
+  * NUNCA mencione slots, roleta, blackjack ou outros jogos de cassino
+- Se não for clara a categoria, priorize o contexto de CASSINO.
 
 REGRAS OBRIGATÓRIAS:
-* O texto deve ter entre 470 e 550 palavras - NÃO EXCEDA OU FIQUE ABAIXO DESTE LIMITE
-* É ABSOLUTAMENTE OBRIGATÓRIO incluir a palavra-âncora "{palavra_ancora}" SOMENTE no segundo ou terceiro parágrafo exatamente como escrita aqui
-* NUNCA coloque a palavra-âncora no primeiro parágrafo ou depois do terceiro parágrafo!
-* A palavra-âncora deve fluir NATURALMENTE no texto - não a force artificialmente ou destaque-a de forma óbvia
-* EXEMPLOS DE USO NATURAL: "Os jogadores que buscam {palavra_ancora} devem saber...", "Ao explorar opções de {palavra_ancora}, é importante..."
-* EXEMPLOS DE USO FORÇADO (EVITE): "Falando de {palavra_ancora}, é importante...", "No que diz respeito a {palavra_ancora}, devemos..."
-* Personalize o conteúdo de acordo com a palavra-âncora - se for sobre um jogo específico, fale sobre este jogo
-* Adapte seu conteúdo ao tema da palavra-âncora (por exemplo: blackjack, roleta, apostas esportivas, etc.)
-* Use linguagem natural e humana, sem formatação Markdown ou símbolos especiais
-* NÃO use asteriscos, hashtags ou qualquer outra formatação
-* NÃO MENCIONE NOMES DE CASAS DE APOSTAS OU SITES DE JOGOS - isso é extremamente importante!
-* Você pode mencionar nomes de jogos específicos, mas nunca plataformas ou casas de apostas
-* Os subtítulos devem ser frases curtas (menos de 60 caracteres) sem pontuação final
-* Garanta que cada subtítulo seja seguido imediatamente por seu conteúdo (parágrafos)
-* O título principal deve aparecer no INÍCIO do texto, não no final
+- NÃO mencione nomes de casas de apostas ou sites de jogos.
+- NÃO use frases como "ganhe mais", "aproveite agora", "clique aqui", "multiplique seus ganhos", "domine o jogo", "experimente já".
+- NÃO faça promessas de ganhos fáceis ou garantidos.
+- NÃO direcione o conteúdo a menores de idade.
+- NÃO inclua informações enganosas sobre probabilidades de ganho.
+- NÃO promova bônus de cadastro de forma irresponsável.
+- SEMPRE inclua avisos sobre a importância de jogar com responsabilidade e limites.
+- NUNCA FALE EM LUCROS ou em experiências potencialmente lucrativas
+- SEMPRE inclua avisos sobre a importância de jogar com responsabilidade e limites
 
-RESTRIÇÕES IMPORTANTES SOBRE APOSTAS RESPONSÁVEIS:
-* Evite afirmações de que o usuário pode ganhar dinheiro fácil ou garantido
-* Não use linguagem que pressione o leitor a apostar imediatamente
-* Não dirija o conteúdo a menores de idade
-* Não inclua informações enganosas sobre probabilidades de ganho
-* Não sugira que o jogador pode controlar ou prever resultados com certeza
-* NUNCA FALE EM LUCROS ou em experiências potencialmente lucrativas
-* Evite mensagens que sugiram que apostas são solução para problemas financeiros
-* Não promova bônus de cadastro de forma irresponsável
-* Evite linguagem ambígua ou exageros sobre a experiência de jogo
-* SEMPRE inclua avisos sobre a importância de jogar com responsabilidade e limites
-
-CARACTERÍSTICAS DO CONTEÚDO:
-* Tom amigável, informativo e responsável
-* Foque em entretenimento, diversão e segurança
-* O conteúdo deve ser relevante para jogos, apostas esportivas ou cassinos online
-* Use a palavra-âncora "{palavra_ancora}" de forma natural no texto SOMENTE no segundo ou terceiro parágrafo
-* O texto NÃO DEVE parecer um publieditorial - mantenha-o informativo e objetivo
-* VARIE os exemplos e abordagens para cada texto, não use sempre o mesmo formato
+**INSPIRAÇÃO FINAL:**
+Crie um texto que seria publicado em um grande portal de notícias ou revista de jogos, focando em informar, analisar e agregar valor ao leitor, sem qualquer apelo publicitário.
 
 IMPORTANTE: TODOS OS ARTIGOS PRECISAM CONTER A PALAVRA-ÂNCORA EXATAMENTE COMO FORNECIDA.
 NÃO FALHE EM INSERIR A PALAVRA-ÂNCORA - ISSO É O REQUISITO MAIS IMPORTANTE DO TEXTO.
@@ -68,4 +79,4 @@ NÃO FALHE EM INSERIR A PALAVRA-ÂNCORA - ISSO É O REQUISITO MAIS IMPORTANTE DO
 
 Lembre-se: as apostas devem ser encaradas como forma de entretenimento, e não como fonte de renda. Aposte sempre com responsabilidade e estabeleça limites claros para suas atividades.
 
-Lembre-se: a formatação será aplicada pelo sistema APÓS você gerar o conteúdo. Seu trabalho é entregar o TEXTO PURO com a estrutura correta. 
+Lembre-se: a formatação será aplicada pelo sistema APÓS você gerar o conteúdo. Seu trabalho é entregar o TEXTO PURO com a estrutura correta.
