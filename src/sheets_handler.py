@@ -202,14 +202,22 @@ class SheetsHandler:
             else:
                  self.logger.warning(f"Coluna url_documento (índice {coluna_url}) não configurada ou fora dos limites. Não foi possível pular linhas já processadas.")
 
-            # Aplica limite de linhas, se especificado - CORREÇÃO AQUI
+            # NOVA LÓGICA: Ordena por número de linha ANTES de aplicar o limite
+            df_final = df_final.sort_values('sheet_row_num')
+            
+            # Encontra a primeira linha não processada (menor número de linha)
+            if not df_final.empty:
+                primeira_linha_nao_processada = df_final['sheet_row_num'].min()
+                self.logger.info(f"Primeira linha não processada: {primeira_linha_nao_processada}")
+            
+            # Aplica limite de linhas, se especificado
             if limite_linhas and len(df_final) > limite_linhas:
-                # Em vez de pegar as primeiras linhas, pegamos as primeiras N linhas disponíveis
-                # Isso garante que processaremos as próximas linhas em sequência
-                df_final = df_final.sort_values('sheet_row_num').iloc[:limite_linhas]
-                self.logger.info(f"Leitura limitada a {limite_linhas} linhas, começando da primeira linha disponível")
+                df_final = df_final.iloc[:limite_linhas]
+                self.logger.info(f"Leitura limitada a {limite_linhas} linhas, começando da linha {df_final['sheet_row_num'].min()}")
             
             self.logger.info(f"Retornando {len(df_final)} registros para processamento (com coluna sheet_row_num)")
+            if not df_final.empty:
+                self.logger.info(f"Linhas a serem processadas: {df_final['sheet_row_num'].tolist()}")
             return df_final
         
         except Exception as e:
