@@ -17,19 +17,26 @@ ESTRATÉGIAS DE REDAÇÃO:
 - Inclua alertas de jogo responsável e menção a riscos, quando pertinente.
 - O título DEVE ter entre 9 e 15 palavras, nem mais nem menos - esta é uma regra OBRIGATÓRIA.
 - Se o jogo tem elemento mitológico, NÃO comece com o nome da mitologia ou deus.
+- Para cada artigo, escolha um enfoque diferente: histórico, curiosidades, dicas práticas, análises, tendências, entrevistas, etc. Não repita o mesmo tipo de abordagem em artigos consecutivos.
+- Evite repetir temas centrais ou argumentos principais em artigos próximos.
+- Inclua palavras-chave de SEO de forma natural, sem repetições excessivas ou forçadas, e sem comprometer a fluidez do texto.
+- Varie o tamanho dos títulos e dos parágrafos, alternando entre frases mais curtas e mais longas, para tornar o texto mais dinâmico.
 
 TÍTULOS JORNALÍSTICOS - REGRAS ESTRITAS DE DIVERSIDADE:
 - PROIBIDO iniciar títulos com as mesmas palavras ou estruturas já utilizadas recentemente.
 - PROIBIDO usar as palavras "Domine", "Fuja", "Desvendando", "Aventura" no início do título.
 - NUNCA use estruturas como "X dicas para...", "Como dominar...", "O guia definitivo..."
-- OBRIGATÓRIO: Cada título deve ter uma estrutura sintática COMPLETAMENTE DIFERENTE dos anteriores.
-- OBRIGATÓRIO: Crie títulos que utilizem uma das seguintes abordagens (escolha apenas UMA por título):
+- Cada título deve ter uma estrutura sintática COMPLETAMENTE DIFERENTE dos anteriores.
+- Crie títulos que utilizem uma das seguintes abordagens (escolha apenas UMA por título):
+- Evite repetir palavras, frases ou estruturas já utilizadas em títulos ou textos anteriores. Varie o vocabulário e a abordagem em cada conteúdo, mantendo o foco no tema.
+- Alterne entre frases curtas e longas, e utilize diferentes tipos de construções sintáticas nos títulos e subtítulos.
   * Pergunta intrigante (Por que...? O que acontece quando...?)
   * Contraste ou comparação (X vs Y: A diferença que importa)
   * Dados surpreendentes (87% dos jogadores desconhecem este recurso em...)
   * Revelação (A mecânica oculta que transforma a experiência em...)
   * Narrativa (A jornada inesperada dos símbolos no slot...)
-  * Análise (Entendendo a matemática por trás do...)
+  * Análise (Entendendo a matemática por trás do...)\
+
 - Exemplos de estruturas DIVERSIFICADAS:
   * "Por que a volatilidade em {palavra_ancora} fascina jogadores experientes?"
   * "Quando a sorte encontra estratégia: O fenômeno {palavra_ancora} explicado"
@@ -69,6 +76,7 @@ REGRAS OBRIGATÓRIAS:
 - SEMPRE inclua avisos sobre a importância de jogar com responsabilidade e limites.
 - NUNCA FALE EM LUCROS ou em experiências potencialmente lucrativas
 - SEMPRE inclua avisos sobre a importância de jogar com responsabilidade e limites
+- Consulte a lista de títulos já criados e busque novas formas de abordar o tema, evitando repetir termos principais ou estruturas semelhantes.
 
 **INSPIRAÇÃO FINAL:**
 Crie um texto que seria publicado em um grande portal de notícias ou revista de jogos, focando em informar, analisar e agregar valor ao leitor, sem qualquer apelo publicitário.

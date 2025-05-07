@@ -1023,8 +1023,8 @@ def processar_linha(linha, indice, df, df_original, modo_teste, spreadsheet_id, 
         contexto = str(df.iloc[indice][COLUNAS["contexto"]])
         instrucoes = str(df.iloc[indice][COLUNAS["instrucoes"]])
         
-        # Obtém a linha original no DataFrame antes da filtragem
-        indice_real = int(df.iloc[indice]["linha_original"]) if "linha_original" in df.columns else indice
+        # Obtém a linha original na planilha usando a coluna sheet_row_num
+        indice_real = int(df.iloc[indice]["sheet_row_num"]) if "sheet_row_num" in df.columns else indice
         logger.info(f"Processando ID {id_campanha} (índice {indice}, índice real na planilha: {indice_real})")
         
         # Chama a API para gerar o conteúdo
@@ -1209,6 +1209,10 @@ def main(limite_linhas: int = None, modo_teste: bool = False, categorias_selecio
             
         total_linhas = len(df_original)
         logger.info(f"Planilha lida com sucesso. Total de {total_linhas} linhas com IDs válidos")
+        
+        # Adiciona log para verificar as linhas que serão processadas
+        if 'sheet_row_num' in df_original.columns:
+            logger.info(f"Linhas que serão processadas em ordem: {df_original['sheet_row_num'].tolist()}")
             
         # Estimar custos por categoria
         categorias = estimar_custo_por_categoria(sheets, df_original)
@@ -1439,4 +1443,4 @@ if __name__ == "__main__":
         limite = args.limite
     
     # Executa o script principal com o menu interativo
-    main(limite_linhas=limite, modo_teste=args.teste) 
+    main(limite_linhas=limite, modo_teste=args.teste)
