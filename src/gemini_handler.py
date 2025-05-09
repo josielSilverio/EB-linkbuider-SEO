@@ -328,6 +328,10 @@ class GeminiHandler:
             # Sempre use o site como tema, nunca use um valor padrão
             site = dados.get('site', '')
             palavra_ancora = dados.get('palavra_ancora', '').lower()
+            url_ancora = dados.get('url_ancora', '')
+            
+            # IMPORTANTE: Registra a palavra-âncora específica para este artigo
+            self.logger.info(f"Construindo prompt para palavra-âncora específica: '{palavra_ancora}'")
             
             # Cria um tema baseado no site e na palavra-âncora
             if 'apostas' not in site.lower():
@@ -335,249 +339,43 @@ class GeminiHandler:
             else:
                 tema = site
                 
-            # Categorização de tipos de títulos com base na palavra-âncora
-            titulos_por_categoria = {
-                # Títulos para apostas esportivas
-                'apostas esportivas': [
-                    f"Guia do Iniciante: 5 Dicas Essenciais para Começar com o Pé Direito nas Apostas Esportivas",
-                    f"Além do Resultado Final: Estratégias Inteligentes para suas Bets Esportivas",
-                    f"Do Palpite a Diversão: Como Dominar as Apostas Esportivas com Inteligência",
-                    f"Apostas Esportivas para Iniciantes: O Que Você Precisa Saber Antes de Começar",
-                    f"3 Segredos que os Apostadores Profissionais Não Querem que Você Saiba",
-                    f"As Melhores Estratégias para Maximizar suas Chances nas Apostas Esportivas",
-                    f"Drible os Erros: 7 Equívocos Comuns que Todo Apostador Iniciante Comete",
-                    f"O Caminho para o Sucesso: Como Desenvolver uma Mentalidade Vencedora nas Apostas Esportivas",
-                    # Novos títulos específicos
-                    f"5 Dicas para Tornar Suas Apostas Esportivas Mais Estratégicas e Divertidas",
-                    f"3 Estatísticas que Podem Melhorar Suas Apostas em Futebol",
-                    f"Como Começar a Apostar em Esportes Eletrônicos em 8 Minutos (Guia Rápido)",
-                    f"7 Maneiras de Aumentar a Emoção nas Apostas ao Vivo",
-                    f"4 Estratégias para Apostar em Esportes com Mais Consistência"
-                ],
-                
-                # Títulos para cassino online
-                'cassino': [
-                    f"Do Sofá para a Mesa: A Experiência Imersiva do Cassino Online",
-                    f"Diversão Garantida: Os Jogos de Cassino Online Que Você Precisa Conhecer",
-                    f"Cassino Online para Iniciantes: Por Onde Começar sua Jornada",
-                    f"As 5 Regras de Ouro para se Divertir em Cassinos Online com Segurança",
-                    f"Navegando pelo Mundo Virtual: Descubra o Fascinante Universo dos Cassinos Online",
-                    f"O Guia Definitivo para Escolher o Melhor Cassino Online para Você",
-                    f"Diversão Responsável: Como Aproveitar ao Máximo a Experiência de Cassino Online",
-                    # Novos títulos específicos
-                    f"5 Dicas para Explorar Novos Jogos de Cassino com Confiança",
-                    f"3 Jogos que Todo Apostador Deve Experimentar pelo Menos Uma Vez",
-                    f"Como Identificar os Melhores Slots para Sua Jogatina em 5 Minutos",
-                    f"7 Formas de Aproveitar Melhor as Promoções de Cassino",
-                    f"4 Passos para uma Experiência de Cassino Online Mais Satisfatória",
-                    f"Como Identificar um Cassino Online Confiável em Apenas 4 Minutos",
-                    f"4 Dicas para Evitar Armadilhas e Jogar com Segurança em Cassinos Online",
-                    f"4 Jogos de Cassino que Oferecem uma Experiência Diferente dos Slots Clássicos"
-                ],
-                
-                # Títulos para jogos específicos
-                'blackjack': [
-                    f"Blackjack para Iniciantes: Aprenda as Regras e Estratégias Básicas em 5 Minutos",
-                    f"Mão Vencedora: 3 Erros Comuns para Evitar ao Jogar Blackjack Online",
-                    f"21 Dicas para Dominar o Blackjack: Do Básico ao Avançado",
-                    f"Contando Cartas: Mito ou Realidade no Blackjack Online?",
-                    f"As Estratégias dos Profissionais: Como Tomar Decisões Vencedoras no Blackjack",
-                    # Novos títulos específicos
-                    f"5 Ações para Elevar Seu Jogo no Blackjack Online",
-                    f"3 Passos para Jogar Blackjack com Mais Segurança e Diversão",
-                    f"Como Melhorar Suas Decisões no Blackjack em Apenas 10 Minutos",
-                    f"7 Dicas para uma Experiência de Blackjack Mais Imersiva",
-                    f"4 Estratégias para Aproveitar Cada Mão no Blackjack Online"
-                ],
-                
-                'roleta': [
-                    f"Gire e Ganhe: 7 Mitos e Verdades Sobre a Roleta Online",
-                    f"Vermelho ou Preto? Estratégias Eficientes para Jogar Roleta Online",
-                    f"A Roda da Fortuna: Desvendando os Segredos da Roleta para Iniciantes",
-                    f"5 Sistemas de Apostas para Roleta que Todo Jogador Deveria Conhecer",
-                    # Novos títulos específicos
-                    f"5 Movimentos que Todo Jogador de Roleta Deve Experimentar",
-                    f"3 Dicas para Transformar Sua Experiência na Roleta Online",
-                    f"Como se Tornar um Jogador de Roleta em 6 Minutos (Guia Rápido)",
-                    f"7 Formas de Aumentar a Diversão na Roleta sem Mudar Sua Estratégia",
-                    f"4 Apostas que Podem Deixar a Roleta Ainda Mais Emocionante",
-                    f"5 Diferenças entre Roleta Americana e Europeia (Qual Traz Mais Emoção?)"
-                ],
-                
-                'aviator': [
-                    f"Prepare-se para Decolar: O Guia Completo do Aviator para Novos Jogadores",
-                    f"Voando Alto: Estratégias Avançadas para Maximizar seus Ganhos no Aviator",
-                    f"Dominando as Alturas: Como Fazer Apostas Inteligentes no Aviator",
-                    f"Controle de Voo: 5 Técnicas que Farão Você Aproveitar Melhor o Aviator",
-                    # Novos títulos específicos
-                    f"5 Ações que Todo Jogador de Aviator Deve Experimentar para Mais Diversão",
-                    f"3 Estratégias para Aproveitar Melhor Cada Partida no Aviator",
-                    f"Como se Tornar um Mestre no Aviator em Apenas 7 Minutos (Dicas Rápidas)",
-                    f"7 Maneiras de Aumentar a Emoção no Aviator sem Arriscar Demais",
-                    f"4 Passos para uma Experiência Mais Intensa no Aviator",
-                    f"3 Vantagens do Aviator que o Tornam um Jogo de Crash Único",
-                    f"4 Vantagens de Experimentar o Aviator Demo Antes de Jogar com Dinheiro Real"
-                ],
-                
-                'fortune tiger': [
-                    f"Testando as Garras: Como Aproveitar ao Máximo o Tigrinho para Aprender e se Divertir",
-                    f"Na Selva dos Slots: Guia Definitivo para Dominar o Fortune Tiger",
-                    f"O Rei da Selva: Segredos e Dicas para o Fortune Tiger que Ninguém te Contou",
-                    f"Rugido da Sorte: Navegando pelas Funcionalidades do Fortune Tiger",
-                    # Novos títulos específicos
-                    f"5 Dicas para Aproveitar ao Máximo o Fortune Tiger e Suas Surpresas",
-                    f"3 Segredos para Deixar o Tigrinho Ainda Mais Divertido",
-                    f"Como Dominar o Tigrinho em 5 Minutos e Aproveitar Cada Rodada",
-                    f"7 Formas de Explorar Todos os Recursos do Fortune Tiger",
-                    f"4 Estratégias para Jogar Fortune Tiger com Mais Confiança",
-                    f"Como Escolher entre Tigrinho e Fortune OX para uma Jogatina Ainda Melhor",
-                    f"Como Usar o Tigrinho Demo para Aprimorar Sua Estratégia em 5 Minutos"
-                ],
-                
-                'fortune rabbit': [
-                    f"Pulando para a Vitória: Descobrindo a Diversão e os Bônus do Fortune Rabbit",
-                    f"O Coelho da Sorte: Estratégias Vencedoras para o Fortune Rabbit",
-                    f"Caçada ao Sucesso: Como Maximizar sua Experiência no Fortune Rabbit",
-                    f"O Pulo do Coelho: Tudo o que Você Precisa Saber Sobre o Fortune Rabbit",
-                    # Novos títulos específicos
-                    f"5 Maneiras de Turbinar Sua Experiência no Fortune Rabbit",
-                    f"3 Truques para Descobrir os Melhores Bônus do Coelho da Sorte",
-                    f"Como se Divertir no Fortune Rabbit em Apenas 3 Minutos (Passo a Passo)",
-                    f"6 Recursos do Fortune Rabbit que Você Talvez Não Conheça",
-                    f"4 Dicas para uma Jogatina Mais Longa e Divertida no Fortune Rabbit",
-                    f"7 Motivos para Experimentar o Fortune Rabbit Além do Tigrinho"
-                ],
-                
-                # Títulos para versões demo
-                'demo': [
-                    f"Experimente Antes de Apostar: Por que as Versões Demo dos Jogos são suas Melhores Amigas",
-                    f"Treinando sem Riscos: Como Aproveitar ao Máximo os Jogos em Versão Demo",
-                    f"Do Demo à Aposta Real: Quando e Como Dar o Próximo Passo no Mundo dos Jogos Online",
-                    f"Diversão Gratuita: Os Melhores Jogos de Cassino Demo para Você Experimentar Hoje",
-                    f"Aprenda sem Perder: O Valor das Versões Demo para Jogadores Iniciantes",
-                    # Novos títulos específicos
-                    f"5 Benefícios de Jogar na Versão Demo Antes de Partir para o Cassino Real",
-                    f"3 Jogos Demo que Todo Iniciante Deve Testar para Ganhar Confiança",
-                    f"7 Sinais de que Você Está Pronto para Levar Sua Jogatina para o Próximo Nível"
-                ],
-                
-                # Títulos para casa de apostas/plataformas
-                'casa de apostas': [
-                    f"Guia do Iniciante: 5 Dicas Essenciais para Começar com o Pé Direito na sua Casa de Apostas Online",
-                    f"Navegando pelos Melhores: Como Escolher a Casa de Apostas Ideal para Você (e o que evitar!)",
-                    f"A Casa Sempre Ganha? Desmistificando Mitos Sobre Casas de Apostas Online",
-                    f"Segurança em Primeiro Lugar: Como Identificar uma Casa de Apostas Confiável",
-                    f"Comparando Gigantes: O Que Faz uma Casa de Apostas Se Destacar das Demais",
-                    f"Além dos Bônus: O Que Realmente Importa ao Escolher uma Casa de Apostas"
-                ],
-                
-                'site de apostas': [
-                    f"Navegando pelos Melhores: Como Escolher o Site de Apostas Ideal para Você (e o que evitar!)",
-                    f"5 Critérios Fundamentais para Avaliar a Qualidade de um Site de Apostas",
-                    f"Escolhendo com Sabedoria: O Guia Definitivo para Sites de Apostas Confiáveis",
-                    f"Além da Propaganda: Como Identificar os Sites de Apostas Realmente Bons",
-                    f"Segurança, Variedade e Pagamentos: O Trio de Ouro dos Sites de Apostas",
-                    # Novos títulos específicos
-                    f"5 Passos para Garantir uma Experiência Segura em Sites de Apostas",
-                    f"3 Dicas para Escolher um Site de Apostas com Total Confiança"
-                ],
-                
-                # Títulos para métodos/tipos de apostas
-                'aposta online': [
-                    f"Apostas sem Sair de Casa: O Guia Definitivo para Dominar a Aposta Online com Segurança",
-                    f"Da Teoria à Prática: Construindo uma Estratégia Vencedora para Apostas Online",
-                    f"Apostas Online para Iniciantes: Tudo o que Você Precisa Saber para Começar Bem",
-                    f"Os 7 Erros Fatais que Todo Iniciante Comete em Apostas Online",
-                    f"Transforme sua Experiência: Dicas Avançadas para Apostas Online Bem-Sucedidas",
-                    # Novos títulos específicos
-                    f"7 Hábitos que Todo Jogador Responsável Deve Adotar para uma Experiência Melhor"
-                ],
-                
-                'bet': [
-                    f"Bet com Responsabilidade: Como Manter o Controle e se Divertir",
-                    f"A Arte da Bet: Transformando Conhecimento em Oportunidades",
-                    f"Bet do Jeito Certo: Estratégias que Realmente Funcionam",
-                    f"Navegando pelo Mundo das Bets: O Guia Essencial para Novatos",
-                    f"Além do Óbvio: Técnicas Avançadas para Bets mais Inteligentes"
-                ]
-            }
+            # CORREÇÃO: Não use categorização automática para títulos
+            # Isso evita que o sistema misture palavras-âncora diferentes
             
-            # Título genéricos para qualquer tema
-            titulos_genericos = [
-                f"O Guia Completo para {tema}",
-                f"Dominando {tema}: Estratégias que Funcionam",
-                f"Segredos de {tema} Revelados",
-                f"Como Melhorar sua Experiência em {tema}",
-                f"Navegando pelo Mundo de {tema}",
-                f"{tema.capitalize()}: O que Você Precisa Saber",
-                f"Explorando {tema}: Do Básico ao Avançado",
-                f"Maximizando seu Potencial em {tema}",
-                f"O Caminho para o Sucesso em {tema}",
-                f"7 Maneiras de Aproveitar ao Máximo {tema}",
-                f"Transformando sua Experiência em {tema}",
-                f"O Manual Essencial de {tema}",
-                f"3 Técnicas Revolucionárias para {tema}",
-                f"A Arte de Dominar {tema}",
-                f"Além do Básico: Um Novo Olhar sobre {tema}",
-                f"Otimizando seus Resultados em {tema}",
-                f"Guia Definitivo para Iniciantes em {tema}",
-                f"Inovação em {tema}: O que Esperar",
-                f"12 Segredos que Ninguém Conta sobre {tema}",
-                f"Simplificando {tema}: Guia Prático para Todos"
-            ]
+            # Instrução específica para garantir uso exclusivo da palavra-âncora
+            instrucao_ancora_especifica = (
+                "\n\nATENÇÃO CRÍTICA SOBRE A PALAVRA-ÂNCORA:\n"
+                "1. A palavra-âncora para este artigo é EXCLUSIVAMENTE: '{palavra_ancora}'\n"
+                "2. NÃO mencione outras palavras-âncora ou jogos não relacionados a '{palavra_ancora}'\n"
+                "3. Todo o conteúdo deve ser sobre '{palavra_ancora}' e APENAS '{palavra_ancora}'\n"
+                "4. O título DEVE mencionar especificamente '{palavra_ancora}' e não outros jogos\n"
+                "5. NUNCA substitua '{palavra_ancora}' por outro jogo ou tema similar\n"
+            )
             
-            # Buscar categoria apropriada baseada na palavra-âncora
-            categoria_encontrada = None
-            for categoria, titulos in titulos_por_categoria.items():
-                if categoria in palavra_ancora or qualquer_palavra_em_outra(categoria.split(), palavra_ancora.split()):
-                    categoria_encontrada = categoria
-                    break
+            # Preenche o template com os dados específicos desta linha
+            prompt = prompt_template.replace("{{site}}", site)
+            prompt = prompt.replace("{{palavra_ancora}}", palavra_ancora)
+            prompt = prompt.replace("{{url_ancora}}", url_ancora)
             
-            # Se não encontrou categoria específica, use uma aleatória ou os genéricos
-            if not categoria_encontrada:
-                # Decide com 60% de chance usar uma categoria aleatória ou usar genérico
-                if hash(palavra_ancora + site) % 100 < 60:
-                    # Escolhe uma categoria aleatória
-                    categorias = list(titulos_por_categoria.keys())
-                    categoria_aleatoria = categorias[hash(palavra_ancora + site) % len(categorias)]
-                    categoria_encontrada = categoria_aleatoria
-                    self.logger.info(f"Usando categoria aleatória '{categoria_aleatoria}' para palavra-âncora '{palavra_ancora}'")
-                else:
-                    # Usa genéricos
-                    self.logger.info(f"Usando títulos genéricos para palavra-âncora '{palavra_ancora}'")
+            # Se houver um título predefinido, use-o
+            if 'titulo' in dados and dados['titulo'] and str(dados['titulo']).strip() != "Sem titulo":
+                titulo_base = dados['titulo']
+                self.logger.info(f"Usando título base fornecido: '{titulo_base}'")
+                prompt = prompt.replace("{{titulo}}", titulo_base)
             else:
-                self.logger.info(f"Categoria '{categoria_encontrada}' encontrada para palavra-âncora '{palavra_ancora}'")
+                # Caso contrário, deixe o modelo gerar um título específico para esta palavra-âncora
+                prompt = prompt.replace("{{titulo}}", f"Artigo sobre {palavra_ancora}")
+                
+            # Adiciona a instrução específica para garantir exclusividade da palavra-âncora
+            prompt += instrucao_ancora_especifica
             
-            # Seleciona lista de títulos apropriada
-            if categoria_encontrada:
-                lista_titulos = titulos_por_categoria[categoria_encontrada]
-            else:
-                lista_titulos = titulos_genericos
-            
-            # Escolhe um título aleatório, usando o site e a palavra-âncora como seed
-            import hashlib
-            seed_str = site + palavra_ancora
-            seed = int(hashlib.md5(seed_str.encode('utf-8')).hexdigest(), 16) % len(lista_titulos)
-            titulo = lista_titulos[seed]
-            
-            # Adiciona o site ao prompt para garantir conteúdo único
-            site_info = f"\nEste conteúdo é para o site: {site}\n"
-            
-            # Reforçar que o link DEVE ser incluído e de forma natural
+            # Adiciona informação do link para personalização
             link_info = (
-                f"\nEXTREMAMENTE IMPORTANTE: A palavra-âncora '{palavra_ancora}' DEVE aparecer de forma NATURAL no segundo OU terceiro parágrafo. "
+                f"\n\nEXTREMAMENTE IMPORTANTE: A palavra-âncora '{palavra_ancora}' DEVE aparecer de forma NATURAL no segundo OU terceiro parágrafo. "
                 f"Não force o texto, use-a em uma frase que faça sentido e flua naturalmente.\n"
                 f"Exemplos incorretos (forçados): 'Considerando {palavra_ancora}, podemos afirmar...', 'No que diz respeito à {palavra_ancora}...'\n"
                 f"Exemplos corretos (naturais): 'Os jogadores que buscam {palavra_ancora} devem...', 'A experiência de {palavra_ancora} oferece muitas vantagens...'\n"
                 f"\nIMPORTANTE: NUNCA coloque a palavra-âncora no primeiro parágrafo ou depois do terceiro parágrafo!"
-            )
-            
-            # Preenche o template com os dados
-            prompt = prompt_template.format(
-                tema=tema,
-                palavra_ancora=palavra_ancora,
-                url_ancora=dados.get('url_ancora', ''),
-                titulo=titulo
             )
             
             # Adiciona alerta sobre termos proibidos
@@ -588,7 +386,7 @@ class GeminiHandler:
             )
             
             # Adiciona informação do site e do link para personalização + alerta de termos proibidos
-            prompt = prompt.replace("Tema: {tema}", f"Tema: {tema}{site_info}{link_info}{termos_proibidos_alerta}")
+            prompt += f"\n{link_info}{termos_proibidos_alerta}"
             
             return prompt
         except KeyError as e:
@@ -597,7 +395,7 @@ class GeminiHandler:
         except Exception as e:
             self.logger.error(f"Erro ao construir prompt: {e}")
             raise
-    
+
     def gerar_conteudo(self, dados: Dict[str, str], instrucao_adicional: str = None) -> Tuple[str, Dict[str, float], Optional[Dict]]:
         """
         Gera conteúdo usando a API do Gemini.
@@ -834,4 +632,4 @@ class GeminiHandler:
         
         except Exception as e:
             self.logger.error(f"Erro ao gerar conteúdo: {e}")
-            raise 
+            raise

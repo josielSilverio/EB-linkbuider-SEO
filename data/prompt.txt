@@ -31,24 +31,27 @@ TÍTULOS JORNALÍSTICOS - REGRAS ESTRITAS DE DIVERSIDADE:
 - Crie títulos que utilizem uma das seguintes abordagens (escolha apenas UMA por título):
 - Evite repetir palavras, frases ou estruturas já utilizadas em títulos ou textos anteriores. Varie o vocabulário e a abordagem em cada conteúdo, mantendo o foco no tema.
 - Alterne entre frases curtas e longas, e utilize diferentes tipos de construções sintáticas nos títulos e subtítulos.
-  * Pergunta intrigante (Por que...? O que acontece quando...?)
-  * Contraste ou comparação (X vs Y: A diferença que importa)
-  * Dados surpreendentes (87% dos jogadores desconhecem este recurso em...)
-  * Revelação (A mecânica oculta que transforma a experiência em...)
-  * Narrativa (A jornada inesperada dos símbolos no slot...)
-  * Análise (Entendendo a matemática por trás do...)
   * O artigo deve ser EXCLUSIVAMENTE sobre `{{palavra_ancora}}`.
   * NÃO mencione outros jogos ou temas não relacionados a `{{palavra_ancora}}`.
   * O título e todo o conteúdo devem focar apenas em `{{palavra_ancora}}`.
   * NUNCA substitua `{{palavra_ancora}}` por outro jogo ou tema similar.
 
 - Exemplos de estruturas DIVERSIFICADAS:
-  * "Por que a volatilidade em {palavra_ancora} fascina jogadores experientes?"
-  * "Quando a sorte encontra estratégia: O fenômeno {palavra_ancora} explicado"
-  * "Da mesa física às telas: A evolução que transformou {palavra_ancora}"
-  * "O que torna {palavra_ancora} um fenômeno entre apostadores brasileiros?"
-  * "Além dos símbolos: A psicologia das cores em {palavra_ancora}"
-  * "Matemática ou intuição? O dilema dos jogadores de {palavra_ancora}"
+  - "Por que a volatilidade em {palavra_ancora} fascina jogadores experientes?"
+  - "Quando a sorte encontra estratégia: O fenômeno {palavra_ancora} explicado"
+  - "De Las Vegas às telas de celulares: O jogo que trouxe a essência dos cassinos {palavra_ancora}"
+  - "O que torna {palavra_ancora} um fenômeno entre apostadores brasileiros?"
+  - "Além dos símbolos: A psicologia das cores em {palavra_ancora}"
+  - Pergunta intrigante (Por que...? O que acontece quando...?)
+  - Contraste ou comparação (X vs Y: A diferença que importa)
+  - Dados surpreendentes (87% dos jogadores desconhecem este recurso em...)
+  - Revelação (A mecânica oculta que transforma a experiência em...)
+  - Narrativa (A jornada inesperada dos símbolos no slot...)
+  - Análise (Entendendo a matemática por trás do...)
+
+  ** Para cada artigo, escolha um enfoque diferente: ANÁLISE DE MECÂNICAS específicas do jogo/tema, o IMPACTO CULTURAL de {palavra_ancora}, MITOS E VERDADES comuns, a EXPERIÊNCIA DO JOGADOR (o que atrai e por quê, de forma analítica), ASPECTOS PSICOLÓGICOS (se aplicável e de forma responsável), TENDÊNCIAS DE MERCADO (com dados, se possível, e suas implicações), CONTEXTO HISTÓRICO (sem focar apenas na 'evolução' linear, mas em momentos chave), CURIOSIDADES POUCO CONHECIDAS, etc. Não repita o mesmo tipo de abordagem em artigos consecutivos. **
+
+  **Além da diversidade sintática nos títulos, busque explorar ângulos temáticos distintos para cada artigo sobre {palavra_ancora}. Se um artigo foca na história, o próximo pode focar em mecânicas atuais, e outro nas percepções dos jogadores, por exemplo.**
 
 **ESTRUTURA DO ARTIGO - REGRAS ESTRITAS:**
 - OBRIGATÓRIO: Cada subtítulo deve ser seguido por pelo menos 2 parágrafos.
@@ -60,15 +63,14 @@ TÍTULOS JORNALÍSTICOS - REGRAS ESTRITAS DE DIVERSIDADE:
 - Inclua a palavra-âncora "{{palavra_ancora}}" de forma natural no segundo ou terceiro parágrafo.
 - Finalize com uma conclusão que resuma os pontos principais ou traga uma reflexão.
 
-SEPARAÇÃO ESTRITA DE TEMAS:
-- OBRIGATÓRIO: Identifique se a palavra-âncora está relacionada a CASSINO ou APOSTAS ESPORTIVAS.
-- Se for relacionada a CASSINO (slots, roleta, blackjack, etc.):
+* SEPARAÇÃO ESTRITA DE TEMAS: CASSINO E APOSTAS ESPORTIVAS
+* OBRIGATÓRIO: Identifique se a palavra-âncora está relacionada a CASSINO ou APOSTAS ESPORTIVAS.
+* Se for relacionada a CASSINO (slots, roleta, blackjack, etc.):
   * Use APENAS exemplos, termos e contextos de jogos de cassino
   * NUNCA mencione apostas esportivas, times, campeonatos ou odds
-- Se for relacionada a APOSTAS ESPORTIVAS (futebol, tênis, etc.):
+* Se for relacionada a APOSTAS ESPORTIVAS (futebol, tênis, etc.):
   * Use APENAS exemplos, termos e contextos de apostas esportivas
-  * NUNCA mencione slots, roleta, blackjack ou outros jogos de cassino
-- Se não for clara a categoria, priorize o contexto de CASSINO.
+  * NUNCA mencione nenhuma palavra, termo ou adjetivo que é utilizado para cassino.
 
 REGRAS OBRIGATÓRIAS:
 - NÃO mencione nomes de casas de apostas ou sites de jogos.

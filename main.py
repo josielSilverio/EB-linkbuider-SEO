@@ -658,116 +658,115 @@ def apresentar_menu_categorias(categorias: Dict[str, Dict]) -> Dict:
     Apresenta um menu interativo para o usuário escolher quais categorias processar.
     
     Args:
-        categorias: Dicionário com estatísticas por categoria
+        categorias: Dicionário com estatísticas por categoria (já filtradas para itens disponíveis)
         
     Returns:
-        Dicionário com as categorias selecionadas (valor booleano)
+        Dicionário com as categorias selecionadas (valor booleano) ou {'quantidade_especifica': N} ou None se cancelado.
     """
     logger = logging.getLogger('seo_linkbuilder')
-    
-    # Filtrar apenas categorias com pelo menos um item
-    categorias_com_itens = {k: v for k, v in categorias.items() if v['count'] > 0}
-    
+
+    # Filtrar apenas categorias com pelo menos um item (deveria já vir assim de estimar_custo_por_categoria)
+    categorias_com_itens = {k: v for k, v in categorias.items() if v.get('count', 0) > 0}
+
     if not categorias_com_itens:
-        logger.warning("Nenhuma categoria com itens encontrada")
+        logger.warning("Nenhuma categoria com itens disponíveis para processamento encontrada para o menu.")
+        print("\nAVISO: Nenhuma categoria com itens disponíveis para seleção no menu.")
+        # Retorna um dicionário que indica "processar nada" ou pode ser tratado como "todas (vazias)"
+        # Para evitar erros, é melhor retornar algo que a lógica principal entenda como "nada a fazer por categoria"
+        # ou talvez a lógica principal nem chame o menu se 'categorias' estiver vazio.
+        # Se chamado, e estiver vazio, retornar um dict vazio pode ser uma opção.
         return {}
-    
+
+
     # Ordenar por contagem (do maior para o menor)
     categorias_ordenadas = sorted(categorias_com_itens.items(), key=lambda x: x[1]['count'], reverse=True)
-    
+
     # Dicionário para armazenar seleção
     selecao = {}
-    
+
     print("\n" + "="*60)
-    print("MENU DE SELEÇÃO DE CATEGORIAS".center(60))
+    print("MENU DE SELEÇÃO DE CATEGORIAS/QUANTIDADE".center(60))
     print("="*60)
-    
-    # Mostrar contagem total
-    total_itens = sum(v['count'] for v in categorias_com_itens.values())
-    total_custo = sum(v.get('custo_total', 0) for v in categorias_com_itens.values())
-    print(f"\nTotal de itens: {total_itens} | Custo estimado total: R${total_custo*5:.2f}")
-    print("\nCategorias disponíveis:")
-    
+
+    # Mostrar contagem total de itens DISPONÍVEIS
+    total_itens_disponiveis = sum(v['count'] for v in categorias_com_itens.values())
+    total_custo_estimado_disponiveis = sum(v.get('custo_total', 0) for v in categorias_com_itens.values())
+    print(f"\nTotal de itens disponíveis para processamento: {total_itens_disponiveis} | Custo estimado total (disponíveis): R${total_custo_estimado_disponiveis*5:.2f}")
+    print("\nCategorias disponíveis (baseado em itens não processados):")
+
     # Apresentar opções
     print("\nCódigo | Categoria              | Quantidade | Custo estimado (R$)")
     print("-"*60)
-    
+
     # Adicionar TODOS OS JOGOS como a primeira opção
-    print(f"0      | TODOS OS JOGOS          | {total_itens:^10} | R${total_custo*5:.2f}")
+    print(f"0      | TODOS OS ITENS          | {total_itens_disponiveis:^10} | R${total_custo_estimado_disponiveis*5:.2f}")
     print("-"*60)
-    
+
     for i, (categoria, stats) in enumerate(categorias_ordenadas, 1):
-        # Formatar para alinhamento
         cat_formatada = f"{categoria[:20]:<20}"
-        custo_total = stats.get('custo_total', 0) * 5  # Converter para reais
-        print(f"{i:^6} | {cat_formatada} | {stats['count']:^10} | R${custo_total:.2f}")
-    
-    # Opções adicionais
+        custo_total_cat = stats.get('custo_total', 0) * 5
+        print(f"{i:^6} | {cat_formatada} | {stats['count']:^10} | R${custo_total_cat:.2f}")
+
     print("-"*60)
-    print(f"T      | TODOS OS ITENS          | {total_itens:^10} | R${total_custo*5:.2f}")
-    print(f"Q      | QUANTIDADE ESPECÍFICA   | -          | -")
+    print(f"T      | TODOS OS ITENS          | {total_itens_disponiveis:^10} | R${total_custo_estimado_disponiveis*5:.2f} (Mesmo que 0)")
+    print(f"Q      | QUANTIDADE ESPECÍFICA   | -          | - (Das primeiras disponíveis)")
     print("-"*60)
-    
-    # Solicitar escolha do usuário
+
     while True:
-        escolha = input("\nEscolha uma opção (número, T para todos, Q para quantidade, ou X para sair): ").strip().upper()
-        
+        escolha = input("\nEscolha uma opção (número da categoria, T/0 para todos, Q para quantidade específica, ou X para sair): ").strip().upper()
+
         if escolha == 'X':
-            logger.info("Operação cancelada pelo usuário")
-            return None
-            
+            logger.info("Operação cancelada pelo usuário no menu.")
+            return None # Indica cancelamento
+
         elif escolha == 'T' or escolha == '0':
-            # Selecionar todos
-            for categoria in categorias_com_itens:
-                selecao[categoria] = True
-            logger.info(f"Selecionados todos os {total_itens} itens (custo estimado: R${total_custo*5:.2f})")
-            break
-            
+            # Selecionar todos os itens disponíveis (não significa todas as categorias, mas sim processar sem filtro de categoria)
+            # A lógica principal interpretará um dict vazio ou um com todas as categorias como "sem filtro de categoria"
+            # Para simplificar, podemos retornar um marcador especial ou um dict que inclui todas as categorias listadas.
+            selecao_final = {cat_nome: True for cat_nome in categorias_com_itens.keys()}
+            logger.info(f"Opção 'Todos os Itens' selecionada. Serão considerados {total_itens_disponiveis} itens disponíveis (antes de outros limites).")
+            return selecao_final
+
         elif escolha == 'Q':
-            # Quantidade específica
             try:
-                quantidade = int(input("Digite a quantidade de itens a processar: "))
+                quantidade = int(input(f"Digite a quantidade de itens a processar (serão pegos os primeiros disponíveis, até {total_itens_disponiveis}): "))
                 if quantidade <= 0:
                     print("Por favor, digite um número maior que zero.")
                     continue
-                    
-                if quantidade > total_itens:
-                    print(f"A quantidade solicitada ({quantidade}) é maior que o total disponível ({total_itens}). Usando o total disponível.")
-                    quantidade = total_itens
                 
-                custo_medio = total_custo / total_itens if total_itens > 0 else 0
-                custo_estimado = custo_medio * quantidade
+                # Não limitar pela quantidade total aqui, a lógica principal fará isso.
+                # Apenas informa a estimativa baseada no que foi pedido.
+                custo_medio_item = total_custo_estimado_disponiveis / total_itens_disponiveis if total_itens_disponiveis > 0 else 0
+                custo_estimado_para_qtd = custo_medio_item * min(quantidade, total_itens_disponiveis) # Estima para o mínimo entre pedido e disponível
                 
-                logger.info(f"Selecionados {quantidade} itens aleatórios (custo estimado: R${custo_estimado*5:.2f})")
-                
-                # Retornar quantidade como um parâmetro especial
+                logger.info(f"Opção de processar {quantidade} itens selecionada. Serão processadas as primeiras linhas disponíveis até esta quantidade, se houver.")
+                logger.info(f"Custo estimado para processar até {min(quantidade, total_itens_disponiveis)} itens: R${custo_estimado_para_qtd*5:.2f}")
+                # Retorna a quantidade desejada para a lógica principal decidir
                 return {'quantidade_especifica': quantidade}
-                
+
             except ValueError:
                 print("Por favor, digite um número válido.")
                 continue
-                
-        else:
-            # Tentar converter para número
+
+        else: # Escolha de categoria específica
             try:
                 indice = int(escolha)
                 if 1 <= indice <= len(categorias_ordenadas):
-                    categoria_selecionada = categorias_ordenadas[indice - 1][0]
+                    categoria_selecionada_nome = categorias_ordenadas[indice - 1][0]
                     stats = categorias_ordenadas[indice - 1][1]
                     
-                    logger.info(f"Selecionada categoria '{categoria_selecionada}' com {stats['count']} itens (custo estimado: R${stats.get('custo_total', 0)*5:.2f})")
+                    logger.info(f"Selecionada categoria '{categoria_selecionada_nome}' com {stats['count']} itens disponíveis (custo estimado: R${stats.get('custo_total', 0)*5:.2f})")
                     
                     # Marcar apenas a categoria selecionada
-                    for categoria in categorias_com_itens:
-                        selecao[categoria] = (categoria == categoria_selecionada)
-                    
-                    break
+                    selecao_final = {cat: (cat == categoria_selecionada_nome) for cat in categorias_com_itens.keys()}
+                    return selecao_final
                 else:
-                    print(f"Por favor, digite um número entre 0 e {len(categorias_ordenadas)}.")
+                    print(f"Por favor, digite um número entre 1 e {len(categorias_ordenadas)}, T/0, Q ou X.")
             except ValueError:
-                print("Opção inválida. Por favor, tente novamente.")
-    
-    return selecao
+                print("Opção inválida. Por favor, tente novamente (número da categoria, T/0, Q ou X).")
+    # Este return não deveria ser alcançado devido ao loop infinito e returns internos.
+    # Mas para garantir, podemos retornar um dict vazio ou None.
+    return None
 
 def filtrar_dataframe_por_categorias(df: pd.DataFrame, sheets: SheetsHandler, selecao: Dict) -> pd.DataFrame:
     """
@@ -1015,6 +1014,10 @@ def processar_linha(linha, indice, df, df_original, modo_teste, spreadsheet_id, 
     """
     logger = logging.getLogger('seo_linkbuilder') # Get the logger instance
     try:
+        # ADICIONE ESTE LOG PARA VERIFICAR QUAL LINHA ESTÁ SENDO PROCESSADA
+        indice_real = int(df.iloc[indice]["sheet_row_num"]) if "sheet_row_num" in df.columns else indice
+        logger.info(f"Processando linha {indice} do DataFrame (linha {indice_real} na planilha original)")
+        
         # Extrai os dados da linha
         id_campanha = str(df.iloc[indice][COLUNAS["id"]])
         site = str(df.iloc[indice][COLUNAS["site"]])
@@ -1024,7 +1027,6 @@ def processar_linha(linha, indice, df, df_original, modo_teste, spreadsheet_id, 
         instrucoes = str(df.iloc[indice][COLUNAS["instrucoes"]])
         
         # Obtém a linha original na planilha usando a coluna sheet_row_num
-        indice_real = int(df.iloc[indice]["sheet_row_num"]) if "sheet_row_num" in df.columns else indice
         logger.info(f"Processando ID {id_campanha} (índice {indice}, índice real na planilha: {indice_real})")
         
         # Chama a API para gerar o conteúdo
@@ -1151,6 +1153,33 @@ def apresentar_menu_pasta_drive() -> str:
             else:
                 print("Opção inválida. Digite S ou N.")
 
+def processar_planilha(limite_linhas=None, modo_teste=False, spreadsheet_id=None, sheet_name=None):
+    """
+    Processa a planilha, gerando conteúdo para cada linha.
+    
+    Args:
+        limite_linhas: Número máximo de linhas a processar
+        modo_teste: Se True, não salva os documentos no Google Drive
+        spreadsheet_id: ID da planilha (opcional)
+        sheet_name: Nome da aba (opcional)
+    """
+    logger = logging.getLogger('seo_linkbuilder')
+    
+    # Inicializa handlers
+    sheets = SheetsHandler()
+    gemini = GeminiHandler()
+    docs = DocsHandler()
+    
+    # Lê a planilha
+    df = sheets.ler_planilha(limite_linhas=limite_linhas, spreadsheet_id=spreadsheet_id, sheet_name=sheet_name)
+    
+    # ADICIONE ESTE LOG PARA VERIFICAR AS LINHAS QUE SERÃO PROCESSADAS
+    logger.info(f"Linhas que serão processadas em ordem: {df['sheet_row_num'].tolist()}")
+    logger.info(f"Índices do DataFrame que serão processados: {df.index.tolist()}")
+    
+    # Continua com o processamento...
+    # ... existing code ...
+
 def main(limite_linhas: int = None, modo_teste: bool = False, categorias_selecionadas: Dict = None, quantidade_especifica: int = None):
     """
     Função principal que orquestra a leitura da planilha, geração de conteúdo e criação de documentos.
@@ -1178,105 +1207,136 @@ def main(limite_linhas: int = None, modo_teste: bool = False, categorias_selecio
         spreadsheet_id_selecionado, sheet_name_selecionado = apresentar_menu_planilha(sheets)
         
         # Atualiza as configurações globais (opcional, mas pode ser útil)
-        # Não recomendado alterar diretamente, mas para consistência interna:
         global SPREADSHEET_ID, SHEET_NAME
         SPREADSHEET_ID = spreadsheet_id_selecionado
         SHEET_NAME = sheet_name_selecionado
         logger.info(f"Processando Planilha: {SPREADSHEET_ID}, Aba: {SHEET_NAME}")
 
-        # 2. Verifica títulos duplicados (independente do mês ou categoria)
-        # verificar_titulos_duplicados(sheets, gemini, docs, modo_teste) # Desativado temporariamente
-
-        # 3. Verifica similaridade de conteúdos (independente do mês ou categoria)
-        # verificar_similaridade_conteudos(sheets, gemini, docs, modo_teste=modo_teste) # Desativado temporariamente
-
-        # 4. Corrige termos proibidos (independente do mês ou categoria)
-        # corrigir_termos_proibidos(sheets, docs, modo_teste) # Desativado temporariamente
-
         # 5. Lê a planilha com base na seleção
-        logger.info(f"Lendo dados da planilha '{sheet_name_selecionado}' ({spreadsheet_id_selecionado})...")
-        df_original = sheets.ler_planilha(
-            spreadsheet_id=spreadsheet_id_selecionado, 
-            sheet_name=sheet_name_selecionado,
-            apenas_dados=(categorias_selecionadas is None) # Lê tudo se não houver filtro de categoria
+        logger.info(f"Lendo dados da planilha '{SHEET_NAME}' ({SPREADSHEET_ID})...")
+        # A função ler_planilha já filtra por IDs válidos e URLs vazias,
+        # e já retorna o DataFrame ordenado por 'sheet_row_num'.
+        # O argumento 'limite_linhas' para ler_planilha pode ser usado se quisermos limitar a leitura inicial,
+        # mas a lógica de "processar N itens" geralmente é melhor aplicada depois.
+        # Por enquanto, vamos deixar ler_planilha carregar todos os itens disponíveis (não processados e com ID válido).
+        df_disponivel_para_processar = sheets.ler_planilha(
+            spreadsheet_id=SPREADSHEET_ID,
+            sheet_name=SHEET_NAME
+            # Não passaremos limite_linhas aqui para que o menu de categorias veja todos os disponíveis.
         )
-        
-        if df_original.empty:
-            logger.warning(f"Nenhuma linha com ID válido encontrada na planilha!")
-            print(f"\n⚠️ AVISO: Nenhuma linha com ID válido encontrada na planilha.")
-            print("Verifique se a planilha contém dados com IDs válidos.")
+
+        if df_disponivel_para_processar.empty:
+            logger.warning(f"Nenhuma linha disponível para processamento (sem ID válido ou já com URL) encontrada na planilha!")
+            print(f"\n⚠️ AVISO: Nenhuma linha disponível para processamento encontrada.")
+            print("Verifique se a planilha contém dados com IDs válidos e sem URL de documento preenchida.")
             return
-            
-        total_linhas = len(df_original)
-        logger.info(f"Planilha lida com sucesso. Total de {total_linhas} linhas com IDs válidos")
-        
-        # Adiciona log para verificar as linhas que serão processadas
-        if 'sheet_row_num' in df_original.columns:
-            logger.info(f"Linhas que serão processadas em ordem: {df_original['sheet_row_num'].tolist()}")
-            
-        # Estimar custos por categoria
-        categorias = estimar_custo_por_categoria(sheets, df_original)
-        
-        # Se não foram fornecidas categorias, apresentar menu para seleção
-        if categorias_selecionadas is None:
-            categorias_selecionadas = apresentar_menu_categorias(categorias)
-            
-            # Se o usuário cancelou a operação
-            if categorias_selecionadas is None:
+
+        total_linhas_disponiveis = len(df_disponivel_para_processar)
+        logger.info(f"Planilha lida com {total_linhas_disponiveis} linhas disponíveis para processamento (ordenadas por linha da planilha).")
+        if 'sheet_row_num' in df_disponivel_para_processar.columns:
+            logger.info(f"Próximas linhas disponíveis para processamento (sheet_row_num): {df_disponivel_para_processar['sheet_row_num'].head().tolist()}")
+
+        # Estimar custos por categoria usando apenas as linhas realmente disponíveis
+        categorias = estimar_custo_por_categoria(sheets, df_disponivel_para_processar)
+
+        # DataFrame final que será processado
+        df_para_processar_final = df_disponivel_para_processar.copy()
+
+        # Se não foram fornecidas categorias/quantidade na chamada da função, apresentar menu
+        num_itens_do_menu = None
+        if categorias_selecionadas is None and quantidade_especifica is None:
+            selecao_menu = apresentar_menu_categorias(categorias) # Esta função precisa ser ajustada
+
+            if selecao_menu is None: # Usuário cancelou
                 logger.info("Operação cancelada pelo usuário. Encerrando.")
                 return
-        
-        # Filtrar DataFrame com base nas categorias selecionadas
-        if 'quantidade_especifica' in categorias_selecionadas:
-            quantidade_especifica = categorias_selecionadas['quantidade_especifica']
-            # Selecionar aleatoriamente a quantidade solicitada
-            if quantidade_especifica >= len(df_original):
-                logger.info(f"A quantidade solicitada ({quantidade_especifica}) é maior ou igual ao total disponível ({len(df_original)}). Usando todo o DataFrame.")
-                df_filtrado = df_original
+
+            if 'quantidade_especifica' in selecao_menu:
+                num_itens_do_menu = selecao_menu['quantidade_especifica']
+                # Não filtramos por categoria se quantidade específica foi escolhida no menu principal.
+                # O df_para_processar_final já contém todos os disponíveis e ordenados.
             else:
-                logger.info(f"Selecionando {quantidade_especifica} itens aleatoriamente.")
-                df_filtrado = df_original.sample(n=quantidade_especifica, random_state=42)
-        else:
-            df_filtrado = filtrar_dataframe_por_categorias(df_original, sheets, categorias_selecionadas)
+                # Filtra por categoria se uma ou mais categorias foram selecionadas
+                df_para_processar_final = filtrar_dataframe_por_categorias(df_para_processar_final, sheets, selecao_menu)
+                # filtrar_dataframe_por_categorias deve manter a ordem se o df de entrada estiver ordenado.
+                # Reordenar por 'sheet_row_num' por segurança, caso a função interna não garanta.
+                if 'sheet_row_num' in df_para_processar_final.columns:
+                     df_para_processar_final.sort_values(by='sheet_row_num', inplace=True)
+
+        elif categorias_selecionadas is not None: # Categorias fornecidas como argumento
+            df_para_processar_final = filtrar_dataframe_por_categorias(df_para_processar_final, sheets, categorias_selecionadas)
+            if 'sheet_row_num' in df_para_processar_final.columns:
+                 df_para_processar_final.sort_values(by='sheet_row_num', inplace=True)
         
-        # Aplicar limite de linhas se fornecido
-        if limite_linhas is not None:
-            df_filtrado = df_filtrado.head(limite_linhas)
+        # Determinar o número final de linhas a processar
+        # Prioridade: argumento da função 'quantidade_especifica', depois 'num_itens_do_menu', depois 'limite_linhas' (CLI)
+        limite_final_linhas = None
+        if quantidade_especifica is not None: # Argumento da função main()
+            limite_final_linhas = quantidade_especifica
+        elif num_itens_do_menu is not None: # Escolha 'Q' no menu
+            limite_final_linhas = num_itens_do_menu
+        elif limite_linhas is not None: # Argumento --limite da CLI
+            limite_final_linhas = limite_linhas
         
-        # Verificar se ainda há linhas após a filtragem
-        total_linhas = len(df_filtrado)
-        if total_linhas == 0:
-            logger.warning("Nenhuma linha restante após filtragem. Encerrando.")
+        # Aplicar o limite final ao df_para_processar_final
+        if limite_final_linhas is not None:
+            if limite_final_linhas <= 0:
+                logger.warning("Número de itens para processar é zero ou negativo. Nada a fazer.")
+                return
+            if limite_final_linhas < len(df_para_processar_final):
+                logger.info(f"Limitando o processamento às primeiras {limite_final_linhas} das {len(df_para_processar_final)} linhas filtradas e ordenadas.")
+                df_para_processar_final = df_para_processar_final.head(limite_final_linhas)
+            else:
+                logger.info(f"Número solicitado ({limite_final_linhas}) é maior ou igual ao disponível ({len(df_para_processar_final)}). Processando todos os {len(df_para_processar_final)} itens.")
+                # Nenhuma ação necessária, já estamos usando todo o df_para_processar_final
+        
+        # Verificar se ainda há linhas após toda a filtragem e limitação
+        total_linhas_a_processar = len(df_para_processar_final)
+        if total_linhas_a_processar == 0:
+            logger.warning("Nenhuma linha restante para processar após todas as filtragens e limites. Encerrando.")
             return
-        
-        logger.info(f"Serão processadas {total_linhas} linhas")
-        
-        # Estimar custo total
-        tokens_entrada_medio = 1700  # Valor médio aproximado
-        tokens_saida_medio = 500  # Valor médio aproximado para 500 palavras
-        custo_estimado_por_item = estimar_custo_gemini(tokens_entrada_medio, tokens_saida_medio)
-        custo_estimado_total = custo_estimado_por_item * total_linhas
-        
-        logger.info(f"Custo estimado total: ${custo_estimado_total:.4f} USD (aproximadamente R${custo_estimado_total*5:.2f})")
-        
+
+        logger.info(f"Serão processadas {total_linhas_a_processar} linhas.")
+        if 'sheet_row_num' in df_para_processar_final.columns:
+             logger.info(f"Linhas da planilha que serão efetivamente processadas (sheet_row_num): {df_para_processar_final['sheet_row_num'].tolist()}")
+
+
+        # Estimar custo total com base nas linhas que serão efetivamente processadas
+        tokens_entrada_medio_estimado = 1700
+        tokens_saida_medio_estimado = 500
+        custo_estimado_por_item_final = estimar_custo_gemini(tokens_entrada_medio_estimado, tokens_saida_medio_estimado)
+        custo_estimado_total_final = custo_estimado_por_item_final * total_linhas_a_processar
+
+        logger.info(f"Custo estimado total para processar {total_linhas_a_processar} itens: ${custo_estimado_total_final:.4f} USD (aproximadamente R${custo_estimado_total_final*5:.2f})")
+
         # Confirmar execução
-        confirmacao = input(f"\nProcessar {total_linhas} itens com custo estimado de R${custo_estimado_total*5:.2f}? (S/N): ").strip().upper()
-        if confirmacao != 'S':
-            logger.info("Operação cancelada pelo usuário. Encerrando.")
+        if not modo_teste: # Não pedir confirmação em modo teste se for processar apenas 1 linha
+             confirmacao = input(f"\nProcessar {total_linhas_a_processar} itens com custo estimado de R${custo_estimado_total_final*5:.2f}? (S/N): ").strip().upper()
+             if confirmacao != 'S':
+                 logger.info("Operação cancelada pelo usuário antes do processamento. Encerrando.")
+                 return
+        
+        # Modo teste (se ativado via CLI) usa apenas a primeira linha do df_para_processar_final
+        # Esta lógica de modo teste via CLI pode ser redundante se a função main já recebe modo_teste=True
+        if modo_teste and total_linhas_a_processar > 0: # Garante que há pelo menos uma linha
+            # Se o modo_teste já está limitando a 1 linha, esta re-fatiamento é segura.
+            # Se o modo_teste é apenas para não salvar, mas processar o 'limite_linhas' do CLI, então não re-fatiar aqui.
+            # A definição original do --teste era "Executa apenas para a primeira linha sem atualizar a planilha"
+            # então, se modo_teste é True, pegamos apenas a primeira linha do que quer que tenha sido selecionado.
+            df_para_processar_final = df_para_processar_final.head(1)
+            total_linhas_a_processar = len(df_para_processar_final) # Atualiza a contagem
+            logger.info(f"EXECUTANDO EM MODO DE TESTE - Apenas a primeira linha selecionada será processada (Sheet Row Num: {df_para_processar_final['sheet_row_num'].iloc[0] if not df_para_processar_final.empty and 'sheet_row_num' in df_para_processar_final.columns else 'N/A'})")
+        elif modo_teste and total_linhas_a_processar == 0:
+            logger.warning("MODO DE TESTE ATIVADO, mas nenhuma linha selecionada para processar.")
             return
-        
-        # Modo teste usa apenas a primeira linha
-        if modo_teste:
-            df_filtrado = df_filtrado.iloc[:1]
-            logger.info("EXECUTANDO EM MODO DE TESTE - Apenas a primeira linha será processada")
-        
+
         # Métricas de custo
         custo_total = 0.0
         tokens_entrada_total = 0
         tokens_saida_total = 0
         
         # Processa cada linha
-        for i, (idx, linha) in enumerate(df_filtrado.iterrows()):
+        for i, (idx, linha) in enumerate(df_para_processar_final.iterrows()):
             try:
                 # Acesso direto às colunas ao invés de extrair_dados_linha
                 id_campanha = str(linha[COLUNAS['id']]) if COLUNAS['id'] < len(linha) else 'Sem-ID'
@@ -1301,7 +1361,7 @@ def main(limite_linhas: int = None, modo_teste: bool = False, categorias_selecio
                     'tema': 'Sem tema',  # Tema não existe na estrutura atual
                 }
                 
-                logger.info(f"Processando linha {i+1}/{len(df_filtrado)}: ID {id_campanha} - {titulo_original} (Sheet Row: {sheet_row_num})")
+                logger.info(f"Processando linha {i+1}/{len(df_para_processar_final)}: ID {id_campanha} - {titulo_original} (Sheet Row: {sheet_row_num})")
                 
                 # LOG ADICIONAL: Verifica os dados enviados ao Gemini
                 logger.debug(f"Enviando para Gemini - ID: {dados.get('id')}, Ancora: '{dados.get('palavra_ancora')}', Titulo Original: '{dados.get('titulo')}'")
@@ -1399,7 +1459,7 @@ def main(limite_linhas: int = None, modo_teste: bool = False, categorias_selecio
         # Exibe resumo
         logger.info(f"\n{'='*50}")
         logger.info(f"RESUMO DE EXECUÇÃO - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        logger.info(f"Total de artigos processados: {len(df_filtrado)}")
+        logger.info(f"Total de artigos processados: {len(df_para_processar_final)}")
         logger.info(f"Tokens de entrada: {tokens_entrada_total}")
         logger.info(f"Tokens de saída: {tokens_saida_total}")
         logger.info(f"Custo total estimado: ${custo_total:.4f} USD (aproximadamente R${custo_total*5:.2f})")
