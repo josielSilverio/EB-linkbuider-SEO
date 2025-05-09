@@ -68,9 +68,22 @@ TÍTULOS JORNALÍSTICOS - REGRAS ESTRITAS DE DIVERSIDADE:
 * Se for relacionada a CASSINO (slots, roleta, blackjack, etc.):
   * Use APENAS exemplos, termos e contextos de jogos de cassino
   * NUNCA mencione apostas esportivas, times, campeonatos ou odds
-* Se for relacionada a APOSTAS ESPORTIVAS (futebol, tênis, etc.):
-  * Use APENAS exemplos, termos e contextos de apostas esportivas
-  * NUNCA mencione nenhuma palavra, termo ou adjetivo que é utilizado para cassino.
+* Se for relacionada a APOSTAS ESPORTIVAS (futebol, vôlei, basquete, tênis, e-sports, etc.):
+  * Use APENAS exemplos, termos e contextos de apostas esportivas. O conteúdo deve ser focado no esporte/campeonato/time/termo específico da {{palavra_ancora}}.
+  * NUNCA mencione nenhuma palavra, termo ou adjetivo que é utilizado primariamente para cassino (ex: "rodadas grátis", "jackpot", "crupiê", a menos que a {{palavra_ancora}} seja especificamente sobre um jogo de cassino com tema esportivo, o que é raro e deve ser tratado com cuidado).
+  * DETALHAMENTO DE ESPORTES E CAMPEONATOS (exemplos, não exaustivo):
+    * **Futebol Nacional Masculino:** Brasileirão (Séries A, B, C, D), Copa do Brasil, Principais Campeonatos Estaduais (Paulista, Carioca, Mineiro, Gaúcho, etc.).
+    * **Futebol Nacional Feminino:** Brasileirão Feminino, principais campeonatos e times.
+    * **Futebol Internacional:** Eurocopa, Copa América, Copa do Mundo, principais ligas europeias (quando o foco for em como brasileiros acompanham/apostam).
+    * **Vôlei:** Superliga Masculina e Feminina, Liga das Nações, Campeonatos Mundiais (foco em participação brasileira ou interesse nacional).
+    * **Basquete:** NBB, NBA (com foco na perspectiva de apostadores brasileiros).
+    * **Futsal:** Liga Nacional de Futsal, principais competições internacionais com relevância para o Brasil.
+    * **Tênis:** Principais Grand Slams (Australian Open, Roland Garros, Wimbledon, US Open) e torneios ATP/WTA com participação de atletas brasileiros ou grande interesse do público nacional.
+    * **E-sports:** Principais campeonatos e jogos com grande base de fãs e mercado de apostas no Brasil (ex: CS:GO/CS2, League of Legends (LoL), Dota 2, Valorant, Free Fire).
+    * **Outras Modalidades:** Outros esportes com procura significativa por apostadores no Brasil (ex: Fórmula 1, MMA/UFC), sempre contextualizando para o público brasileiro.
+  * **Dados e Estatísticas:** Priorize dados e estatísticas do cenário esportivo nacional. Para esportes/campeonatos internacionais, o enfoque deve ser em como impactam o apostador brasileiro ou em dados de popularidade no Brasil.
+  * **Termos Comuns de Apostas Esportivas (exemplos para {{palavra_ancora}}):**
+    * "odds", "odds para [campeonato/jogo]", "aposta simples", "aposta múltipla", "handicap asiático", "handicap europeu", "mercados de apostas", "como apostar em [esporte/time/campeonato]", "apostas esportivas online", "apostas ao vivo em [esporte]", "estratégias de apostas para [esporte]", "palpites [campeonato]", "apostas em [nome do time]", "guia de apostas [nome do campeonato]".
 
 REGRAS OBRIGATÓRIAS:
 - NÃO mencione nomes de casas de apostas ou sites de jogos.
