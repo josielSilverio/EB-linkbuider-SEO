@@ -17,10 +17,12 @@ from src.utils import (
     configurar_logging, 
     limpar_nome_arquivo, 
     identificar_palavras_frequentes_em_titulos, # Importar a nova função
-    contar_tokens # Adicionar contar_tokens
+    contar_tokens, # Adicionar contar_tokens
+    extrair_titulos_por_ancora,
+    identificar_padroes_por_ancora
 )
 from src.sheets_handler import SheetsHandler
-from src.gemini_handler import GeminiHandler, verificar_conteudo_proibido
+from src.gemini_handler import GeminiHandler, verificar_conteudo_proibido, verificar_e_corrigir_titulo
 from src.docs_handler import DocsHandler
 from src.config import (
     gerar_nome_arquivo, 
@@ -1047,7 +1049,7 @@ def processar_linha(linha, indice, df, df_original, modo_teste, spreadsheet_id, 
         )
         
         # Extrai o título do conteúdo gerado (primeira linha não vazia)
-        titulo = extrair_titulo(conteudo_gerado)
+        titulo = extrair_titulo(conteudo_gerado, ancora) # Passar a palavra_ancora aqui
         
         # Gera o nome do arquivo baseado no padrão definido
         nome_arquivo = gerar_nome_arquivo(id=id_campanha, site=site, ancora=ancora)
@@ -1103,21 +1105,40 @@ def processar_linha(linha, indice, df, df_original, modo_teste, spreadsheet_id, 
         logger.exception("Detalhes completos do erro:")
         return False
 
-def extrair_titulo(conteudo):
+def extrair_titulo(conteudo, palavra_ancora: str):
     """
-    Extrai o título do conteúdo gerado (primeira linha não vazia).
+    Extrai o título do conteúdo gerado (primeira linha não vazia) e garante que tenha um comprimento adequado.
+    Também verifica a presença da palavra-âncora.
     """
-    linhas = conteudo.strip().split('\n')
-    for linha in linhas:
-        linha_limpa = linha.strip()
-        if linha_limpa and not linha_limpa.startswith('#'):
-            # Remove marcadores de formatação (** para negrito, etc)
-            return re.sub(r'[*_#]', '', linha_limpa)
+    # A importação de verificar_e_corrigir_titulo já está no escopo global de gemini_handler,
+    # mas para clareza se esta função fosse movida, poderia ser importada aqui.
+    # from src.gemini_handler import verificar_e_corrigir_titulo 
     
-    # Se não encontrar um título claro, usa as primeiras palavras
-    palavras = conteudo.split()[:5]
-    titulo_padrao = ' '.join(palavras) + '...'
-    return titulo_padrao
+    linhas = conteudo.strip().split('\n')
+    for linha_atual in linhas:
+        linha_limpa = linha_atual.strip()
+        if linha_limpa and not linha_limpa.startswith('#'):
+            titulo_bruto = re.sub(r'[*_#]', '', linha_limpa)
+            # Aplica verificação e correção, passando a palavra_ancora
+            titulo_verificado = verificar_e_corrigir_titulo(titulo_bruto, palavra_ancora)
+            if titulo_verificado: # Se retornou um título válido
+                return titulo_verificado
+            # Se retornou None, o título foi rejeitado, continuamos para tentar outra linha ou fallback
+            # Isso pode acontecer se a primeira linha parecer um título mas não tiver a âncora, por exemplo.
+    
+    # Fallback: Se nenhum título claro foi encontrado nas primeiras linhas ou foram rejeitados
+    # Tenta criar um título com as primeiras palavras e a palavra-âncora, e então verifica.
+    palavras_conteudo = conteudo.split()[:7] # Pega um pouco mais para dar contexto
+    titulo_fallback_bruto = ' '.join(palavras_conteudo)
+    if palavra_ancora.lower() not in titulo_fallback_bruto.lower():
+        titulo_fallback_bruto = f"{palavra_ancora}: {titulo_fallback_bruto}"
+    
+    titulo_fallback_verificado = verificar_e_corrigir_titulo(titulo_fallback_bruto, palavra_ancora)
+    if titulo_fallback_verificado:
+        return titulo_fallback_verificado
+    
+    # Se até o fallback falhar, retorna um título genérico com a âncora (menos ideal)
+    return f"Artigo sobre {palavra_ancora} (Título Provisório)"
 
 def apresentar_menu_pasta_drive() -> str:
     """
@@ -1237,6 +1258,26 @@ def main(limite_linhas: int = None, modo_teste: bool = False, categorias_selecio
                     if palavras_a_evitar_no_titulo:
                         logger.info(f"Novos títulos tentarão EVITAR as palavras (normalizadas): {palavras_a_evitar_no_titulo}")
                     # else: Logger dentro da função já informa se nada foi encontrado ou se poucos títulos
+                    
+                    # A lista global de todos os títulos existentes na planilha.
+                    # Esta lista será usada para a verificação de similaridade mais ampla.
+                    todos_os_titulos_da_planilha = titulos_existentes if titulos_existentes else []
+                    
+                    # Agora vamos identificar padrões repetitivos para cada palavra-âncora
+                    logger.info("Analisando títulos por palavra-âncora para identificar padrões repetitivos...")
+                    try:
+                        titulos_por_ancora = extrair_titulos_por_ancora(
+                            df_todos_os_dados, 
+                            COLUNAS['titulo'], 
+                            COLUNAS['palavra_ancora']
+                        )
+                        padroes_por_ancora = identificar_padroes_por_ancora(titulos_por_ancora)
+                        logger.info(f"Identificados padrões repetitivos para {len(padroes_por_ancora)} palavras-âncora")
+                    except Exception as e:
+                        logger.error(f"Erro ao analisar títulos por palavra-âncora: {e}")
+                        logger.exception("Detalhes do erro na análise por palavra-âncora:")
+                        padroes_por_ancora = {}  # Garante que a variável existe em caso de erro
+                    
                 else:
                     logger.info("Nenhum título existente encontrado na coluna para análise de frequência.")
             else:
@@ -1365,31 +1406,148 @@ def main(limite_linhas: int = None, modo_teste: bool = False, categorias_selecio
             logger.debug(f"Dados para Gemini: {dados}")
             
             instrucao_adicional_para_gemini = ""
+            
+            # Verificar se há padrões específicos para evitar com esta palavra-âncora
+            padroes_especificos_ancora = []
+            palavra_ancora_lower = palavra_ancora.lower().strip()
+            if palavra_ancora_lower in padroes_por_ancora:
+                padroes_especificos_ancora = padroes_por_ancora[palavra_ancora_lower]
+                logger.info(f"A palavra-âncora '{palavra_ancora}' tem padrões repetitivos a evitar: {padroes_especificos_ancora}")
+                
+                # Adicionar instrução específica para esta palavra-âncora
+                instrucao_padroes_especificos = (
+                    "\\n\\nREGRAS CRÍTICAS PARA ESTA PALAVRA-ÂNCORA ESPECÍFICA:\\n"
+                    f"- A palavra-âncora '{palavra_ancora}' aparece em vários artigos anteriores!\\n"
+                    f"- Foi detectado que os títulos existentes com '{palavra_ancora}' têm padrões repetitivos.\\n"
+                    f"- NUNCA use os seguintes padrões já utilizados em outros títulos com '{palavra_ancora}':\\n"
+                )
+                
+                for padrao in padroes_especificos_ancora:
+                    instrucao_padroes_especificos += f"  * '{padrao}'\\n"
+                
+                instrucao_padroes_especificos += (
+                    f"- OBRIGATORIAMENTE use uma ABORDAGEM COMPLETAMENTE NOVA para '{palavra_ancora}'\\n"
+                    f"- Considere ÂNGULOS INÉDITOS como:\\n"
+                    f"  * Aspectos históricos de '{palavra_ancora}'\\n"
+                    f"  * Perspectivas técnicas incomuns\\n"
+                    f"  * Comparações surpreendentes\\n"
+                    f"  * Contextos culturais inesperados\\n"
+                    f"  * Use uma pergunta provocativa\\n"
+                    f"  * Use um formato numerado (ex: '7 aspectos surpreendentes...')\\n"
+                    f"  * Use contraste ou negação (ex: 'Além dos mitos...')\\n"
+                )
+                
+                instrucao_adicional_para_gemini += instrucao_padroes_especificos
+            
+            # Adicionar instrução para evitar palavras frequentes gerais
             if palavras_a_evitar_no_titulo:
-                palavras_str = ", ".join([f"'{p}'" for p in palavras_a_evitar_no_titulo])
-                instrucao_adicional_para_gemini = f"\\n\\nCRÍTICO: Para o TÍTULO do artigo, EVITE RIGOROSAMENTE o uso das seguintes palavras (ou suas variações próximas, como plural ou gênero), pois foram detectadas como excessivamente repetidas em títulos anteriores: {palavras_str}. Foque em sinônimos e estruturas completamente diferentes para diversificar os títulos e manter a originalidade."
-                logger.info(f"Instrução adicional para Gemini (evitar palavras no título): {instrucao_adicional_para_gemini}")
+                # Separa palavras e frases
+                palavras_individuais = [p for p in palavras_a_evitar_no_titulo if ' ' not in p]
+                frases_ou_sequencias = [p for p in palavras_a_evitar_no_titulo if ' ' in p]
+                
+                instrucao_adicional_para_gemini += "\\n\\nCRÍTICO: Para o TÍTULO do artigo:"
+                
+                # Adiciona instrução para palavras individuais, se houver
+                if palavras_individuais:
+                    palavras_str = ", ".join([f"'{p}'" for p in palavras_individuais])
+                    instrucao_adicional_para_gemini += f"\\n1. EVITE RIGOROSAMENTE o uso das seguintes PALAVRAS (ou suas variações próximas, como plural ou gênero), pois foram detectadas como excessivamente repetidas em títulos anteriores: {palavras_str}."
+                
+                # Adiciona instrução para frases ou sequências, se houver
+                if frases_ou_sequencias:
+                    frases_str = ", ".join([f"'{p}'" for p in frases_ou_sequencias])
+                    instrucao_adicional_para_gemini += f"\\n2. NUNCA use os seguintes PADRÕES ou SEQUÊNCIAS DE PALAVRAS: {frases_str}. Estas estruturas são excessivamente repetitivas nos títulos existentes."
+                
+                # Instrução geral de diversificação
+                instrucao_adicional_para_gemini += "\\n3. Foque em sinônimos e estruturas completamente diferentes para diversificar os títulos e manter a originalidade.\\n4. Use perguntas, contrastes, dados surpreendentes ou revelações para criar estruturas sintáticas diversificadas.\\n5. NUNCA comece o título com os mesmos padrões identificados acima."
+                
+            if instrucao_adicional_para_gemini:
+                logger.info(f"Instrução adicional para Gemini: {instrucao_adicional_para_gemini}")
 
             logger.info(f"Gerando conteúdo com o Gemini para '{palavra_ancora}'...")
-            conteudo, metricas, info_link = gemini.gerar_conteudo(
-                dados,
-                instrucao_adicional=instrucao_adicional_para_gemini
-            )
-            
-            # ... (restante do loop: métricas, extrair título, criar doc, atualizar planilha) ...
-            custo_total += metricas['custo_estimado']
-            tokens_entrada_total += metricas['tokens_entrada']
-            tokens_saida_total += metricas['tokens_saida']
-            
-            titulo_gerado = extrair_titulo(conteudo)
-            logger.info(f"Título gerado: {titulo_gerado}")
+
+            # Extrai títulos anteriores para esta palavra-âncora
+            titulos_anteriores_mesma_ancora = []
+            if 'titulos_por_ancora' in locals() and palavra_ancora_lower in titulos_por_ancora:
+                titulos_anteriores_mesma_ancora = titulos_por_ancora[palavra_ancora_lower]
+                logger.info(f"Encontrados {len(titulos_anteriores_mesma_ancora)} títulos anteriores para '{palavra_ancora}'")
+                for i, titulo in enumerate(titulos_anteriores_mesma_ancora[:3], 1):  # Mostra apenas os 3 primeiros
+                    logger.info(f"  Título anterior {i}: {titulo}")
+
+            # Tenta gerar conteúdo até 3 vezes se título for rejeitado
+            max_tentativas = 3
+            tentativa = 0
+            titulo_aprovado = False
+            conteudo_final = None
+            metricas_final = None
+            info_link_final = None
+
+            while tentativa < max_tentativas and not titulo_aprovado:
+                tentativa += 1
+                logger.info(f"Tentativa {tentativa}/{max_tentativas} para gerar título único para '{palavra_ancora}'...")
+                
+                # Aumenta as instruções de diversidade a cada tentativa
+                if tentativa > 1:
+                    instrucao_adicional_para_gemini += f"\\n\\nNOVA TENTATIVA {tentativa}: O título anterior foi REJEITADO por não ser original ou por não conter a palavra-âncora '{palavra_ancora}' ou por terminar com reticências! OBRIGATORIAMENTE use um estilo COMPLETAMENTE DIFERENTE desta vez. EVITE TOTALMENTE qualquer semelhança com títulos anteriores. ASSEGURE que '{palavra_ancora}' esteja no título e que ele não termine com '...'."
+                
+                try:
+                    conteudo, metricas, info_link = gemini.gerar_conteudo(
+                        dados,
+                        instrucao_adicional=instrucao_adicional_para_gemini,
+                        titulos_existentes=todos_os_titulos_da_planilha # Passa todos os títulos existentes para verificação global
+                    )
+                    
+                    # Passa palavra_ancora para extrair_titulo, que por sua vez passará para verificar_e_corrigir_titulo
+                    titulo_gerado = extrair_titulo(conteudo, palavra_ancora)
+                    logger.info(f"Título extraído e verificado (tentativa {tentativa}): {titulo_gerado}")
+                    
+                    # Verifica se o título atende aos critérios
+                    # A função verificar_titulo_gerado agora também espera palavra_ancora
+                    # e titulos_existentes (que para esta verificação mais focada, usamos os da mesma âncora)
+                    if gemini.verificar_titulo_gerado(titulo_gerado, palavra_ancora, palavras_a_evitar_no_titulo, titulos_anteriores_mesma_ancora):
+                        titulo_aprovado = True
+                        conteudo_final = conteudo
+                        metricas_final = metricas
+                        info_link_final = info_link
+                        logger.info(f"✓ Título aprovado: {titulo_gerado}")
+                    else:
+                        logger.warning(f"✗ Título rejeitado: {titulo_gerado}")
+                        # Adiciona o padrão do início do título às palavras a evitar
+                        palavras = titulo_gerado.split()
+                        if len(palavras) >= 3:
+                            padrao_a_evitar = ' '.join(palavras[:3]).lower()
+                            if padrao_a_evitar not in palavras_a_evitar_no_titulo:
+                                palavras_a_evitar_no_titulo.append(padrao_a_evitar)
+                                logger.info(f"Adicionado padrão '{padrao_a_evitar}' às palavras a evitar")
+                except Exception as e:
+                    logger.error(f"Erro na tentativa {tentativa}: {str(e)}")
+                    if tentativa == max_tentativas:
+                        raise
+                    time.sleep(2)  # Pausa antes de tentar novamente
+
+            # Se não conseguiu aprovar nenhum título após todas as tentativas, usa o último gerado
+            if not titulo_aprovado:
+                logger.warning("Não foi possível gerar um título que atenda a todos os critérios após várias tentativas")
+                conteudo_final = conteudo
+                metricas_final = metricas
+                info_link_final = info_link
+                titulo_gerado = extrair_titulo(conteudo_final, palavra_ancora)
+                logger.warning(f"Usando o último título gerado: {titulo_gerado}")
+
+            # Atualiza totais
+            custo_total += metricas_final['custo_estimado']
+            tokens_entrada_total += metricas_final['tokens_entrada']
+            tokens_saida_total += metricas_final['tokens_saida']
+
+            # Continua com o processamento usando o conteúdo final
+            conteudo = conteudo_final
+            info_link = info_link_final
             
             try:
                 nome_arquivo = gerar_nome_arquivo(id_campanha, site, palavra_ancora, titulo_gerado)
             except Exception as e:
                 logger.error(f"Erro ao gerar nome de arquivo: {e}. Usando fallback.")
                 nome_arquivo = f"{id_campanha} - {site} - Artigo"
-            
+
             logger.info(f"Criando documento '{nome_arquivo}' na pasta {DRIVE_FOLDER_ID}...")
             document_id, document_url = docs.criar_documento(
                 titulo_gerado,
@@ -1398,7 +1556,7 @@ def main(limite_linhas: int = None, modo_teste: bool = False, categorias_selecio
                 info_link,
                 target_folder_id=DRIVE_FOLDER_ID
             )
-            
+
             if not modo_teste:
                 try:
                     col_titulo_letra = sheets.get_column_letter(COLUNAS['titulo'])
@@ -1423,10 +1581,10 @@ def main(limite_linhas: int = None, modo_teste: bool = False, categorias_selecio
             else:
                 logger.info(f"[MODO TESTE] Documento gerado: {document_url} (Não atualizado na planilha)")
                 logger.info(f"[MODO TESTE] Título gerado: {titulo_gerado} (Não atualizado na planilha)")
-            
-            time.sleep(DELAY_ENTRE_CHAMADAS_GEMINI) # Pausa configurável
 
-        # ... (resumo de execução, chamadas de verificação de duplicatas, etc.) ...
+            time.sleep(DELAY_ENTRE_CHAMADAS_GEMINI) # Pausa configurável
+        
+        # Resumo de execução, chamadas de verificação de duplicatas, etc.
         logger.info(f"\n{'='*50}")
         logger.info(f"RESUMO DE EXECUÇÃO - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         logger.info(f"Total de artigos processados: {total_linhas_a_processar}")

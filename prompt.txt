@@ -52,7 +52,8 @@ Gere o texto seguindo estas diretrizes:
 
 1.  **CRIATIVIDADE E ORIGINALIDADE:**
     *   **ABSOLUTAMENTE PROIBIDO TÍTULOS OU CONTEÚDOS REPETITIVOS.** Cada artigo deve ser único na sua abordagem e título.
-    *   **NÃO USE ESTRUTURAS REPETITIVAS.** Varie a forma como os artigos são organizados.
+    *   **NÃO USE ESTRUTURAS REPETITIVAS OU PADRÕES NUMÉRICOS IDÊNTICOS NOS TÍTULOS** (Ex: "7 Dicas...", "5 Segredos..."). Se uma estrutura assim for usada, ela não deve ser repetida para outros temas por um longo período. Varie a forma como os artigos são organizados e os títulos são construídos.
+    *   *** Nunca repetir palavras, temas, idéias e temas já gerados antes, seja na mesma requisição ou anterior.
     *   **EVITE CLICHÊS E FRASES FEITAS.** Busque ângulos surpreendentes e linguagem fresca.
     *   **NÃO USE TÍTULOS NO ESTILO "Domine X, Domine Y".** Crie títulos que gerem curiosidade e sejam específicos ao tema.
 
@@ -67,7 +68,7 @@ Gere o texto seguindo estas diretrizes:
     *   A lista de exemplos pode crescer. Use **todos** os exemplos como inspiração para gerar variedade.
 
 4.  **OTIMIZAÇÃO E ESTRUTURA:**
-    *   **Título Final:** Deve ser altamente criativo, temático, otimizado para SEO e gerar CTR.
+    *   **Título Final:** Deve ser altamente criativo, temático, otimizado para SEO e gerar CTR. **OBRIGATORIAMENTE deve conter a `{{palavra_ancora}}` e NÃO PODE terminar com reticências (...) ou ser uma frase incompleta.**
     *   **Estrutura:** Use títulos (H2, H3) e subtítulos para organizar. Parágrafos curtos. Listas quando aplicável.
     *   **Tamanho:** Mínimo de 8 parágrafos e 400 palavras.
     *   **Link Âncora:** Insira a `{{palavra_ancora}}` como texto âncora de um link para a `{{url_ancora}}` **naturalmente** dentro dos 3 primeiros parágrafos.

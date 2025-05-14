@@ -11,9 +11,11 @@ from src.config import (
     GEMINI_MODEL,
     GEMINI_MAX_OUTPUT_TOKENS,
     GEMINI_TEMPERATURE,
-    estimar_custo_gemini
+    estimar_custo_gemini,
+    GEMINI_PRECO_ENTRADA as GEMINI_INPUT_COST_PER_1K,
+    GEMINI_PRECO_SAIDA as GEMINI_OUTPUT_COST_PER_1K
 )
-from src.utils import contar_tokens, substituir_links_markdown
+from src.utils import contar_tokens, substituir_links_markdown, normalizar_texto
 
 def qualquer_palavra_em_outra(palavras1, palavras2):
     """
@@ -121,96 +123,93 @@ def extrair_instrucao_especial_jogo(palavra_ancora: str) -> str:
     return "Destaque o que torna este jogo único entre seus concorrentes. Explique as mecânicas principais, recursos especiais e elementos visuais distintivos. Mantenha o foco nas características específicas deste jogo."
 
 
-def verificar_e_corrigir_titulo(titulo: str) -> str:
+def verificar_e_corrigir_titulo(titulo: str, palavra_ancora: str) -> Optional[str]:
     """
-    Verifica e corrige o comprimento do título, garantindo que tenha entre 9-15 palavras.
+    Verifica e corrige o comprimento do título, garantindo que tenha entre 9-15 palavras,
+    não ultrapasse 100 caracteres, contenha a palavra-âncora e não termine com reticências.
     
     Args:
         titulo: O título a ser verificado
+        palavra_ancora: A palavra-âncora que deve estar presente no título
         
     Returns:
-        Título corrigido ou original se estiver dentro dos limites
+        Título corrigido e válido, ou None se não puder ser validado/corrigido.
     """
+    logger = logging.getLogger('seo_linkbuilder.gemini')
+    
     if not titulo:
-        return titulo
+        logger.warning("Título vazio recebido para verificação.")
+        return None
     
     # Remove espaços extras e quebras de linha
-    titulo = re.sub(r'\s+', ' ', titulo).strip()
+    titulo_processado = re.sub(r'\s+', ' ', titulo).strip()
     
+    # Verificar se a string é realmente o conteúdo completo em vez de um título
+    if len(titulo_processado) > 250:  # Se é muito longo, provavelmente não é um título
+        palavras_titulo = titulo_processado.split()[:10]
+        titulo_processado = " ".join(palavras_titulo)
+        logger.warning(f"Texto muito longo detectado como título. Considerado como: {titulo_processado}")
+        # Adiciona reticências aqui porque é um truncamento de um texto maior, não um título finalizado com "..."
+        if not titulo_processado.endswith("..."):
+             titulo_processado += "..."
+
+
+    # 1. Verificar e remover reticências do final
+    if titulo_processado.endswith("..."):
+        titulo_processado = titulo_processado[:-3].strip()
+        logger.info(f"Reticências removidas do final do título: '{titulo_processado}'")
+        if not titulo_processado: # Se o título ficou vazio após remover "..."
+            logger.warning("Título ficou vazio após remover reticências.")
+            return None
+
+    # 2. Verificar presença da palavra-âncora (case-insensitive)
+    if palavra_ancora.lower() not in titulo_processado.lower():
+        logger.warning(f"Palavra-âncora '{palavra_ancora}' não encontrada no título: '{titulo_processado}'. O título será rejeitado.")
+        return None # Rejeita o título se a palavra-âncora não estiver presente
+
     # Conta palavras
-    palavras = titulo.split()
+    palavras = titulo_processado.split()
     num_palavras = len(palavras)
     
-    # Verifica se está dentro dos limites
-    if 9 <= num_palavras <= 15:
-        return titulo
-    
-    # Correção para títulos muito curtos
-    if num_palavras < 9:
-        # Identifica o tema principal
-        jogo = ""
-        temas = ["olympus", "zeus", "fortuna", "aviator", "blackjack", "roleta", "poker", "slot"]
-        for tema in temas:
-            if tema.lower() in titulo.lower():
-                jogo = tema
-                break
-        
-        # Adiciona qualificadores para expandir o título
-        qualificadores = [
-            "com mecânicas inovadoras e design impressionante",
-            "com recursos exclusivos e jogabilidade envolvente",
-            "uma nova abordagem para jogos de cassino online",
-            "combinando estratégia e chance de maneira equilibrada",
-            "revolucionando a experiência de jogos digitais modernos"
-        ]
-        
-        # Escolhe um qualificador que não repita palavras já presentes
-        random.shuffle(qualificadores)
-        for qualificador in qualificadores:
-            if not any(q.lower() in titulo.lower() for q in qualificador.split()):
-                novo_titulo = f"{titulo}: {qualificador}"
-                if len(novo_titulo.split()) >= 9:
-                    return novo_titulo
-        
-        # Se nenhum qualificador funcionou, adiciona um genérico
-        return f"{titulo}: uma abordagem inovadora para jogos de cassino digitais"
-    
-    # Correção para títulos muito longos
-    else:  # num_palavras > 15
-        # Tenta remover palavras menos importantes mantendo a estrutura
-        artigos_e_conjuncoes = ["e", "o", "a", "os", "as", "um", "uma", "uns", "umas", "com", "para", "que", "de", "do", "da"]
-        adjetivos_comuns = ["incrível", "impressionante", "fantástico", "maravilhoso", "excelente", "surpreendente"]
-        
-        # Primeiro tenta remover adjetivos não essenciais
-        nova_lista = []
-        removidos = 0
-        palavras_para_remover = num_palavras - 15
-        
-        for palavra in palavras:
-            if removidos < palavras_para_remover and palavra.lower() in adjetivos_comuns:
-                removidos += 1
-                continue
-            nova_lista.append(palavra)
-        
-        # Se ainda está longo, tenta remover artigos e conjunções do meio (não do início)
-        if len(nova_lista) > 15:
-            temp_lista = [nova_lista[0]]  # Mantém a primeira palavra
-            removidos = 0
-            palavras_para_remover = len(nova_lista) - 15
+    # Limita o comprimento em caracteres
+    MAX_CARACTERES = 100
+    if len(titulo_processado) > MAX_CARACTERES:
+        logger.warning(f"Título excede {MAX_CARACTERES} caracteres: '{titulo_processado}' ({len(titulo_processado)} caracteres)")
+        # Reduz o título para caber no limite de caracteres, tenta não cortar palavras-chave
+        if palavra_ancora.lower() in titulo_processado.lower():
+            # Tenta preservar a palavra_ancora ao truncar
+            idx_ancora = titulo_processado.lower().find(palavra_ancora.lower())
+            fim_ancora = idx_ancora + len(palavra_ancora)
             
-            for palavra in nova_lista[1:]:
-                if removidos < palavras_para_remover and palavra.lower() in artigos_e_conjuncoes:
-                    removidos += 1
-                    continue
-                temp_lista.append(palavra)
-            
-            nova_lista = temp_lista
+            if fim_ancora > MAX_CARACTERES - 20 and len(titulo_processado) > MAX_CARACTERES : # Se a âncora está no final e estoura
+                 # Trunca antes da âncora e tenta re-adicionar, se possível
+                parte_antes = titulo_processado[:idx_ancora].rsplit(' ',1)[0] if idx_ancora >0 else ""
+                novo_titulo_tentativa = f"{parte_antes} {palavra_ancora}"
+                if len(novo_titulo_tentativa) <= MAX_CARACTERES :
+                    titulo_processado = novo_titulo_tentativa.strip()
+                else: # Se mesmo assim não cabe, usa o método padrão de truncamento
+                    titulo_processado = titulo_processado[:MAX_CARACTERES].rsplit(' ', 1)[0]
+
+            elif len(titulo_processado) > MAX_CARACTERES : # Ancora no inicio ou meio
+                 titulo_processado = titulo_processado[:MAX_CARACTERES].rsplit(' ', 1)[0]
+        else: # Se âncora não está (não deveria acontecer devido à checagem anterior), trunca normalmente
+            titulo_processado = titulo_processado[:MAX_CARACTERES].rsplit(' ', 1)[0]
+
+        logger.info(f"Título reduzido para: '{titulo_processado}' ({len(titulo_processado)} caracteres)")
+        palavras = titulo_processado.split() # Recalcula palavras
+        num_palavras = len(palavras)
+
+    # Verifica se está dentro dos limites de palavras (9-15)
+    if not (9 <= num_palavras <= 15):
+        logger.warning(f"Título com número de palavras fora do intervalo (9-15): '{titulo_processado}' ({num_palavras} palavras).")
+        # Títulos fora da contagem de palavras após ajustes são rejeitados para nova geração.
+        # A lógica de expansão/redução anterior era muito propensa a criar títulos de baixa qualidade.
+        # É melhor o Gemini tentar novamente com as restrições do prompt.
+        return None 
         
-        # Se ainda está longo, remove palavras do final (preservando a estrutura principal)
-        if len(nova_lista) > 15:
-            nova_lista = nova_lista[:15]
-        
-        return " ".join(nova_lista)
+    # Se todas as verificações passaram
+    logger.info(f"Título validado e corrigido: '{titulo_processado}'")
+    return titulo_processado
 
 
 class GeminiHandler:
@@ -233,6 +232,9 @@ class GeminiHandler:
                 "max_output_tokens": GEMINI_MAX_OUTPUT_TOKENS,
             }
             self.temperatura_atual = GEMINI_TEMPERATURE
+            # Adiciona configuração de safety settings (pode ser vazia)
+            self.safety_settings = []
+            
             self.model = genai.GenerativeModel(
                 model_name=GEMINI_MODEL,
                 generation_config=generation_config
@@ -270,53 +272,147 @@ class GeminiHandler:
         if 'titulo' in dados and dados['titulo'] and dados['titulo'].strip():
             return prompt  # Se já tem título, não precisa modificar
         
-        # Palavras de início comuns que queremos evitar
-        inicios_comuns = [
-            "segredos", "o poder", "a magia", "o guia", "como", "descubra", 
-            "explorando", "o mundo", "7 dicas", "tudo sobre", "a arte de",
-            "o mito", "a lenda", "desvendando", "jornada"
+        # Palavras e frases de início comuns que queremos evitar - CRÍTICO PARA DIVERSIDADE
+        padroes_proibidos = [
+            # Artigos definidos + substantivos comuns
+            "a evolu", "a analis", "a histor", "a experienc", "a jornada", "a transformac", 
+            "a fascinant", "a importanc", "a influenc", "o impacto", "o guia", "o manual",
+            "o segredo", "o papel", "o poder", "o jeito", "o metodo", "a arte", "a magia",
+            "a tecnica", "o jogo", "a estrateg", "a mecanic", "as vantagens", "as possibilidades",
+            
+            # Adjetivos iniciais comuns
+            "fascinante", "incrivel", "surpreendente", "impressionante", "inacreditavel",
+            "fundamental", "essencial", "crucial", "importante", "significativo", "inovador",
+            "revolucionario", "tradicional", "classico", "moderno", "contemporaneo", "completo",
+            "detalhado", "abrangente", "definitivo", "unico", "exclusivo", "especial",
+            
+            # Construções comuns
+            "como dominar", "como jogar", "como aproveitar", "como utilizar", "como entender",
+            "dicas para", "truques para", "segredos para", "estrategias para", "metodos para",
+            "guia completo", "guia definitivo", "guia pratico", "guia essencial", "manual de",
+            "tudo sobre", "tudo que", "tudo o que", "o que voce", "o que todo", "por que escolher",
+            
+            # Estruturas de listas
+            "top", "melhores", "principais", "essenciais", "fundamentais", "cruciais", "basicas",
+            
+            # Padrões específicos identificados como repetitivos
+            "uma analise", "uma abordagem", "uma visao", "uma perspectiva", "uma exploracao",
+            "entendendo", "compreendendo", "descobrindo", "explorando", "desvendando", "revelando",
+            "dominando", "aprendendo", "conhecendo", "desenvolvendo", "aprimorando", "maximizando"
         ]
         
-        # Padrões estruturais comuns a evitar
-        padroes_comuns = [
-            "[substantivo]: uma [jornada/experiência]",
-            "o [substantivo] de [jogo]",
-            "[jogo]: [substantivo] e [substantivo]"
+        # Rotação obrigatória de estruturas (12 tipos diferentes)
+        estruturas_rotativas = [
+            # 1. PERGUNTA PROVOCATIVA
+            "Por que {PALAVRA_ANCORA} continua fascinando jogadores mesmo após anos de lançamento?",
+            "O que torna {PALAVRA_ANCORA} tão singular no universo dos jogos de cassino online?",
+            "Onde encontrar as informações mais precisas sobre estratégias em {PALAVRA_ANCORA}?",
+            "Qual o segredo por trás do design imersivo que caracteriza {PALAVRA_ANCORA}?",
+            
+            # 2. DADOS NUMÉRICOS
+            "5 fatores que contribuem para a popularidade crescente de {PALAVRA_ANCORA} entre brasileiros",
+            "7 conceitos essenciais para compreender a matemática por trás de {PALAVRA_ANCORA}",
+            "3 razões pelas quais {PALAVRA_ANCORA} atrai tanto jogadores iniciantes quanto veteranos",
+            "10 curiosidades pouco conhecidas que explicam o fenômeno {PALAVRA_ANCORA} na atualidade",
+            
+            # 3. CONTRASTE/OPOSIÇÃO
+            "Entre sorte e estratégia: {PALAVRA_ANCORA} analisado sob perspectivas complementares",
+            "Mito versus realidade: o que jogadores precisam saber sobre {PALAVRA_ANCORA}",
+            "Tradição e inovação: como {PALAVRA_ANCORA} equilibra elementos clássicos e modernos",
+            "Simplicidade aparente, complexidade real: desvendando as camadas de {PALAVRA_ANCORA}",
+            
+            # 4. NARRATIVA HISTÓRICA
+            "Das mesas europeias para o mundo digital: traçando a evolução de {PALAVRA_ANCORA}",
+            "Do nicho à popularidade global: a trajetória surpreendente de {PALAVRA_ANCORA}",
+            "Origens e transformações: como {PALAVRA_ANCORA} se adaptou às novas gerações",
+            "Momentos decisivos que definiram o desenvolvimento e posicionamento de {PALAVRA_ANCORA}",
+            
+            # 5. ANÁLISE TÉCNICA
+            "Mecânicas fundamentais que fazem de {PALAVRA_ANCORA} um exemplo de design equilibrado",
+            "Elementos estruturais que explicam o engajamento duradouro com {PALAVRA_ANCORA}",
+            "Padrões algorítmicos presentes em {PALAVRA_ANCORA} e seus efeitos na experiência",
+            "Dissecando as camadas técnicas que compõem a jogabilidade única de {PALAVRA_ANCORA}",
+            
+            # 6. FRASE INACABADA
+            "Quando {PALAVRA_ANCORA} transcende as expectativas tradicionais de seu gênero...",
+            "Enquanto especialistas debatem estratégias para {PALAVRA_ANCORA}, jogadores descobrem...",
+            "Mesmo entre tantas opções no mercado, {PALAVRA_ANCORA} continua relevante porque...",
+            "Para além do entretenimento básico, {PALAVRA_ANCORA} representa um fenômeno cultural...",
+            
+            # 7. CITAÇÃO/FRASE DE EFEITO
+            "Simplesmente revolucionário: por que {PALAVRA_ANCORA} redefine padrões na indústria",
+            "Impossível ignorar: como {PALAVRA_ANCORA} conquistou seu espaço no hall da fama",
+            "Mais que um jogo, uma experiência: dissecando o fenômeno {PALAVRA_ANCORA}",
+            "Além das expectativas: o impacto cultural de {PALAVRA_ANCORA} em diferentes mercados",
+            
+            # 8. IMPERATIVO
+            "Descubra por que {PALAVRA_ANCORA} permanece relevante mesmo com tantas alternativas",
+            "Entenda os mecanismos psicológicos que fazem de {PALAVRA_ANCORA} tão atraente",
+            "Conheça as nuances estratégicas que podem transformar sua experiência com {PALAVRA_ANCORA}",
+            "Explore as dimensões culturais e sociais que cercam o universo de {PALAVRA_ANCORA}",
+            
+            # 9. PARADOXO
+            "Simples na aparência, complexo na execução: {PALAVRA_ANCORA} sob análise profunda",
+            "Acessível para iniciantes, desafiador para veteranos: o equilíbrio em {PALAVRA_ANCORA}",
+            "Aleatório mas previsível: compreendendo a matemática que governa {PALAVRA_ANCORA}",
+            "Tradicional e inovador simultaneamente: o caso fascinante de {PALAVRA_ANCORA}",
+            
+            # 10. MOVIMENTO/CICLO
+            "Do nicho ao mainstream: como {PALAVRA_ANCORA} transformou-se em fenômeno cultural",
+            "Da criação ao reconhecimento global: jornada histórica de {PALAVRA_ANCORA}",
+            "Entre altos e baixos: a resiliente trajetória de {PALAVRA_ANCORA} no mercado",
+            "Do desenvolvimento à consolidação: marcos importantes na história de {PALAVRA_ANCORA}",
+            
+            # 11. IMPACTO
+            "Como {PALAVRA_ANCORA} influenciou toda uma geração de jogos similares",
+            "Por que {PALAVRA_ANCORA} continua impactando o comportamento dos jogadores",
+            "De que forma {PALAVRA_ANCORA} redefiniu expectativas na indústria do entretenimento",
+            "Em que medida {PALAVRA_ANCORA} contribuiu para a evolução dos jogos online",
+            
+            # 12. PSICOLOGIA
+            "Gatilhos psicológicos que explicam o fascínio duradouro por {PALAVRA_ANCORA}",
+            "Mecanismos cognitivos ativados durante sessões de {PALAVRA_ANCORA}",
+            "Aspectos emocionais envolvidos na experiência imersiva de {PALAVRA_ANCORA}",
+            "Processos mentais que tornam {PALAVRA_ANCORA} tão envolvente para diferentes perfis"
         ]
         
-        # Regra obrigatória de comprimento do título
-        regra_comprimento = (
-            "REGRA OBRIGATÓRIA DE COMPRIMENTO DO TÍTULO:\n"
-            "- O título DEVE ter entre 9 e 15 palavras, nem mais nem menos.\n"
-            "- Conte as palavras antes de finalizar o título e ajuste se necessário.\n"
-            "- Esta é uma regra INVIOLÁVEL - títulos muito curtos ou muito longos serão rejeitados.\n"
+        # Seleciona aleatoriamente um modelo de cada categoria para sugerir ao Gemini
+        estruturas_selecionadas = []
+        for i in range(0, len(estruturas_rotativas), 4):
+            grupo = estruturas_rotativas[i:i+4]
+            estruturas_selecionadas.append(random.choice(grupo))
+        
+        # Embaralha as estruturas selecionadas para maior diversidade
+        random.shuffle(estruturas_selecionadas)
+        
+        # Instruções específicas sobre diversidade de títulos
+        instrucoes_diversidade = (
+            "\n\nINSTRUÇÕES CRÍTICAS PARA GARANTIR TÍTULOS ÚNICOS E DIVERSIFICADOS:\n"
+            f"1. É ABSOLUTAMENTE PROIBIDO começar o título com qualquer dos seguintes padrões (ou suas variações): {', '.join(padroes_proibidos[:20])}...\n"
+            "2. PROIBIDO usar ARTIGOS DEFINIDOS no início do título (A, O, As, Os).\n"
+            "3. PROIBIDO usar QUALQUER ADJETIVO no início do título.\n"
+            "4. PROIBIDO iniciar com 'Uma análise', 'Um guia', ou estruturas similares.\n"
+            "5. OBRIGATÓRIO: Use uma abordagem criativa e única, evitando QUALQUER estrutura já comum em blogs.\n\n"
+            "Para ajudar, aqui estão algumas ESTRUTURAS APROVADAS que você pode ADAPTAR (mas não copiar exatamente):\n"
         )
         
-        # Se é um jogo de mitologia ou deuses, adicione instruções específicas
-        palavra_ancora = dados.get('palavra_ancora', '').lower()
-        if any(termo in palavra_ancora for termo in ['olympus', 'zeus', 'thor', 'viking', 'egypt', 'maya', 'aztec']):
-            instrucao_especifica = (
-                "REGRA ESPECIAL PARA ESTE TÍTULO:\n"
-                "- NÃO comece com o nome de deuses, mitologias ou locais míticos\n"
-                "- Evite COMPLETAMENTE começar com as palavras 'Segredos', 'Poder', 'Jornada', 'Mito', 'Guia'\n"
-                "- Crie um título que não se pareça com NENHUM outro já usado para jogos similares\n"
-                "- Obrigatoriamente use uma abordagem que não envolva a palavra 'experiência' ou 'jornada'\n"
-                + regra_comprimento
-            )
-            prompt += "\n" + instrucao_especifica
+        # Adiciona 5 estruturas aleatórias das selecionadas como exemplos
+        exemplos_estruturas = random.sample(estruturas_selecionadas, min(5, len(estruturas_selecionadas)))
+        for i, exemplo in enumerate(exemplos_estruturas, 1):
+            if '{PALAVRA_ANCORA}' in exemplo:
+                # Substitui o placeholder pela palavra real
+                palavra_ancora = dados.get('palavra_ancora', 'este jogo')
+                exemplo = exemplo.replace('{PALAVRA_ANCORA}', palavra_ancora)
+            instrucoes_diversidade += f"- Exemplo {i}: \"{exemplo}\"\n"
         
-        # Para outros tipos de jogos, adicione instruções gerais
-        else:
-            instrucao_geral = (
-                "REGRA ESPECIAL PARA ESTE TÍTULO:\n"
-                "- Use uma estrutura completamente diferente dos exemplos mostrados\n"
-                "- Evite começar com qualquer palavra comum em títulos de artigos\n"
-                "- Crie um título que poderia se destacar em uma revista premium\n"
-                + regra_comprimento
-            )
-            prompt += "\n" + instrucao_geral
+        # Adiciona aviso final sobre a importância da diversidade
+        instrucoes_diversidade += (
+            "\nAVISO FINAL: Qualquer título que começar com estruturas comuns como \"A Evolução\", \"A Análise\", "
+            "ou \"A Experiência\" será REJEITADO e o artigo terá que ser refeito. Use criatividade para evitar padrões!"
+        )
         
-        return prompt
+        # Adiciona as instruções ao prompt original
+        return prompt + instrucoes_diversidade
 
     
     
@@ -396,13 +492,140 @@ class GeminiHandler:
             self.logger.error(f"Erro ao construir prompt: {e}")
             raise
 
-    def gerar_conteudo(self, dados: Dict[str, str], instrucao_adicional: str = None) -> Tuple[str, Dict[str, float], Optional[Dict]]:
+    def verificar_titulo_gerado(self, titulo: str, palavra_ancora: str, palavras_a_evitar: list, titulos_existentes: list = None) -> bool:
+        """
+        Verifica se o título gerado contém palavras ou padrões proibidos, a palavra-âncora e não termina com reticências.
+        
+        Args:
+            titulo: O título gerado
+            palavra_ancora: A palavra-âncora que deve estar presente
+            palavras_a_evitar: Lista de palavras e frases a evitar
+            titulos_existentes: Lista de títulos já existentes para verificar similaridade
+            
+        Returns:
+            True se o título é aceitável, False caso contrário
+        """
+        if not titulo:
+            self.logger.warning("Título vazio recebido em verificar_titulo_gerado.")
+            return False
+        
+        titulo_norm = normalizar_texto(titulo.lower())
+        palavra_ancora_norm = normalizar_texto(palavra_ancora.lower())
+
+        # 1. Verificar presença da palavra-âncora
+        if palavra_ancora_norm not in titulo_norm:
+            self.logger.warning(f"Palavra-âncora '{palavra_ancora}' não encontrada no título '{titulo}' durante a verificação.")
+            return False
+
+        # 2. Verificar se termina com reticências
+        if titulo.strip().endswith("..."):
+            self.logger.warning(f"Título '{titulo}' termina com reticências.")
+            return False
+
+        # 3. Verifica se o título é muito similar a algum título existente
+        if titulos_existentes:
+            for titulo_existente in titulos_existentes:
+                titulo_existente_norm = normalizar_texto(titulo_existente.lower())
+                palavras_titulo = set(titulo_norm.split())
+                palavras_existente = set(titulo_existente_norm.split())
+                
+                # Ignora palavras muito curtas na comparação de similaridade
+                palavras_titulo_filtradas = {p for p in palavras_titulo if len(p) > 2}
+                palavras_existente_filtradas = {p for p in palavras_existente if len(p) > 2}
+
+                if not palavras_titulo_filtradas or not palavras_existente_filtradas: # Evita divisão por zero se um dos títulos for só palavras curtas
+                    continue
+
+                palavras_comuns = palavras_titulo_filtradas.intersection(palavras_existente_filtradas)
+                
+                # Similaridade mais rigorosa: Jaccard Index > 0.5 (ou 50% de sobreposição de palavras significativas)
+                # E verifica se o início do título é idêntico (padrões como "7 alguma coisa")
+                similaridade_jaccard = len(palavras_comuns) / len(palavras_titulo_filtradas.union(palavras_existente_filtradas))
+                
+                # Verificação de padrão numérico inicial (ex: "7 Dicas...", "5 Segredos...")
+                match_titulo_num = re.match(r"^(\d+)\s+\w+", titulo_norm)
+                match_existente_num = re.match(r"^(\d+)\s+\w+", titulo_existente_norm)
+
+                if match_titulo_num and match_existente_num:
+                    # Se ambos começam com um número e a primeira palavra após o número é a mesma
+                    if match_titulo_num.group(0) == match_existente_num.group(0):
+                        self.logger.warning(f"Título rejeitado por padrão numérico inicial repetido: '{titulo}' vs '{titulo_existente}'")
+                        return False
+                
+                if similaridade_jaccard > 0.5: # Aumentado o limiar de similaridade para 0.5
+                    self.logger.warning(f"Título rejeitado por alta similaridade ({similaridade_jaccard:.2f}) com título existente: '{titulo}' vs '{titulo_existente}'")
+                    return False
+        
+        # Lista ampliada de padrões absolutamente proibidos no início do título
+        padroes_proibidos_inicio = [
+            "a evolu", "a analis", "a histor", "a experienc", "a jornada", "a transformac", 
+            "a fascinant", "a importanc", "a influenc", "o impacto", "o guia", "o manual",
+            "o segredo", "o papel", "o poder", "o jeito", "o metodo", "a arte", "a magia",
+            "a tecnica", "o jogo", "a estrateg", "a mecanic", "as vantagens", "as possibilidades",
+            "a abordagem", "a visao", "a perspectiva", "a exploracao", "a descoberta",
+            "o fenomeno", "a ciencia", "o estudo", "a investigacao", "a analise",
+            "o caminho", "a rota", "a trajetoria", "a aventura", "a missao",
+            "a explicacao", "a compreensao", "o entendimento", "a percepcao",
+            "a revolucao", "a inovacao", "a transformacao", "a mudanca", "a alteracao",
+            "o desenvolvimento", "a evolucao", "o crescimento", "a expansao", "o avanco",
+            "a exploracao", "a investigacao", "a pesquisa", "o estudo", "a observacao",
+            "a essencia", "a natureza", "o cerne", "o nucleo", "a base", "o fundamento",
+            "os segredos", "os misterios", "as curiosidades", "os detalhes", "os aspectos",
+            "uma analise", "uma abordagem", "uma visao", "uma perspectiva", "uma exploracao",
+            "um guia", "um manual", "um panorama", "um olhar", "uma investigacao"
+        ]
+        
+        # Verifica se começa com algum dos padrões proibidos
+        for padrao in padroes_proibidos_inicio:
+            if titulo_norm.startswith(padrao):
+                self.logger.warning(f"Título rejeitado por iniciar com padrão proibido '{padrao}': '{titulo}'")
+                return False
+        
+        # Verifica estruturas comuns e repetitivas no título inteiro
+        estruturas_problematicas = [
+            "dicas para", "truques para", "segredos para", "estrategias para", "metodos para",
+            "guia completo", "guia definitivo", "guia pratico", "guia essencial", "manual de",
+            "tudo sobre", "tudo que", "tudo o que", "o que voce", "o que todo", "por que escolher",
+            "como dominar", "como jogar", "como aproveitar", "como utilizar", "como entender"
+        ]
+        
+        for estrutura in estruturas_problematicas:
+            if estrutura in titulo_norm:
+                self.logger.warning(f"Título rejeitado por conter estrutura problemática '{estrutura}': '{titulo}'")
+                return False
+        
+        # Verifica se contém palavras ou frases específicas a evitar
+        if palavras_a_evitar:
+            for palavra in palavras_a_evitar:
+                palavra_norm = normalizar_texto(palavra.lower())
+                # Verifica se é uma palavra inteira ou parte de uma
+                if f" {palavra_norm} " in f" {titulo_norm} ":
+                    self.logger.warning(f"Título rejeitado por conter palavra a evitar '{palavra}': '{titulo}'")
+                    return False
+        
+        # Verifica se o título tem comprimento adequado (9-15 palavras)
+        palavras = [p for p in titulo.split() if p.strip()]
+        if len(palavras) < 9 or len(palavras) > 15:
+            self.logger.warning(f"Título rejeitado por ter {len(palavras)} palavras (deve ter entre 9-15): '{titulo}'")
+            return False
+        
+        # Verifica o comprimento em caracteres (máximo 100)
+        if len(titulo) > 100:
+            self.logger.warning(f"Título rejeitado por ter {len(titulo)} caracteres (máximo 100): '{titulo}'")
+            return False
+        
+        # Se passou por todas as verificações, o título é aceitável
+        self.logger.info(f"Título '{titulo}' passou na verificação de duplicidade e padrões.")
+        return True
+
+    def gerar_conteudo(self, dados: Dict[str, str], instrucao_adicional: str = None, titulos_existentes: list = None) -> Tuple[str, Dict[str, float], Optional[Dict]]:
         """
         Gera conteúdo usando a API do Gemini.
         
         Args:
             dados: Dicionário com os dados da linha da planilha
             instrucao_adicional: Texto opcional a ser adicionado ao prompt para personalizar a geração
+            titulos_existentes: Lista de títulos já existentes para evitar repetição.
         
         Returns:
             Tupla (conteudo_gerado, metricas, info_link)
@@ -417,219 +640,138 @@ class GeminiHandler:
             prompt = self._construir_prompt(dados, prompt_template)
             
             # Adiciona instrução adicional ao prompt, se fornecida
+            palavras_a_evitar = []
             if instrucao_adicional:
                 prompt += instrucao_adicional
                 self.logger.info(f"Instrução adicional adicionada ao prompt: {instrucao_adicional}")
+                
+                # Extrai palavras a evitar do instrucao_adicional para validação posterior
+                if "EVITE RIGOROSAMENTE o uso das seguintes PALAVRAS" in instrucao_adicional:
+                    match = re.search(r"PALAVRAS.*?: (.*?)\.", instrucao_adicional)
+                    if match:
+                        palavras_texto = match.group(1)
+                        palavras_a_evitar.extend([p.strip().strip("'") for p in palavras_texto.split(",")])
+                
+                if "NUNCA use os seguintes PADRÕES ou SEQUÊNCIAS DE PALAVRAS" in instrucao_adicional:
+                    match = re.search(r"SEQUÊNCIAS DE PALAVRAS: (.*?)\.", instrucao_adicional)
+                    if match:
+                        frases_texto = match.group(1)
+                        palavras_a_evitar.extend([p.strip().strip("'") for p in frases_texto.split(",")])
+            
+            # Armazena temperatura original e ajusta para mais aleatoriedade
+            temperatura_original = self.temperatura_atual
+            nova_temperatura = min(0.9, temperatura_original + 0.1 * (hash(dados.get('site', '')) % 5))
+            self.temperatura_atual = nova_temperatura
             
             # Conta tokens de entrada para estimativa de custo
             tokens_entrada = contar_tokens(prompt)
             self.logger.info(f"Prompt construído com {tokens_entrada} tokens estimados")
             
             # Log das entidades importantes no prompt
-            site = dados.get('site', 'Não fornecido')
-            self.logger.info(f"Site: '{site}'")
-            
-            # Não logar 'tema' como 'Sem tema', usar o site como tema
-            tema = f"apostas em {site}" if 'apostas' not in site.lower() else site
-            self.logger.info(f"Tema: '{tema}'")
-            
             palavra_ancora = dados.get('palavra_ancora', '')
-            url_ancora = dados.get('url_ancora', '')
-            
             self.logger.info(f"Palavra-âncora que DEVE ser inserida naturalmente: '{palavra_ancora}'")
-            self.logger.info(f"URL-âncora para a palavra: '{url_ancora}'")
             self.logger.info(f"Título: '{dados.get('titulo', 'Será gerado automaticamente')}'")
-            
-            # Armazena temperatura original
-            temperatura_original = self.temperatura_atual
-            # Aumenta a temperatura para cada execução para garantir mais aleatoriedade
-            nova_temperatura = min(0.9, temperatura_original + 0.1 * (hash(dados.get('site', '')) % 5))
-            self.temperatura_atual = nova_temperatura
+            if titulos_existentes:
+                self.logger.info(f"Títulos existentes fornecidos para verificação: {len(titulos_existentes)} títulos.")
             
             # Cria configuração de geração com a nova temperatura
             generation_config = {
-                "temperature": nova_temperatura,
+                "temperature": self.temperatura_atual,
+                "top_p": 0.9,
+                "top_k": 40,
                 "max_output_tokens": GEMINI_MAX_OUTPUT_TOKENS,
             }
             
-            # Usa a nova configuração para este request específico
-            self.logger.info(f"Usando temperatura: {nova_temperatura} para gerar conteúdo único")
+            # Variáveis para métricas
+            tokens_saida = 0
+            custo_estimado = 0
+            tentativas = 0
+            max_tentativas = 3
+            conteudo_gerado = ""
             
-            # Gera o conteúdo chamando a API do Gemini com a configuração específica
-            self.logger.info("Chamando a API Gemini para gerar conteúdo...")
-            response = self.model.generate_content(
-                prompt,
-                generation_config=generation_config
-            )
-            
-            # Restaura a temperatura original
-            self.temperatura_atual = temperatura_original
-            
-            # Extrai o texto gerado e limpa formatações indesejadas
-            conteudo_gerado = response.text.strip()
-            
-            # Verifica se a palavra-âncora está presente ANTES de ajustar o tamanho
-            palavra_presente = palavra_ancora.lower() in conteudo_gerado.lower()
-            
-            if not palavra_presente:
-                self.logger.warning(f"ALERTA: Palavra-âncora '{palavra_ancora}' não detectada no texto gerado. Tentando novamente...")
+            # Loop de tentativas para gerar conteúdo válido
+            while tentativas < max_tentativas:
+                tentativas += 1
+                self.logger.info(f"Tentativa {tentativas} de geração de conteúdo")
                 
-                # Adiciona uma instrução ainda mais específica
-                prompt_ajustado = prompt + (
-                    f"\n\nATENÇÃO CRÍTICA: Você FALHOU em incluir a palavra-âncora '{palavra_ancora}' no texto. "
-                    f"É ABSOLUTAMENTE OBRIGATÓRIO incluir EXATAMENTE a palavra '{palavra_ancora}' no segundo ou terceiro parágrafo. "
-                    f"Não parafraseie, não use sinônimos, use EXATAMENTE a palavra '{palavra_ancora}' e de forma natural no texto."
+                # Faz a requisição à API do Gemini (removido safety_settings)
+                resposta = self.model.generate_content(
+                    prompt,
+                    generation_config=generation_config
                 )
                 
-                # Aumenta a temperatura para maior variação
-                nova_temperatura = min(0.95, nova_temperatura + 0.15)
+                # Extrai o conteúdo da resposta
+                conteudo_gerado = resposta.text
                 
-                # Cria nova configuração
-                generation_config = {
-                    "temperature": nova_temperatura,
-                    "max_output_tokens": GEMINI_MAX_OUTPUT_TOKENS,
-                }
+                # Conta tokens de saída para estimativa de custo
+                tokens_saida = contar_tokens(conteudo_gerado)
                 
-                # Tenta gerar novamente com foco na palavra-âncora
-                try:
-                    self.logger.info(f"Gerando novo conteúdo com ênfase na inclusão da palavra-âncora '{palavra_ancora}'...")
-                    response = self.model.generate_content(
-                        prompt_ajustado,
-                        generation_config=generation_config
-                    )
-                    conteudo_gerado = response.text.strip()
-                    
-                    # Verifica se a palavra-âncora está presente agora
-                    palavra_presente = palavra_ancora.lower() in conteudo_gerado.lower()
-                    if palavra_presente:
-                        self.logger.info(f"✓ Sucesso! Palavra-âncora '{palavra_ancora}' incluída na nova geração.")
+                # Calcula custo estimado
+                custo_estimado = (tokens_entrada * GEMINI_INPUT_COST_PER_1K / 1000) + (tokens_saida * GEMINI_OUTPUT_COST_PER_1K / 1000)
+                
+                # Verifica se o título está adequado
+                linhas = conteudo_gerado.strip().split('\n')
+                titulo_gerado = linhas[0].strip() if linhas else "Sem título"
+                
+                # Aplica verificação e correção de comprimento e palavra-âncora no título
+                # A palavra_ancora é crucial aqui
+                titulo_corrigido_ou_none = verificar_e_corrigir_titulo(titulo_gerado, palavra_ancora)
+                
+                # Se o título foi corrigido, substitui no conteúdo
+                # Se for None, significa que é inválido e precisa regenerar.
+                if titulo_corrigido_ou_none is None:
+                    self.logger.warning(f"Título gerado '{titulo_gerado}' foi rejeitado por verificar_e_corrigir_titulo (ausência de âncora, reticências, ou tamanho).")
+                    # Prepara para próxima tentativa
+                elif titulo_gerado != titulo_corrigido_ou_none:
+                    self.logger.info(f"Título corrigido de '{titulo_gerado}' para '{titulo_corrigido_ou_none}' por verificar_e_corrigir_titulo.")
+                    if linhas:
+                        linhas[0] = titulo_corrigido_ou_none
+                        conteudo_gerado = '\n'.join(linhas)
+                
+                # Verifica o título (corrigido ou original se não foi corrigido) com verificar_titulo_gerado
+                # A função verificar_titulo_gerado também precisa da palavra_ancora
+                titulo_para_verificar = titulo_corrigido_ou_none if titulo_corrigido_ou_none else titulo_gerado
+
+                if titulo_corrigido_ou_none and self.verificar_titulo_gerado(titulo_para_verificar, palavra_ancora, palavras_a_evitar, titulos_existentes):
+                    self.logger.info(f"Título gerado é aceitável: '{titulo_para_verificar}'")
+                    break # Sai do loop de tentativas
+                else:
+                    if not titulo_corrigido_ou_none:
+                        self.logger.warning(f"Título '{titulo_gerado}' invalidado por verificar_titulo_gerado. Tentando novamente.")
                     else:
-                        self.logger.error(f"❌ FALHA: Mesmo após segunda tentativa, a palavra-âncora '{palavra_ancora}' não foi incluída.")
-                except Exception as e:
-                    self.logger.error(f"Erro ao tentar gerar conteúdo com a palavra-âncora: {e}")
+                        self.logger.warning(f"Título '{titulo_para_verificar}' rejeitado por verificar_titulo_gerado. Tentando novamente.")
+
+                # Título contém padrões proibidos ou é inválido, tenta novamente com temperatura mais alta
+                self.temperatura_atual = min(0.95, self.temperatura_atual + 0.1)
+                generation_config["temperature"] = self.temperatura_atual
+                self.logger.info(f"Aumentando temperatura para {self.temperatura_atual} e tentando novamente")
             
-            # Enquanto o número de palavras for menor que 470 ou maior que 550, tenta gerar novamente
-            num_tentativas = 0
-            max_tentativas = 3
-            
-            while num_tentativas < max_tentativas:
-                # Verifica o tamanho do texto em palavras
-                num_palavras = len(conteudo_gerado.split())
-                
-                if 470 <= num_palavras <= 550:
-                    break
-                    
-                if num_palavras < 470:
-                    self.logger.warning(f"Texto gerado tem apenas {num_palavras} palavras. Tentando gerar um texto mais longo (tentativa {num_tentativas+1}/{max_tentativas})")
-                    # Ajusta o prompt para pedir texto mais longo
-                    prompt_ajustado = prompt + (
-                        f"\n\nIMPORTANTE: O texto DEVE ter entre 470 e 550 palavras. Forneça conteúdo mais detalhado em cada tópico. "
-                        f"E LEMBRE-SE: A palavra-âncora '{palavra_ancora}' DEVE aparecer no segundo ou terceiro parágrafo de forma natural."
-                    )
-                elif num_palavras > 550:
-                    self.logger.warning(f"Texto gerado tem {num_palavras} palavras, acima do limite. Tentando gerar um texto mais conciso (tentativa {num_tentativas+1}/{max_tentativas})")
-                    # Ajusta o prompt para pedir texto mais curto
-                    prompt_ajustado = prompt + (
-                        f"\n\nIMPORTANTE: O texto DEVE ter no máximo 550 palavras. Seja mais conciso em cada tópico. "
-                        f"E LEMBRE-SE: A palavra-âncora '{palavra_ancora}' DEVE aparecer no segundo ou terceiro parágrafo de forma natural."
-                    )
-                
-                # Aumenta a temperatura para maior variação
-                nova_temperatura = min(0.9, nova_temperatura + 0.1)
-                
-                # Cria nova configuração com temperatura aumentada
-                generation_config = {
-                    "temperature": nova_temperatura,
-                    "max_output_tokens": GEMINI_MAX_OUTPUT_TOKENS,
-                }
-                
-                # Tenta gerar novamente
-                try:
-                    response = self.model.generate_content(
-                        prompt_ajustado,
-                        generation_config=generation_config
-                    )
-                    novo_conteudo = response.text.strip()
-                    
-                    # Verifica se a palavra-âncora está presente no novo texto
-                    palavra_presente_novo = palavra_ancora.lower() in novo_conteudo.lower()
-                    if not palavra_presente_novo and palavra_presente:
-                        # O novo texto não tem a palavra-âncora, mas o anterior tinha
-                        self.logger.warning(f"O novo texto não contém a palavra-âncora '{palavra_ancora}', mantendo texto anterior.")
-                        break
-                    
-                    # Verifica se o novo conteúdo está dentro do intervalo desejado
-                    novo_num_palavras = len(novo_conteudo.split())
-                    mais_proximo_do_ideal = abs(novo_num_palavras - 500) < abs(num_palavras - 500)
-                    
-                    if palavra_presente_novo and (mais_proximo_do_ideal or not palavra_presente):
-                        conteudo_gerado = novo_conteudo
-                        palavra_presente = True
-                        self.logger.info(f"Gerado novo conteúdo com {novo_num_palavras} palavras e contendo a palavra-âncora.")
-                    elif mais_proximo_do_ideal and not palavra_presente_novo and not palavra_presente:
-                        conteudo_gerado = novo_conteudo
-                        self.logger.warning(f"Gerado novo conteúdo com {novo_num_palavras} palavras, mas ainda sem a palavra-âncora.")
-                    else:
-                        self.logger.warning("O novo conteúdo não era melhor que o anterior.")
-                except Exception as e:
-                    self.logger.error(f"Erro ao tentar gerar conteúdo ajustado: {e}")
-                    
-                num_tentativas += 1
-            
-            # Restaura a temperatura original
+            # Restaura a temperatura original para próximas chamadas
             self.temperatura_atual = temperatura_original
             
-            # Verifica a estrutura básica do texto gerado
-            linhas = conteudo_gerado.split('\n')
-            self.logger.info(f"Resposta final contém {len(linhas)} linhas")
-            if len(linhas) > 0:
-                self.logger.info(f"Primeira linha: '{linhas[0][:50]}...'")
-                if len(linhas) > 2:
-                    self.logger.info(f"Terceira linha: '{linhas[2][:50]}...'")
-            
-            # Conta tokens de saída para estimativa de custo
-            tokens_saida = contar_tokens(conteudo_gerado)
-            self.logger.info(f"Resposta gerada com {tokens_saida} tokens e {len(conteudo_gerado)} caracteres")
-            
-            # Verifica o tamanho final do texto em palavras
-            num_palavras = len(conteudo_gerado.split())
-            self.logger.info(f"Número de palavras no texto gerado: {num_palavras}")
-            if num_palavras < 470 or num_palavras > 550:
-                self.logger.warning(f"ALERTA: Texto gerado tem menos de 470 ou mais de 550 palavras ({num_palavras})")
-            
-            # Calcula custo estimado
-            custo_estimado = estimar_custo_gemini(tokens_entrada, tokens_saida)
-            self.logger.info(f"Custo estimado: ${custo_estimado:.6f} USD")
-            
-            # Verifica se há termos proibidos no conteúdo gerado
-            conteudo_filtrado, termos_substituidos = verificar_conteudo_proibido(conteudo_gerado)
-            if termos_substituidos:
-                self.logger.warning(f"Foram substituídos {len(termos_substituidos)} termos proibidos no conteúdo: {', '.join(termos_substituidos)}")
-                conteudo_gerado = conteudo_filtrado
-                
-            # Adiciona o link na palavra âncora
-            info_link = None
-            if palavra_ancora and url_ancora:
-                self.logger.info(f"Iniciando processo para criar link da palavra-âncora '{palavra_ancora}' para URL '{url_ancora}'...")
-                conteudo_gerado, info_link = substituir_links_markdown(conteudo_gerado, palavra_ancora, url_ancora)
-                if info_link:
-                    self.logger.info(f"✓ Link criado com sucesso para a palavra-âncora '{palavra_ancora}' no parágrafo {info_link.get('paragrafo', '?')}!")
-                    if 'paragrafo' in info_link and info_link['paragrafo'] > 3:
-                        self.logger.warning(f"⚠️ Palavra-âncora inserida no parágrafo {info_link['paragrafo']}, não nos parágrafos 2 ou 3 como solicitado.")
-                else:
-                    self.logger.error(f"❌ FALHA: Palavra-âncora '{palavra_ancora}' não foi encontrada no texto gerado.")
-            else:
-                self.logger.warning("Palavra-âncora ou URL não encontrados. Conteúdo gerado sem link.")
-            
-            # Retorna o conteúdo gerado e as métricas
+            # Monta métricas para logging e custos
             metricas = {
                 'tokens_entrada': tokens_entrada,
                 'tokens_saida': tokens_saida,
-                'custo_estimado': custo_estimado
+                'custo_estimado': custo_estimado,
+                'tentativas': tentativas
             }
             
-            return conteudo_gerado, metricas, info_link
+            # Insere a palavra-âncora no texto (agora com verificação de contexto natural)
+            conteudo_processado, info_link = substituir_links_markdown(conteudo_gerado, palavra_ancora, dados.get('url_ancora', ''))
+            
+            # Logs sobre o processamento
+            self.logger.info(f"Conteúdo gerado com {tokens_saida} tokens de saída")
+            self.logger.info(f"Custo estimado: ${custo_estimado:.6f} USD")
+            
+            if info_link:
+                self.logger.info(f"Palavra-âncora '{palavra_ancora}' inserida no parágrafo {info_link['paragrafo']}")
+            else:
+                self.logger.warning(f"Não foi possível inserir a palavra-âncora '{palavra_ancora}' no texto")
+            
+            return conteudo_processado, metricas, info_link
         
         except Exception as e:
-            self.logger.error(f"Erro ao gerar conteúdo: {e}")
+            self.logger.error(f"Erro ao gerar conteúdo com o Gemini: {e}")
+            self.logger.exception("Detalhes do erro:")
             raise

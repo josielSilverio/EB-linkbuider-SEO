@@ -7,6 +7,7 @@ from datetime import datetime
 import tiktoken
 from collections import Counter
 import unicodedata # Para normalização de acentos
+import pandas as pd
 
 # Configura o logger para este módulo
 logger = logging.getLogger(__name__)
@@ -590,19 +591,19 @@ def normalizar_texto(texto: str) -> str:
 
 def identificar_palavras_frequentes_em_titulos(
     titulos: list[str],
-    limiar_percentual: float = 0.5,
-    min_titulos_para_analise: int = 10,
+    limiar_percentual: float = 0.3,
+    min_titulos_para_analise: int = 5,
     min_palavra_len: int = 4
 ) -> list[str]:
     """
-    Identifica palavras (excluindo stopwords) que aparecem em uma alta porcentagem de títulos.
+    Identifica palavras e frases comuns (excluindo stopwords) que aparecem em uma alta porcentagem de títulos.
     Args:
         titulos: Lista de strings, onde cada string é um título.
         limiar_percentual: Percentual de títulos em que uma palavra deve aparecer para ser considerada frequente.
         min_titulos_para_analise: Número mínimo de títulos válidos para realizar a análise.
         min_palavra_len: Comprimento mínimo da palavra (normalizada) para ser considerada.
     Returns:
-        Lista de palavras frequentes (normalizadas) a serem evitadas.
+        Lista de palavras e frases frequentes (normalizadas) a serem evitadas.
     """
     titulos_validos_normalizados = [
         normalizar_texto(str(t)) for t in titulos 
@@ -616,11 +617,15 @@ def identificar_palavras_frequentes_em_titulos(
         )
         return []
 
+    # Contador para palavras individuais
     contador_palavras_em_titulos = Counter()
+    # Contador para frases comuns (2-3 palavras)
+    contador_frases_em_titulos = Counter()
     total_titulos_analisados = len(titulos_validos_normalizados)
 
     for titulo_norm in titulos_validos_normalizados:
-        palavras = re.findall(r'\b\w+\b', titulo_norm) # \w+ já lida bem com texto normalizado sem acentos
+        # Análise de palavras individuais
+        palavras = re.findall(r'\b\w+\b', titulo_norm)
         palavras_unicas_no_titulo = set()
         for palavra_norm in palavras:
             if palavra_norm not in PORTUGUESE_STOPWORDS and len(palavra_norm) >= min_palavra_len:
@@ -628,31 +633,65 @@ def identificar_palavras_frequentes_em_titulos(
         
         for palavra_unica_norm in palavras_unicas_no_titulo:
             contador_palavras_em_titulos[palavra_unica_norm] += 1
+        
+        # Análise de frases comuns (2-3 palavras)
+        palavras_com_stop = [w for w in re.findall(r'\b\w+\b', titulo_norm)]
+        if len(palavras_com_stop) >= 2:
+            # Bigramas (sequências de 2 palavras)
+            for i in range(len(palavras_com_stop) - 1):
+                bigrama = f"{palavras_com_stop[i]} {palavras_com_stop[i+1]}"
+                contador_frases_em_titulos[bigrama] += 1
+            
+            # Trigramas (sequências de 3 palavras)
+            if len(palavras_com_stop) >= 3:
+                for i in range(len(palavras_com_stop) - 2):
+                    trigrama = f"{palavras_com_stop[i]} {palavras_com_stop[i+1]} {palavras_com_stop[i+2]}"
+                    contador_frases_em_titulos[trigrama] += 1
             
     palavras_frequentes = []
-    if not contador_palavras_em_titulos:
-        logger.info("Nenhuma palavra candidata encontrada após filtragem de stopwords e tamanho.")
+    frases_frequentes = []
+    
+    if not contador_palavras_em_titulos and not contador_frases_em_titulos:
+        logger.info("Nenhuma palavra ou frase candidata encontrada após filtragem.")
         return []
 
     logger.debug(f"Contagem de palavras nos títulos (top 10): {contador_palavras_em_titulos.most_common(10)}")
+    logger.debug(f"Contagem de frases nos títulos (top 10): {contador_frases_em_titulos.most_common(10)}")
 
+    # Palavras individuais frequentes
     for palavra_norm, contagem in contador_palavras_em_titulos.items():
         percentual_ocorrencia = contagem / total_titulos_analisados
-        # logger.debug(f"Palavra: '{palavra_norm}', Contagem: {contagem}, Total Títulos: {total_titulos_analisados}, Percentual: {percentual_ocorrencia:.2f}")
-        if percentual_ocorrencia > limiar_percentual:
+        if percentual_ocorrencia > limiar_percentual and len(palavra_norm) >= min_palavra_len:
             palavras_frequentes.append(palavra_norm)
+    
+    # Frases frequentes (excluindo as que são stopwords completas)
+    for frase_norm, contagem in contador_frases_em_titulos.items():
+        percentual_ocorrencia = contagem / total_titulos_analisados
+        frase_palavras = frase_norm.split()
+        
+        # Verifica se a frase não é composta apenas de stopwords
+        if not all(p in PORTUGUESE_STOPWORDS for p in frase_palavras):
+            # Se contiver pelo menos uma palavra não-stopword com comprimento mínimo
+            if any(len(p) >= min_palavra_len and p not in PORTUGUESE_STOPWORDS for p in frase_palavras):
+                if percentual_ocorrencia > limiar_percentual:
+                    frases_frequentes.append(frase_norm)
             
-    if palavras_frequentes:
+    resultado_final = palavras_frequentes + frases_frequentes
+            
+    if resultado_final:
         logger.info(
-            f"Palavras frequentes identificadas (ocorrem em > {limiar_percentual*100:.0f}% de {total_titulos_analisados} títulos): "
-            f"{palavras_frequentes}"
+            f"Padrões frequentes identificados (ocorrem em > {limiar_percentual*100:.0f}% de {total_titulos_analisados} títulos):"
         )
+        if palavras_frequentes:
+            logger.info(f"Palavras: {palavras_frequentes}")
+        if frases_frequentes:
+            logger.info(f"Frases: {frases_frequentes}")
     else:
         logger.info(
-            f"Nenhuma palavra excedeu o limiar de frequência de {limiar_percentual*100:.0f}% nos {total_titulos_analisados} títulos analisados."
+            f"Nenhuma palavra ou frase excedeu o limiar de frequência de {limiar_percentual*100:.0f}% nos {total_titulos_analisados} títulos analisados."
         )
         
-    return palavras_frequentes 
+    return resultado_final
 
 def limpar_nome_arquivo(nome_arquivo: str) -> str:
     """
@@ -689,3 +728,117 @@ def limpar_nome_arquivo(nome_arquivo: str) -> str:
     #     nome_limpo = nome_limpo[:max_len].rsplit('-', 1)[0] # Tenta cortar em um hífen para não quebrar palavras
         
     return nome_limpo 
+
+def extrair_titulos_por_ancora(df, coluna_titulo, coluna_ancora):
+    """
+    Agrupa títulos por palavra-âncora para detectar padrões repetitivos.
+    
+    Args:
+        df: DataFrame com os dados
+        coluna_titulo: Índice da coluna de títulos
+        coluna_ancora: Índice da coluna de palavras-âncora
+        
+    Returns:
+        Dicionário com palavras-âncora como chaves e listas de títulos como valores
+    """
+    logger = logging.getLogger('seo_linkbuilder.utils')
+    
+    titulos_por_ancora = {}
+    
+    # Verificar se as colunas existem no DataFrame
+    if coluna_titulo >= len(df.columns) or coluna_ancora >= len(df.columns):
+        logger.warning(f"Colunas necessárias não encontradas no DataFrame. Colunas disponíveis: {df.columns}")
+        return titulos_por_ancora
+    
+    for idx, row in df.iterrows():
+        if pd.isna(row[coluna_ancora]) or pd.isna(row[coluna_titulo]):
+            continue
+        
+        ancora = str(row[coluna_ancora]).lower().strip()
+        titulo = str(row[coluna_titulo]).strip()
+        
+        if not ancora or not titulo:
+            continue
+            
+        if ancora not in titulos_por_ancora:
+            titulos_por_ancora[ancora] = []
+            
+        titulos_por_ancora[ancora].append(titulo)
+    
+    # Log para depuração
+    logger.info(f"Extração de títulos por âncora: {len(titulos_por_ancora)} âncoras encontradas")
+    for ancora, titulos in titulos_por_ancora.items():
+        if len(titulos) > 3:  # Mostra apenas âncoras com mais de 3 títulos para não sobrecarregar o log
+            logger.info(f"Âncora '{ancora}' tem {len(titulos)} títulos")
+    
+    return titulos_por_ancora
+
+def identificar_padroes_por_ancora(titulos_por_ancora):
+    """
+    Identifica padrões repetitivos em títulos para cada palavra-âncora.
+    
+    Args:
+        titulos_por_ancora: Dicionário com palavras-âncora como chaves e listas de títulos como valores
+        
+    Returns:
+        Dicionário com palavras-âncora como chaves e listas de padrões a evitar como valores
+    """
+    logger = logging.getLogger('seo_linkbuilder.utils')
+    import re
+    from collections import Counter
+    
+    padroes_por_ancora = {}
+    
+    for ancora, titulos in titulos_por_ancora.items():
+        if len(titulos) < 3:  # Ignora âncoras com poucos títulos
+            continue
+            
+        # Normaliza os títulos
+        titulos_norm = [normalizar_texto(titulo.lower()) for titulo in titulos]
+        
+        # Detecta padrões de início comuns (2-3 primeiras palavras)
+        inicios = []
+        for titulo in titulos_norm:
+            palavras = titulo.split()
+            if len(palavras) >= 3:
+                inicios.append(' '.join(palavras[:3]))
+            elif len(palavras) >= 2:
+                inicios.append(' '.join(palavras[:2]))
+                
+        # Conta frequência dos inícios
+        contador_inicios = Counter(inicios)
+        
+        # Identifica inícios repetidos (mais de uma vez)
+        padroes_repetidos = [inicio for inicio, count in contador_inicios.items() if count > 1]
+        
+        # Detecta frases completas repetidas (como "a evolução da experiência")
+        frases_comuns = []
+        for i in range(len(titulos_norm)):
+            for j in range(i+1, len(titulos_norm)):
+                # Encontra subsequências comuns de 3+ palavras
+                palavras_titulo1 = titulos_norm[i].split()
+                palavras_titulo2 = titulos_norm[j].split()
+                
+                for k in range(len(palavras_titulo1) - 2):
+                    for l in range(len(palavras_titulo2) - 2):
+                        if (k < len(palavras_titulo1) - 2 and 
+                            l < len(palavras_titulo2) - 2 and
+                            palavras_titulo1[k] == palavras_titulo2[l] and 
+                            palavras_titulo1[k+1] == palavras_titulo2[l+1] and
+                            palavras_titulo1[k+2] == palavras_titulo2[l+2]):
+                            frase = ' '.join(palavras_titulo1[k:k+3])
+                            if frase not in frases_comuns and len(frase.split()) >= 3:
+                                frases_comuns.append(frase)
+        
+        # Junta todos os padrões detectados
+        padroes = padroes_repetidos + frases_comuns
+        
+        # Remove duplicatas e mantém apenas padrões mais significativos
+        padroes = list(set(padroes))
+        
+        # Adiciona ao dicionário se tiver padrões detectados
+        if padroes:
+            padroes_por_ancora[ancora] = padroes
+            logger.info(f"Padrões repetitivos identificados para âncora '{ancora}': {padroes}")
+    
+    return padroes_por_ancora 
