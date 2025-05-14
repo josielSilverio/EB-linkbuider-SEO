@@ -101,7 +101,16 @@ def extrair_instrucao_especial_jogo(palavra_ancora: str) -> str:
         # Jogos de mesa
         "blackjack": "Aborde o equilíbrio entre sorte e estratégia. Explique a mecânica básica e por que o jogo atrai tanto jogadores iniciantes quanto experientes. Mencione a importância das decisões estratégicas.",
         "poker": "Destaque o elemento de habilidade e psicologia. Explique como o jogo se diferencia de outros jogos de cassino pelo componente estratégico. Mencione as variantes mais populares.",
-        "roleta": "Explique a elegância e simplicidade do jogo. Descreva os diferentes tipos de apostas possíveis e como a roleta mantém seu charme através dos séculos. Mencione as diferenças entre as versões."
+        "roleta": "Explique a elegância e simplicidade do jogo. Descreva os diferentes tipos de apostas possíveis e como a roleta mantém seu charme através dos séculos. Mencione as diferenças entre as versões online e físicas, como dealers ao vivo e variedades exclusivas da web.",
+        
+        # Termos genéricos de apostas - NOVAS ADIÇÕES
+        "casa de apostas": "Foque nos aspectos de confiança, segurança, variedade de mercados (esportes, cassino), qualidade do atendimento e experiência do usuário na plataforma. Ângulos possíveis: O que procurar em uma casa de apostas de excelência? Como a tecnologia está transformando as casas de apostas? Comparativos de funcionalidades.",
+        "aposta online": "Aborde a conveniência, acessibilidade e a vasta gama de opções disponíveis nas apostas online. Pode incluir dicas para iniciantes, como entender odds, diferentes tipos de apostas (simples, múltiplas, sistemas) e a importância do jogo responsável no ambiente digital.",
+        "aposta esportiva": "Explore a paixão pelos esportes combinada com a análise e estratégia. Destaque a importância de conhecer o esporte, os times/atletas, e como analisar estatísticas. Pode focar em mercados específicos (futebol, basquete, tênis, eSports) e estratégias como handicap, over/under, etc.",
+        "site de apostas": "Similar a 'casa de apostas', mas com ênfase na interface digital. Explore a usabilidade da plataforma, design responsivo (mobile), facilidade de navegação, métodos de pagamento seguros e a integração de ferramentas de jogo responsável. O que faz um site de apostas ser intuitivo e seguro?",
+        "bet": "Use este termo mais genérico para discutir o conceito de 'bet' (aposta) de forma mais ampla. Pode incluir a psicologia por trás das apostas, a evolução histórica, a importância da gestão de banca, e como o 'bet' se manifesta em diferentes culturas e contextos de entretenimento.",
+        "roleta online": "Diferencie da roleta tradicional, destacando as vantagens do ambiente online: variedades do jogo (europeia, americana, francesa, multi-wheel), mesas com dealers ao vivo para uma experiência imersiva, bônus específicos para roleta online e a conveniência de jogar a qualquer hora e lugar.",
+        "bet online": "Combine os conceitos de 'bet' e 'online'. Enfatize a transformação digital no setor de apostas, a facilidade de acesso, a diversidade de modalidades (esportes, cassino, crash games, etc.) disponíveis online e a importância de escolher plataformas regulamentadas e seguras para uma experiência de bet online positiva."
     }
     
     # Detecta palavras-chave no nome do jogo
@@ -127,6 +136,7 @@ def verificar_e_corrigir_titulo(titulo: str, palavra_ancora: str) -> Optional[st
     """
     Verifica e corrige o comprimento do título, garantindo que tenha entre 9-15 palavras,
     não ultrapasse 100 caracteres, contenha a palavra-âncora e não termine com reticências.
+    Também remove o prefixo "Título:" e rejeita frases de continuação.
     
     Args:
         titulo: O título a ser verificado
@@ -142,7 +152,60 @@ def verificar_e_corrigir_titulo(titulo: str, palavra_ancora: str) -> Optional[st
         return None
     
     # Remove espaços extras e quebras de linha
-    titulo_processado = re.sub(r'\s+', ' ', titulo).strip()
+    titulo_processado = re.sub(r'\\s+', ' ', titulo).strip()
+
+    # Remover prefixo "Título: " (case-insensitive)
+    if titulo_processado.lower().startswith("título:"):
+        titulo_processado = titulo_processado[len("título:"):].strip()
+        logger.info(f"Prefixo 'Título:' removido. Novo título para processamento: '{titulo_processado}'")
+        if not titulo_processado: # Se o título ficou vazio após remover "Título:"
+            logger.warning("Título ficou vazio após remover prefixo 'Título:'.")
+            return None
+
+    # Lista de frases de continuação a serem rejeitadas no início do título
+    frases_de_continuacao_proibidas = [
+        "em resumo,", "concluindo,", "para concluir,",
+        "em primeiro lugar,", "em segundo lugar,", "em terceiro lugar,", "em quarto lugar,", "em quinto lugar,",
+        "além disso,", "portanto,", "no entanto,", "contudo,", "assim sendo,", "dessa forma,",
+        "por conseguinte,", "em suma,", "finalmente,"
+    ]
+    titulo_lower_para_verificacao = titulo_processado.lower()
+    for frase_proibida in frases_de_continuacao_proibidas:
+        if titulo_lower_para_verificacao.startswith(frase_proibida):
+            logger.warning(f"Título rejeitado por começar com frase de continuação proibida ('{frase_proibida}'): '{titulo_processado}'")
+            return None
+
+    # Nova verificação: Rejeitar títulos que terminam de forma incompleta
+    terminacoes_incompletas_proibidas = [
+        " de", " a", " o", " com", " em", " por", " para", " que", 
+        " é", " são", " foi", " era", " ser", " estar",
+        " e", " ou", " mas", " nem", " pois",
+        " se", " como", " quando", " onde",
+        " sobre", " entre", " até", " sem", " sob",
+        " um", " uma", " uns", " umas", "; é" 
+        # Adicionar mais conforme necessário, sempre com espaço antes para pegar a palavra inteira no final.
+        # "; é" é um caso específico.
+    ]
+    # Também verifica se termina com ponto e vírgula simples, o que pode indicar continuação
+    if titulo_processado.endswith(";"):
+        logger.warning(f"Título rejeitado por terminar com ponto e vírgula, sugerindo incompletude: '{titulo_processado}'")
+        return None
+
+    titulo_lower_para_final = titulo_processado.lower()
+    for term_proibido in terminacoes_incompletas_proibidas:
+        if titulo_lower_para_final.endswith(term_proibido.strip()): # .strip() para o caso de "; é" 
+            # Para casos como "; é", o .strip() assegura que estamos verificando o final correto.
+            # Para os outros com espaço antes, o endswith continuará funcionando bem após o strip() no term_proibido
+            if term_proibido == "; é" and titulo_lower_para_final.endswith("; é"):
+                 logger.warning(f"Título rejeitado por terminar com padrão proibido indicando incompletude ('{term_proibido}'): '{titulo_processado}'")
+                 return None
+            elif term_proibido != "; é" and titulo_lower_para_final.endswith(term_proibido): # Garante que não é um falso positivo com "; é"
+                 # Verifica se a palavra antes da terminação não a torna válida (ex: "Guia Completo de A a Z")
+                 # Esta é uma heurística e pode precisar de refinamento.
+                 partes = titulo_processado.rsplit(None, 1) # Divide na última palavra
+                 if len(partes) > 1 and partes[-1].lower() == term_proibido.strip():
+                    logger.warning(f"Título rejeitado por terminar com palavra/frase que sugere incompletude ('{term_proibido.strip()}'): '{titulo_processado}'")
+                    return None
     
     # Verificar se a string é realmente o conteúdo completo em vez de um título
     if len(titulo_processado) > 250:  # Se é muito longo, provavelmente não é um título
@@ -543,13 +606,22 @@ class GeminiHandler:
                 similaridade_jaccard = len(palavras_comuns) / len(palavras_titulo_filtradas.union(palavras_existente_filtradas))
                 
                 # Verificação de padrão numérico inicial (ex: "7 Dicas...", "5 Segredos...")
-                match_titulo_num = re.match(r"^(\d+)\s+\w+", titulo_norm)
-                match_existente_num = re.match(r"^(\d+)\s+\w+", titulo_existente_norm)
+                match_titulo_num = re.match(r"^(\d+)\s+(\w+\s+\w+)", titulo_norm) # Captura número e as duas palavras seguintes
+                match_existente_num = re.match(r"^(\d+)\s+(\w+\s+\w+)", titulo_existente_norm)
 
                 if match_titulo_num and match_existente_num:
-                    # Se ambos começam com um número e a primeira palavra após o número é a mesma
-                    if match_titulo_num.group(0) == match_existente_num.group(0):
-                        self.logger.warning(f"Título rejeitado por padrão numérico inicial repetido: '{titulo}' vs '{titulo_existente}'")
+                    numero_titulo = match_titulo_num.group(1)
+                    palavras_titulo = match_titulo_num.group(2)
+                    numero_existente = match_existente_num.group(1)
+                    palavras_existente = match_existente_num.group(2)
+
+                    # Se as duas palavras seguintes ao número são as mesmas, é um forte indício de repetição de padrão
+                    if palavras_titulo == palavras_existente:
+                        self.logger.warning(f"Título rejeitado por padrão numérico com palavras seguintes idênticas: '{titulo}' (padrão: '{numero_titulo} {palavras_titulo}') vs '{titulo_existente}' (padrão: '{numero_existente} {palavras_existente}')")
+                        return False
+                    # Se os números são os mesmos E a primeira palavra seguinte é a mesma (menos rigoroso, mas ainda útil)
+                    elif numero_titulo == numero_existente and palavras_titulo.split()[0] == palavras_existente.split()[0]:
+                        self.logger.warning(f"Título rejeitado por padrão numérico com mesmo número e primeira palavra seguinte idêntica: '{titulo}' vs '{titulo_existente}'")
                         return False
                 
                 if similaridade_jaccard > 0.5: # Aumentado o limiar de similaridade para 0.5
@@ -613,6 +685,20 @@ class GeminiHandler:
         if len(titulo) > 100:
             self.logger.warning(f"Título rejeitado por ter {len(titulo)} caracteres (máximo 100): '{titulo}'")
             return False
+        
+        # Verificação de duplicidade exata
+        if titulos_existentes:
+            for titulo_existente in titulos_existentes:
+                if normalizar_texto(titulo_norm) == normalizar_texto(titulo_existente.lower()):
+                    self.logger.warning(f"Título duplicado detectado: '{titulo}' já existe na planilha.")
+                    return False
+                # Verificação de padrão numérico no início (ex: '7 Dimensões ...')
+                match_titulo = re.match(r"^(\d+)\s+\w+", titulo_norm)
+                match_existente = re.match(r"^(\d+)\s+\w+", normalizar_texto(titulo_existente.lower()))
+                if match_titulo and match_existente:
+                    if match_titulo.group(1) == match_existente.group(1):
+                        self.logger.warning(f"Título com padrão numérico repetido detectado: '{titulo}' e '{titulo_existente}'")
+                        return False
         
         # Se passou por todas as verificações, o título é aceitável
         self.logger.info(f"Título '{titulo}' passou na verificação de duplicidade e padrões.")
@@ -745,6 +831,9 @@ class GeminiHandler:
                 self.temperatura_atual = min(0.95, self.temperatura_atual + 0.1)
                 generation_config["temperature"] = self.temperatura_atual
                 self.logger.info(f"Aumentando temperatura para {self.temperatura_atual} e tentando novamente")
+                # INSTRUÇÃO AGRESSIVA para evitar repetição
+                instrucao_adicional = "\n\nATENÇÃO: Os títulos anteriores foram rejeitados por serem repetidos ou pouco criativos. GERE UM TÍTULO TOTALMENTE DIFERENTE DE TUDO QUE JÁ FOI USADO PARA ESTA PALAVRA-ÂNCORA. NÃO USE NÚMEROS, NÃO USE PADRÕES JÁ VISTOS, INOVE!"
+                prompt += instrucao_adicional
             
             # Restaura a temperatura original para próximas chamadas
             self.temperatura_atual = temperatura_original

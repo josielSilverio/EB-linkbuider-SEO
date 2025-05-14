@@ -1595,9 +1595,9 @@ def main(limite_linhas: int = None, modo_teste: bool = False, categorias_selecio
         
         if not modo_teste and (limite_linhas is None and quantidade_especifica is None and not categorias_selecionadas): # Só roda se processou tudo
             logger.info("Iniciando verificações de qualidade pós-processamento...")
-            verificar_titulos_duplicados(sheets, gemini, docs, modo_teste=False, spreadsheet_id_param=SPREADSHEET_ID, sheet_name_param=SHEET_NAME, drive_folder_id_param=DRIVE_FOLDER_ID)
-            verificar_similaridade_conteudos(sheets, gemini, docs, limiar_similaridade=0.4, modo_teste=False, spreadsheet_id_param=SPREADSHEET_ID, sheet_name_param=SHEET_NAME, drive_folder_id_param=DRIVE_FOLDER_ID)
-            corrigir_termos_proibidos(sheets, docs, modo_teste=False, spreadsheet_id_param=SPREADSHEET_ID, sheet_name_param=SHEET_NAME, drive_folder_id_param=DRIVE_FOLDER_ID)
+            verificar_titulos_duplicados(sheets, gemini, docs, modo_teste=False)
+            verificar_similaridade_conteudos(sheets, gemini, docs, limiar_similaridade=0.4, modo_teste=False)
+            corrigir_termos_proibidos(sheets, docs, modo_teste=False)
         elif not modo_teste:
             logger.info("Processamento com filtros/limites. Verificações de qualidade (duplicidade, similaridade, termos proibidos) serão ignoradas no final.")
         else:
