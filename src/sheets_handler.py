@@ -28,6 +28,29 @@ class SheetsHandler:
             self.logger.error(f"Erro ao inicializar serviços para SheetsHandler: {e}")
             raise
     
+    def get_column_letter(self, column_index: int) -> str:
+        """
+        Converte um índice de coluna (0-based) para a letra da coluna do Google Sheets (A, B, ..., Z, AA, AB, ...).
+        Args:
+            column_index: O índice da coluna (0 para A, 1 para B, etc.).
+        Returns:
+            A letra da coluna correspondente.
+        """
+        if not isinstance(column_index, int) or column_index < 0:
+            self.logger.error(f"Índice de coluna inválido fornecido para get_column_letter: {column_index}")
+            # Retorna um fallback ou levanta um erro, dependendo da política de erro desejada.
+            # Por segurança, vamos retornar uma coluna padrão alta para evitar erros de range, mas logar.
+            return "Z" # Ou poderia ser "AMJ" (coluna 1023, limite comum) se preferir.
+
+        letter = ''
+        while column_index >= 0:
+            remainder = column_index % 26
+            letter = chr(ord('A') + remainder) + letter
+            column_index = (column_index // 26) - 1
+            if column_index < -1: # Pequena correção para o loop quando column_index se torna -1
+                break
+        return letter
+    
     def obter_planilhas_disponiveis(self):
         """
         Obtém a lista de planilhas disponíveis na conta do usuário.
@@ -99,7 +122,7 @@ class SheetsHandler:
             self.logger.error(f"Erro ao listar abas da planilha {spreadsheet_id}: {e}")
             return []
     
-    def ler_planilha(self, limite_linhas: Optional[int] = None, apenas_dados: bool = False, spreadsheet_id=None, sheet_name=None) -> pd.DataFrame:
+    def ler_planilha(self, limite_linhas: Optional[int] = None, apenas_dados: bool = False, spreadsheet_id=None, sheet_name=None, filtrar_processados=True):
         """
         Lê a planilha do Google Sheets e retorna os dados como um DataFrame pandas.
         Adiciona uma coluna 'sheet_row_num' com o número original da linha na planilha.
@@ -109,112 +132,117 @@ class SheetsHandler:
             apenas_dados: Se True, retorna todos os dados sem aplicar filtros adicionais de ID.
             spreadsheet_id: ID da planilha. Se None, usa o ID configurado no .env
             sheet_name: Nome da aba. Se None, usa o nome configurado no .env
+            filtrar_processados: Se True, filtra linhas que já foram processadas (têm URL de documento).
         
         Returns:
             DataFrame com os dados da planilha e a coluna 'sheet_row_num'.
         """
+        self.logger.debug(f"Iniciando leitura da planilha. Limite: {limite_linhas}, Apenas Dados: {apenas_dados}, Filtrar Processados: {filtrar_processados}")
+
+        current_spreadsheet_id = spreadsheet_id if spreadsheet_id else SPREADSHEET_ID
+        current_sheet_name = sheet_name if sheet_name else SHEET_NAME
+
+        if not current_spreadsheet_id or not current_sheet_name:
+            self.logger.error("ID da planilha ou nome da aba não especificados.")
+            return pd.DataFrame() if not apenas_dados else []
+
         try:
-            # Usa os IDs fornecidos ou os configurados
-            id_planilha = spreadsheet_id or SPREADSHEET_ID
-            nome_aba = sheet_name or SHEET_NAME
+            self.logger.info(f"Lendo dados da planilha: '{current_spreadsheet_id}', Aba: '{current_sheet_name}'")
+            max_col_index = 0
+            if isinstance(COLUNAS, dict):
+                max_col_index = max(COLUNAS.values()) if COLUNAS else 0
             
-            self.logger.info(f"Tentando ler planilha {id_planilha}, aba {nome_aba}")
-            
-            # Obtém a planilha - lemos até a coluna O
-            resultado = self.service.spreadsheets().values().get(
-                spreadsheetId=id_planilha,
-                range=f"{nome_aba}!A:O" # Assume que os dados começam na linha 1
+            ultima_coluna_letra = self.get_column_letter(max_col_index + 5)
+            range_para_ler = f"{current_sheet_name}!A:{ultima_coluna_letra}"
+            self.logger.debug(f"Range de leitura definido para: {range_para_ler}")
+
+            result = self.service.spreadsheets().values().get(
+                spreadsheetId=current_spreadsheet_id,
+                range=range_para_ler
             ).execute()
-            
-            valores = resultado.get('values', [])
-            
-            if not valores:
-                self.logger.warning(f"Nenhum dado encontrado na planilha {id_planilha}, aba {nome_aba}")
-                return pd.DataFrame()
-            
-            self.logger.info(f"Lidas {len(valores)} linhas da planilha no total")
-            
-            df = pd.DataFrame(valores)
-            
-            # Verifica se a primeira linha parece ser um cabeçalho (Lógica Refinada)
-            header_detected = False
-            header_offset = 0
-            if len(df) > 0 and df.iloc[0] is not None:
-                first_row = df.iloc[0]
-                # Verifica se colunas específicas contêm os nomes de cabeçalho esperados (case-insensitive)
-                is_id_header = COLUNAS['id'] < len(first_row) and str(first_row[COLUNAS['id']]).strip().lower() == 'id'
-                is_site_header = COLUNAS['site'] < len(first_row) and str(first_row[COLUNAS['site']]).strip().lower() == 'site'
-                # Permite variações para 'ancora'
-                is_ancora_header = COLUNAS['palavra_ancora'] < len(first_row) and str(first_row[COLUNAS['palavra_ancora']]).strip().lower() in ['palavra_ancora', 'palavra ancora', 'ancora', 'âncora']
+            data_rows = result.get('values', [])
 
-                # Considera cabeçalho se pelo menos duas colunas chave corresponderem
-                if (is_id_header and is_site_header) or (is_id_header and is_ancora_header) or (is_site_header and is_ancora_header):
-                    header_detected = True
-                    header_offset = 1
-                    self.logger.info(f"Cabeçalho detectado (baseado nas colunas ID, Site, Âncora): {first_row.tolist()}")
-                    df_data = df.iloc[header_offset:] # Remove cabeçalho
+            if not data_rows:
+                self.logger.warning(f"Nenhum dado encontrado na aba '{current_sheet_name}' da planilha '{current_spreadsheet_id}'.")
+                return pd.DataFrame() if not apenas_dados else []
+
+            self.logger.info(f"Recebidos {len(data_rows)} linhas da API do Google Sheets.")
+            
+            if data_rows: # Somente processa se houver alguma linha (incluindo cabeçalho)
+                header = data_rows[0]
+                num_header_cols = len(header)
+                
+                # Normaliza as linhas de dados para terem o mesmo número de colunas que o cabeçalho
+                processed_data_rows = []
+                for row in data_rows[1:]:
+                    # Garante que a linha tenha o mesmo número de colunas que o cabeçalho,
+                    # preenchendo com strings vazias se for mais curta.
+                    # Se for mais longa, trunca para o tamanho do cabeçalho (menos provável, mas seguro)
+                    normalized_row = (row + [''] * num_header_cols)[:num_header_cols]
+                    processed_data_rows.append(normalized_row)
+                
+                if processed_data_rows: # Se houver linhas de dados após o cabeçalho
+                    df = pd.DataFrame(processed_data_rows, columns=header)
+                else: # Só havia cabeçalho, ou nenhuma linha de dados real
+                    df = pd.DataFrame(columns=header) # DataFrame vazio com colunas do cabeçalho
+                
+                # Como COLUNAS usa índices numéricos, resetamos as colunas do df para índices numéricos.
+                # Isso mantém a consistência com o restante do código que espera df.columns ser numérico.
+                df.columns = range(df.shape[1]) # df.shape[1] dará o número de colunas do cabeçalho
+            else:
+                # Nenhuma linha recebida da API, nem mesmo cabeçalho
+                df = pd.DataFrame()
+            
+            coluna_id_idx = COLUNAS.get('id', -1)
+            coluna_url_idx = COLUNAS.get('url_documento', -1)
+
+            if coluna_id_idx != -1 and coluna_id_idx < len(df.columns):
+                df[coluna_id_idx] = df[coluna_id_idx].astype(str)
+                original_row_count = len(df)
+                df = df[df[coluna_id_idx].notna() & (df[coluna_id_idx].str.strip() != '')]
+                self.logger.info(f"{original_row_count - len(df)} linhas removidas por ID inválido/vazio. {len(df)} linhas restantes.")
+            else:
+                self.logger.warning(f"Coluna ID (índice {coluna_id_idx}) não encontrada. Não foi possível filtrar por IDs válidos.")
+
+            if filtrar_processados:
+                if coluna_url_idx != -1 and coluna_url_idx < len(df.columns):
+                    df[coluna_url_idx] = df[coluna_url_idx].astype(str) # Converte a coluna para string
+                    original_row_count = len(df)
+
+                    # Mantém linhas onde a URL é NaN (pandas considera nulo) OU a string está vazia.
+                    # pd.NA não é pego por isna() em colunas de objeto, então converter para string e checar é mais robusto.
+                    df = df[df[coluna_url_idx].fillna('').str.strip() == '']
+                    self.logger.info(f"{original_row_count - len(df)} linhas removidas por já terem URL. {len(df)} linhas restantes para processamento.")
                 else:
-                    self.logger.info("Primeira linha não detectada como cabeçalho (verificação específica de colunas).")
-                    df_data = df # Não remove nada
-                    header_offset = 0 # Garante que o offset seja 0 se não for detectado cabeçalho
+                    self.logger.warning(f"Coluna URL (índice {coluna_url_idx}) não encontrada. Não foi possível filtrar por itens já processados.")
             else:
-                 self.logger.warning("DataFrame vazio ou primeira linha nula após leitura.")
-                 df_data = df # Continua com o DataFrame original (provavelmente vazio)
-                 header_offset = 0 # Garante que o offset seja 0
-
-            # Adiciona o número da linha original da planilha (1-based)
-            # O índice preservado de df_data já reflete a posição original na leitura (0-based se sem header, 1-based se header foi removido)
-            # Apenas adicionamos 1 para obter a numeração de linha da planilha (1-based)
-            df_data = df_data.copy() # Para evitar SettingWithCopyWarning
-            df_data['sheet_row_num'] = df_data.index + 1 # Correção: Simplesmente índice + 1
-            self.logger.debug(f"Coluna 'sheet_row_num' adicionada. Exemplo (primeiras 5 linhas de dados): {df_data[['sheet_row_num']].head().to_string()}")
+                self.logger.info("Filtragem de itens já processados foi pulada (filtrar_processados=False).")
             
-            df_a_filtrar_id = df_data.copy() # Copia antes de qualquer filtro
-            coluna_id = COLUNAS.get("id", -1)
-            if not apenas_dados and coluna_id != -1 and coluna_id < len(df_a_filtrar_id.columns):
-                def is_valid_id(id_value):
-                    if not id_value: return False
-                    id_str = str(id_value).strip().lower()
-                    return bool(id_str and id_str not in ['id', 'identificador', 'código', 'code', 'none', 'nan', '#n/a', 'n/a'])
+            if df.empty:
+                self.logger.warning("Nenhuma linha restante após as filtragens.")
+                return pd.DataFrame() if not apenas_dados else []
 
-                if not df_a_filtrar_id.empty:
-                    mascara_id = df_a_filtrar_id[coluna_id].apply(is_valid_id)
-                    df_filtrado_id = df_a_filtrar_id[mascara_id]
-                    self.logger.info(f"Filtrado para {len(df_filtrado_id)} linhas com IDs válidos de {len(df_a_filtrar_id)} linhas de dados")
-                    df_para_filtrar_url = df_filtrado_id
-                else:
-                    df_para_filtrar_url = df_a_filtrar_id # Dataframe já estava vazio
-            else:
-                self.logger.info("Modo 'apenas_dados' ativado OU coluna ID não configurada/encontrada. Pulando filtro de ID.")
-                df_para_filtrar_url = df_a_filtrar_id
+            # Adicionar 'sheet_row_num' APÓS as filtragens que podem alterar o número de linhas,
+            # mas ANTES de qualquer ordenação que possa bagunçar a correspondência com a planilha original se o índice for resetado.
+            # O df.index neste ponto ainda deve corresponder aos índices da leitura original (0-based).
+            # Adicionamos 2: 1 para converter para 1-based e 1 porque a linha 1 da planilha é geralmente cabeçalho.
+            # Esta coluna é crucial para atualizar a célula correta na planilha.
+            df['sheet_row_num'] = df.index + 2 
 
-            # Aplica filtro para pular linhas com URL já preenchida (Coluna J)
-            df_final = df_para_filtrar_url.copy() # Copia antes do filtro de URL
-            coluna_url = COLUNAS.get("url_documento", -1)
-            if coluna_url != -1 and coluna_url < len(df_final.columns):
-                # Mantém linhas onde a coluna URL está vazia ou nula
-                mascara_url = df_final[coluna_url].isnull() | (df_final[coluna_url].astype(str).str.strip() == '')
-                df_filtrado_url = df_final[mascara_url]
-                linhas_puladas = len(df_final) - len(df_filtrado_url)
-                if linhas_puladas > 0:
-                    self.logger.info(f"Puladas {linhas_puladas} linhas que já possuem URL na coluna {coluna_url}.")
-                df_final = df_filtrado_url
-            else:
-                 self.logger.warning(f"Coluna url_documento (índice {coluna_url}) não configurada ou fora dos limites. Não foi possível pular linhas já processadas.")
+            # Ordenar por 'sheet_row_num' para garantir que processamos na ordem da planilha
+            # Isso é importante se o limite_linhas for aplicado.
+            df = df.sort_values(by='sheet_row_num').reset_index(drop=True) # Resetar índice após ordenação
+                                                                        # para que .head() funcione previsivelmente.
 
-            # GARANTE ORDEM: Ordena por número de linha ANTES de aplicar o limite
-            df_final = df_final.sort_values('sheet_row_num').reset_index(drop=True)
-
-            # Aplica limite de linhas, se especificado, sempre pegando as primeiras disponíveis
-            if limite_linhas and len(df_final) > limite_linhas:
-                df_final = df_final.iloc[:limite_linhas]
-                self.logger.info(f"Leitura limitada a {limite_linhas} linhas, começando da linha {df_final['sheet_row_num'].min()}")
+            self.logger.info(f"DataFrame preparado com {len(df)} linhas. Próximas linhas (sheet_row_num): {df['sheet_row_num'].head().tolist() if not df.empty else 'N/A'}")
             
-            self.logger.info(f"Retornando {len(df_final)} registros para processamento (com coluna sheet_row_num)")
-            if not df_final.empty:
-                self.logger.info(f"Linhas a serem processadas: {df_final['sheet_row_num'].tolist()}")
-            return df_final
-        
+            if limite_linhas is not None and isinstance(limite_linhas, int) and limite_linhas > 0:
+                if not df.empty:
+                    df = df.head(limite_linhas)
+                    self.logger.info(f"{len(df)} linhas após aplicar limite de {limite_linhas}.")
+            
+            return df if not apenas_dados else df.values.tolist()
+
         except Exception as e:
             self.logger.error(f"Erro ao ler a planilha: {e}")
             self.logger.exception("Detalhes do erro:")

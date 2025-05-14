@@ -13,7 +13,12 @@ import re
 import dotenv
 import json
 
-from src.utils import configurar_logging
+from src.utils import (
+    configurar_logging, 
+    limpar_nome_arquivo, 
+    identificar_palavras_frequentes_em_titulos, # Importar a nova função
+    contar_tokens # Adicionar contar_tokens
+)
 from src.sheets_handler import SheetsHandler
 from src.gemini_handler import GeminiHandler, verificar_conteudo_proibido
 from src.docs_handler import DocsHandler
@@ -25,7 +30,9 @@ from src.config import (
     MESES,
     SPREADSHEET_ID,
     SHEET_NAME,
-    DRIVE_FOLDER_ID
+    DRIVE_FOLDER_ID,
+    USD_TO_BRL_RATE,
+    DELAY_ENTRE_CHAMADAS_GEMINI # Adicionar esta importação
 )
 
 # Caminho para salvar a última seleção
@@ -402,7 +409,7 @@ def verificar_similaridade_conteudos(sheets: SheetsHandler, gemini: GeminiHandle
                     logger.exception("Detalhes do erro:")
                 
                 # Pausa para não sobrecarregar as APIs
-                time.sleep(1)
+                time.sleep(DELAY_ENTRE_CHAMADAS_GEMINI) # Pausa configurável
                 
             except Exception as e: # Except correspondente ao try principal do processamento do par
                 # Log do erro incluindo o índice original se disponível
@@ -1181,48 +1188,70 @@ def processar_planilha(limite_linhas=None, modo_teste=False, spreadsheet_id=None
     # ... existing code ...
 
 def main(limite_linhas: int = None, modo_teste: bool = False, categorias_selecionadas: Dict = None, quantidade_especifica: int = None):
-    """
-    Função principal que orquestra a leitura da planilha, geração de conteúdo e criação de documentos.
-    """
     logger = configurar_logging(logging.INFO)
     logger.info(f"Iniciando script SEO-LinkBuilder - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     
     if modo_teste:
         logger.warning("=== MODO DE TESTE ATIVADO ===")
-        logger.warning("Nenhuma alteração será feita na planilha ou nos documentos do Google Drive.")
-    
+        # logger.warning("Nenhuma alteração será feita na planilha ou nos documentos do Google Drive.") # Comentado pois o modo teste agora pode ter nuances
+
     try:
-        # Inicializa handlers
         sheets = SheetsHandler()
         gemini = GeminiHandler()
         docs = DocsHandler()
         
-        # NOVO: Apresenta menu para selecionar pasta do Drive
         target_drive_folder_id = apresentar_menu_pasta_drive()
-        if not target_drive_folder_id: # Segurança caso algo dê errado no menu
+        if not target_drive_folder_id:
              logger.error("ID da pasta do Drive não foi obtido. Encerrando.")
              return
         
-        # 1. Apresenta o menu para selecionar Planilha e Aba
         spreadsheet_id_selecionado, sheet_name_selecionado = apresentar_menu_planilha(sheets)
         
-        # Atualiza as configurações globais (opcional, mas pode ser útil)
-        global SPREADSHEET_ID, SHEET_NAME
+        global SPREADSHEET_ID, SHEET_NAME, DRIVE_FOLDER_ID
         SPREADSHEET_ID = spreadsheet_id_selecionado
         SHEET_NAME = sheet_name_selecionado
-        logger.info(f"Processando Planilha: {SPREADSHEET_ID}, Aba: {SHEET_NAME}")
+        DRIVE_FOLDER_ID = target_drive_folder_id # Atualiza globalmente se outras partes usarem
+        logger.info(f"Processando Planilha: {SPREADSHEET_ID}, Aba: {SHEET_NAME}, Pasta Destino: {DRIVE_FOLDER_ID}")
 
-        # 5. Lê a planilha com base na seleção
-        logger.info(f"Lendo dados da planilha '{SHEET_NAME}' ({SPREADSHEET_ID})...")
-        # A função ler_planilha já filtra por IDs válidos e URLs vazias,
-        # e já retorna o DataFrame ordenado por 'sheet_row_num'.
-        # O argumento 'limite_linhas' para ler_planilha pode ser usado se quisermos limitar a leitura inicial,
-        # mas a lógica de "processar N itens" geralmente é melhor aplicada depois.
-        # Por enquanto, vamos deixar ler_planilha carregar todos os itens disponíveis (não processados e com ID válido).
+        # ANÁLISE DE PALAVRAS FREQUENTES EM TÍTULOS EXISTENTES
+        palavras_a_evitar_no_titulo = []
+        try:
+            logger.info("Analisando títulos existentes para identificar palavras frequentes...")
+            df_todos_os_dados = sheets.ler_planilha(
+                spreadsheet_id=SPREADSHEET_ID,
+                sheet_name=SHEET_NAME,
+                filtrar_processados=False # Crucial para pegar todos os títulos
+            )
+            
+            if not df_todos_os_dados.empty and COLUNAS['titulo'] < len(df_todos_os_dados.columns):
+                titulos_existentes = df_todos_os_dados[COLUNAS['titulo']].dropna().astype(str).tolist()
+                
+                # A função identificar_palavras_frequentes_em_titulos já lida com "sem titulo" e normalização.
+                if titulos_existentes:
+                    palavras_a_evitar_no_titulo = identificar_palavras_frequentes_em_titulos(
+                        titulos_existentes,
+                        limiar_percentual=0.5, 
+                        min_titulos_para_analise=10,
+                        min_palavra_len=4 
+                    )
+                    if palavras_a_evitar_no_titulo:
+                        logger.info(f"Novos títulos tentarão EVITAR as palavras (normalizadas): {palavras_a_evitar_no_titulo}")
+                    # else: Logger dentro da função já informa se nada foi encontrado ou se poucos títulos
+                else:
+                    logger.info("Nenhum título existente encontrado na coluna para análise de frequência.")
+            else:
+                logger.info("DataFrame de todos os dados está vazio ou coluna de título não encontrada. Pulando análise de frequência.")
+        except Exception as e:
+            logger.error(f"Erro durante a análise de frequência de palavras em títulos: {e}")
+            logger.exception("Detalhes do erro na análise de frequência:")
+            palavras_a_evitar_no_titulo = [] # Garante que a lista existe em caso de erro
+
+        # LER DADOS PARA PROCESSAMENTO (APENAS ITENS NOVOS/PENDENTES)
+        logger.info(f"Lendo dados da planilha '{SHEET_NAME}' ({SPREADSHEET_ID}) para processamento...")
         df_disponivel_para_processar = sheets.ler_planilha(
             spreadsheet_id=SPREADSHEET_ID,
-            sheet_name=SHEET_NAME
-            # Não passaremos limite_linhas aqui para que o menu de categorias veja todos os disponíveis.
+            sheet_name=SHEET_NAME,
+            filtrar_processados=True # Padrão, mas explícito para clareza
         )
 
         if df_disponivel_para_processar.empty:
@@ -1234,51 +1263,36 @@ def main(limite_linhas: int = None, modo_teste: bool = False, categorias_selecio
         total_linhas_disponiveis = len(df_disponivel_para_processar)
         logger.info(f"Planilha lida com {total_linhas_disponiveis} linhas disponíveis para processamento (ordenadas por linha da planilha).")
         if 'sheet_row_num' in df_disponivel_para_processar.columns:
-            logger.info(f"Próximas linhas disponíveis para processamento (sheet_row_num): {df_disponivel_para_processar['sheet_row_num'].head().tolist()}")
+             logger.info(f"Próximas linhas disponíveis para processamento (sheet_row_num): {df_disponivel_para_processar['sheet_row_num'].head().tolist()}")
 
-        # Estimar custos por categoria usando apenas as linhas realmente disponíveis
-        categorias = estimar_custo_por_categoria(sheets, df_disponivel_para_processar)
-
-        # DataFrame final que será processado
+        categorias = estimar_custo_por_categoria(sheets, df_disponivel_para_processar) # Passa o df já filtrado
         df_para_processar_final = df_disponivel_para_processar.copy()
-
-        # Se não foram fornecidas categorias/quantidade na chamada da função, apresentar menu
         num_itens_do_menu = None
-        if categorias_selecionadas is None and quantidade_especifica is None:
-            selecao_menu = apresentar_menu_categorias(categorias) # Esta função precisa ser ajustada
 
-            if selecao_menu is None: # Usuário cancelou
+        if categorias_selecionadas is None and quantidade_especifica is None:
+            selecao_menu = apresentar_menu_categorias(categorias)
+            if selecao_menu is None:
                 logger.info("Operação cancelada pelo usuário. Encerrando.")
                 return
-
             if 'quantidade_especifica' in selecao_menu:
                 num_itens_do_menu = selecao_menu['quantidade_especifica']
-                # Não filtramos por categoria se quantidade específica foi escolhida no menu principal.
-                # O df_para_processar_final já contém todos os disponíveis e ordenados.
             else:
-                # Filtra por categoria se uma ou mais categorias foram selecionadas
                 df_para_processar_final = filtrar_dataframe_por_categorias(df_para_processar_final, sheets, selecao_menu)
-                # filtrar_dataframe_por_categorias deve manter a ordem se o df de entrada estiver ordenado.
-                # Reordenar por 'sheet_row_num' por segurança, caso a função interna não garanta.
                 if 'sheet_row_num' in df_para_processar_final.columns:
                      df_para_processar_final.sort_values(by='sheet_row_num', inplace=True)
-
-        elif categorias_selecionadas is not None: # Categorias fornecidas como argumento
+        elif categorias_selecionadas is not None:
             df_para_processar_final = filtrar_dataframe_por_categorias(df_para_processar_final, sheets, categorias_selecionadas)
             if 'sheet_row_num' in df_para_processar_final.columns:
                  df_para_processar_final.sort_values(by='sheet_row_num', inplace=True)
         
-        # Determinar o número final de linhas a processar
-        # Prioridade: argumento da função 'quantidade_especifica', depois 'num_itens_do_menu', depois 'limite_linhas' (CLI)
         limite_final_linhas = None
-        if quantidade_especifica is not None: # Argumento da função main()
+        if quantidade_especifica is not None:
             limite_final_linhas = quantidade_especifica
-        elif num_itens_do_menu is not None: # Escolha 'Q' no menu
+        elif num_itens_do_menu is not None:
             limite_final_linhas = num_itens_do_menu
-        elif limite_linhas is not None: # Argumento --limite da CLI
+        elif limite_linhas is not None:
             limite_final_linhas = limite_linhas
         
-        # Aplicar o limite final ao df_para_processar_final
         if limite_final_linhas is not None:
             if limite_final_linhas <= 0:
                 logger.warning("Número de itens para processar é zero ou negativo. Nada a fazer.")
@@ -1286,11 +1300,7 @@ def main(limite_linhas: int = None, modo_teste: bool = False, categorias_selecio
             if limite_final_linhas < len(df_para_processar_final):
                 logger.info(f"Limitando o processamento às primeiras {limite_final_linhas} das {len(df_para_processar_final)} linhas filtradas e ordenadas.")
                 df_para_processar_final = df_para_processar_final.head(limite_final_linhas)
-            else:
-                logger.info(f"Número solicitado ({limite_final_linhas}) é maior ou igual ao disponível ({len(df_para_processar_final)}). Processando todos os {len(df_para_processar_final)} itens.")
-                # Nenhuma ação necessária, já estamos usando todo o df_para_processar_final
         
-        # Verificar se ainda há linhas após toda a filtragem e limitação
         total_linhas_a_processar = len(df_para_processar_final)
         if total_linhas_a_processar == 0:
             logger.warning("Nenhuma linha restante para processar após todas as filtragens e limites. Encerrando.")
@@ -1300,188 +1310,146 @@ def main(limite_linhas: int = None, modo_teste: bool = False, categorias_selecio
         if 'sheet_row_num' in df_para_processar_final.columns:
              logger.info(f"Linhas da planilha que serão efetivamente processadas (sheet_row_num): {df_para_processar_final['sheet_row_num'].tolist()}")
 
-
-        # Estimar custo total com base nas linhas que serão efetivamente processadas
-        tokens_entrada_medio_estimado = 1700
-        tokens_saida_medio_estimado = 500
+        # ... (estimativa de custo e confirmação) ...
+        prompt_template_texto = gemini.carregar_prompt_template()
+        tokens_prompt_base = contar_tokens(prompt_template_texto)
+        tokens_entrada_medio_estimado = tokens_prompt_base + 200 # Adiciona tokens para os dados da linha
+        tokens_saida_medio_estimado = int(GEMINI_MAX_OUTPUT_TOKENS * 0.5) # Estima 50% do máx de saída como média
         custo_estimado_por_item_final = estimar_custo_gemini(tokens_entrada_medio_estimado, tokens_saida_medio_estimado)
         custo_estimado_total_final = custo_estimado_por_item_final * total_linhas_a_processar
 
-        logger.info(f"Custo estimado total para processar {total_linhas_a_processar} itens: ${custo_estimado_total_final:.4f} USD (aproximadamente R${custo_estimado_total_final*5:.2f})")
+        logger.info(f"Custo estimado total para processar {total_linhas_a_processar} itens: ${custo_estimado_total_final:.4f} USD (aproximadamente R${custo_estimado_total_final * USD_TO_BRL_RATE:.2f})")
 
-        # Confirmar execução
-        if not modo_teste: # Não pedir confirmação em modo teste se for processar apenas 1 linha
-             confirmacao = input(f"\nProcessar {total_linhas_a_processar} itens com custo estimado de R${custo_estimado_total_final*5:.2f}? (S/N): ").strip().upper()
+        if not modo_teste:
+             confirmacao = input(f"\nProcessar {total_linhas_a_processar} itens com custo estimado de R${custo_estimado_total_final * USD_TO_BRL_RATE:.2f}? (S/N): ").strip().upper()
              if confirmacao != 'S':
                  logger.info("Operação cancelada pelo usuário antes do processamento. Encerrando.")
                  return
         
-        # Modo teste (se ativado via CLI) usa apenas a primeira linha do df_para_processar_final
-        # Esta lógica de modo teste via CLI pode ser redundante se a função main já recebe modo_teste=True
-        if modo_teste and total_linhas_a_processar > 0: # Garante que há pelo menos uma linha
-            # Se o modo_teste já está limitando a 1 linha, esta re-fatiamento é segura.
-            # Se o modo_teste é apenas para não salvar, mas processar o 'limite_linhas' do CLI, então não re-fatiar aqui.
-            # A definição original do --teste era "Executa apenas para a primeira linha sem atualizar a planilha"
-            # então, se modo_teste é True, pegamos apenas a primeira linha do que quer que tenha sido selecionado.
+        if modo_teste and total_linhas_a_processar > 0:
+            logger.warning(f"MODO DE TESTE: Apenas a primeira linha selecionada será processada (Sheet Row Num: {df_para_processar_final['sheet_row_num'].iloc[0] if not df_para_processar_final.empty and 'sheet_row_num' in df_para_processar_final.columns else 'N/A'}). Nenhuma alteração será salva.")
             df_para_processar_final = df_para_processar_final.head(1)
-            total_linhas_a_processar = len(df_para_processar_final) # Atualiza a contagem
-            logger.info(f"EXECUTANDO EM MODO DE TESTE - Apenas a primeira linha selecionada será processada (Sheet Row Num: {df_para_processar_final['sheet_row_num'].iloc[0] if not df_para_processar_final.empty and 'sheet_row_num' in df_para_processar_final.columns else 'N/A'})")
+            total_linhas_a_processar = len(df_para_processar_final)
         elif modo_teste and total_linhas_a_processar == 0:
             logger.warning("MODO DE TESTE ATIVADO, mas nenhuma linha selecionada para processar.")
             return
 
-        # Métricas de custo
         custo_total = 0.0
         tokens_entrada_total = 0
         tokens_saida_total = 0
         
-        # Processa cada linha
         for i, (idx, linha) in enumerate(df_para_processar_final.iterrows()):
-            try:
-                # Acesso direto às colunas ao invés de extrair_dados_linha
-                id_campanha = str(linha[COLUNAS['id']]) if COLUNAS['id'] < len(linha) else 'Sem-ID'
-                site = str(linha[COLUNAS['site']]) if COLUNAS['site'] < len(linha) else 'Sem site'
-                palavra_ancora = str(linha[COLUNAS['palavra_ancora']]) if COLUNAS['palavra_ancora'] < len(linha) else 'Sem palavra-âncora'
-                url_ancora = str(linha[COLUNAS['url_ancora']]) if COLUNAS['url_ancora'] < len(linha) else 'Sem URL'
-                titulo_original = str(linha[COLUNAS['titulo']]) if COLUNAS['titulo'] < len(linha) and linha[COLUNAS['titulo']] else 'Sem título'
+            # ... (extração de dados da linha: id_campanha, site, palavra_ancora, etc.) ...
+            id_campanha = str(linha[COLUNAS['id']]) if COLUNAS['id'] < len(linha) else 'Sem-ID'
+            site = str(linha[COLUNAS['site']]) if COLUNAS['site'] < len(linha) else 'Sem site'
+            palavra_ancora = str(linha[COLUNAS['palavra_ancora']]) if COLUNAS['palavra_ancora'] < len(linha) else 'Sem palavra-âncora'
+            url_ancora = str(linha[COLUNAS['url_ancora']]) if COLUNAS['url_ancora'] < len(linha) else 'Sem URL'
+            titulo_original_da_planilha = str(linha[COLUNAS['titulo']]) if COLUNAS['titulo'] < len(linha) and pd.notna(linha[COLUNAS['titulo']]) and str(linha[COLUNAS['titulo']]).strip() else ''
 
-                # Obter o número real da linha da planilha
-                if 'sheet_row_num' not in linha:
-                     logger.error(f"Coluna 'sheet_row_num' não encontrada na linha com ID {id_campanha}. Pulando atualização da planilha.")
-                     continue
-                sheet_row_num = int(linha['sheet_row_num'])
-                
-                # Cria um dicionário de dados para passar para o Gemini
-                dados = {
-                    'id': id_campanha,
-                    'site': site,
-                    'palavra_ancora': palavra_ancora,
-                    'url_ancora': url_ancora,
-                    'titulo': titulo_original, # Usar o título original aqui
-                    'tema': 'Sem tema',  # Tema não existe na estrutura atual
-                }
-                
-                logger.info(f"Processando linha {i+1}/{len(df_para_processar_final)}: ID {id_campanha} - {titulo_original} (Sheet Row: {sheet_row_num})")
-                
-                # LOG ADICIONAL: Verifica os dados enviados ao Gemini
-                logger.debug(f"Enviando para Gemini - ID: {dados.get('id')}, Ancora: '{dados.get('palavra_ancora')}', Titulo Original: '{dados.get('titulo')}'")
-                
-                # Gera o conteúdo usando o Gemini
-                logger.info(f"Gerando conteúdo com o Gemini para '{palavra_ancora}'...")
-                conteudo, metricas, info_link = gemini.gerar_conteudo(dados)
-                
-                # Atualiza métricas
-                custo_total += metricas['custo_estimado']
-                tokens_entrada_total += metricas['tokens_entrada']
-                tokens_saida_total += metricas['tokens_saida']
-                
-                # Extrai o título real do conteúdo gerado (primeira linha)
-                titulo_gerado = extrair_titulo(conteudo) # Usar função para extrair título
-                logger.info(f"Título gerado: {titulo_gerado}")
-                
-                # Gera o nome do arquivo usando o ID em vez da data
-                try:
-                    nome_arquivo = gerar_nome_arquivo(id_campanha, site, palavra_ancora)
-                except Exception as e:
-                    logger.error(f"Erro ao gerar nome de arquivo: {e}")
-                    # Fallback para um nome simples
-                    nome_arquivo = f"{id_campanha} - {site} - Artigo"
-                
-                # Cria o documento no Google Docs, PASSANDO O ID DA PASTA SELECIONADO
-                logger.info(f"Criando documento '{nome_arquivo}' na pasta {target_drive_folder_id}...")
-                document_id, document_url = docs.criar_documento(
-                    titulo_gerado,
-                    conteudo,
-                    nome_arquivo,
-                    info_link,
-                    target_folder_id=target_drive_folder_id # Passa o ID selecionado
-                )
-                
-                # Atualiza a URL e o título na planilha (se não estiver em modo de teste)
-                if not modo_teste:
-                    try:
-                        # Usa sheet_row_num diretamente
-                        linha_planilha = sheet_row_num
-                        
-                        # Imprime detalhes de diagnóstico ANTES de atualizar
-                        logger.info(f"==== INFORMAÇÕES DE ATUALIZAÇÃO DA PLANILHA ====")
-                        logger.info(f"ID da Planilha: {SPREADSHEET_ID}")
-                        logger.info(f"Nome da Aba: {SHEET_NAME}")
-                        logger.info(f"Índice Original da Linha (0-based data): {linha.name}") # Log do índice do DF
-                        logger.info(f"Linha na planilha a ser atualizada (1-based): {linha_planilha}")
-                        
-                        # Atualiza o título (coluna I)
-                        coluna_titulo = 'I' # Coluna do título
-                        titulo_range = f"{SHEET_NAME}!{coluna_titulo}{linha_planilha}"
-                        logger.info(f"Tentando atualizar Título na célula {coluna_titulo}{linha_planilha} (Range: {titulo_range}) com valor: '{titulo_gerado}'")
-                        
-                        atualizado_titulo = sheets.atualizar_titulo_documento(
-                            sheet_row_num=linha_planilha, # Passa o número correto
-                            titulo=titulo_gerado,
-                            spreadsheet_id=SPREADSHEET_ID,
-                            sheet_name=SHEET_NAME
-                        )
-                        
-                        logger.info(f"✓ Título atualizado com sucesso em {titulo_range}!")
-                        
-                        # Atualiza a URL (coluna J)
-                        coluna_url = 'J' # Coluna da URL
-                        url_range = f"{SHEET_NAME}!{coluna_url}{linha_planilha}"
-                        logger.info(f"Tentando atualizar URL na célula {coluna_url}{linha_planilha} (Range: {url_range}) com valor: '{document_url}'")
-                        
-                        atualizado_url = sheets.atualizar_url_documento(
-                            sheet_row_num=linha_planilha, # Passa o número correto
-                            url_documento=document_url,
-                            spreadsheet_id=SPREADSHEET_ID,
-                            sheet_name=SHEET_NAME
-                        )
-                        
-                        logger.info(f"✓ URL atualizada com sucesso em {url_range}!")
-                        logger.info(f"==== FIM DA ATUALIZAÇÃO DA PLANILHA ====")
-                        
-                    except Exception as e:
-                        logger.error(f"Erro ao atualizar planilha para linha {sheet_row_num}: {e}")
-                        logger.exception("Detalhes do erro:")
-                else:
-                    logger.info(f"[MODO TESTE] URL gerada (não atualizada na planilha): {document_url}")
-                    logger.info(f"[MODO TESTE] Título gerado (não atualizado na planilha): {titulo_gerado}")
-                
-                # Pausa para não sobrecarregar as APIs
-                time.sleep(1)
-                
+            if 'sheet_row_num' not in linha:
+                 logger.error(f"Coluna 'sheet_row_num' não encontrada na linha com ID {id_campanha}. Pulando atualização da planilha.")
+                 continue
+            sheet_row_num = int(linha['sheet_row_num'])
+            
+            dados = {
+                'id': id_campanha,
+                'site': site,
+                'palavra_ancora': palavra_ancora,
+                'url_ancora': url_ancora,
+                # Passa o título original da planilha para o Gemini se existir, senão ele cria um do zero
+                'titulo': titulo_original_da_planilha if titulo_original_da_planilha else f"Artigo sobre {palavra_ancora}", 
+                'tema': titulo_original_da_planilha if titulo_original_da_planilha else palavra_ancora, 
+            }
+            
+            logger.info(f"Processando linha {i+1}/{total_linhas_a_processar}: ID {id_campanha} - Âncora: '{palavra_ancora}' (Sheet Row: {sheet_row_num})")
+            logger.debug(f"Dados para Gemini: {dados}")
+            
+            instrucao_adicional_para_gemini = ""
+            if palavras_a_evitar_no_titulo:
+                palavras_str = ", ".join([f"'{p}'" for p in palavras_a_evitar_no_titulo])
+                instrucao_adicional_para_gemini = f"\\n\\nCRÍTICO: Para o TÍTULO do artigo, EVITE RIGOROSAMENTE o uso das seguintes palavras (ou suas variações próximas, como plural ou gênero), pois foram detectadas como excessivamente repetidas em títulos anteriores: {palavras_str}. Foque em sinônimos e estruturas completamente diferentes para diversificar os títulos e manter a originalidade."
+                logger.info(f"Instrução adicional para Gemini (evitar palavras no título): {instrucao_adicional_para_gemini}")
+
+            logger.info(f"Gerando conteúdo com o Gemini para '{palavra_ancora}'...")
+            conteudo, metricas, info_link = gemini.gerar_conteudo(
+                dados,
+                instrucao_adicional=instrucao_adicional_para_gemini
+            )
+            
+            # ... (restante do loop: métricas, extrair título, criar doc, atualizar planilha) ...
+            custo_total += metricas['custo_estimado']
+            tokens_entrada_total += metricas['tokens_entrada']
+            tokens_saida_total += metricas['tokens_saida']
+            
+            titulo_gerado = extrair_titulo(conteudo)
+            logger.info(f"Título gerado: {titulo_gerado}")
+            
+            try:
+                nome_arquivo = gerar_nome_arquivo(id_campanha, site, palavra_ancora, titulo_gerado)
             except Exception as e:
-                # Log do erro incluindo o número da linha da planilha, se disponível
-                sheet_row_num_erro = linha.get('sheet_row_num', 'N/A')
-                logger.error(f"Erro ao processar linha {i+1} (Sheet Row: {sheet_row_num_erro}): {e}")
-                logger.exception("Detalhes completos do erro:")
-                continue # Continua para a próxima linha em caso de erro
-        
-        # Exibe resumo
+                logger.error(f"Erro ao gerar nome de arquivo: {e}. Usando fallback.")
+                nome_arquivo = f"{id_campanha} - {site} - Artigo"
+            
+            logger.info(f"Criando documento '{nome_arquivo}' na pasta {DRIVE_FOLDER_ID}...")
+            document_id, document_url = docs.criar_documento(
+                titulo_gerado,
+                conteudo,
+                nome_arquivo,
+                info_link,
+                target_folder_id=DRIVE_FOLDER_ID
+            )
+            
+            if not modo_teste:
+                try:
+                    col_titulo_letra = sheets.get_column_letter(COLUNAS['titulo'])
+                    col_url_letra = sheets.get_column_letter(COLUNAS['url_documento'])
+                    logger.info(f"Atualizando Planilha: Linha {sheet_row_num}, Col Título ({col_titulo_letra}), Col URL ({col_url_letra})")
+                    
+                    sheets.atualizar_titulo_documento(
+                        sheet_row_num=sheet_row_num,
+                        titulo=titulo_gerado,
+                        spreadsheet_id=SPREADSHEET_ID,
+                        sheet_name=SHEET_NAME
+                    )
+                    sheets.atualizar_url_documento(
+                        sheet_row_num=sheet_row_num,
+                        url_documento=document_url,
+                        spreadsheet_id=SPREADSHEET_ID,
+                        sheet_name=SHEET_NAME
+                    )
+                    logger.info(f"✓ Planilha atualizada para ID {id_campanha} (linha {sheet_row_num}).")
+                except Exception as e:
+                    logger.error(f"Erro ao atualizar planilha para linha {sheet_row_num}: {e}")
+            else:
+                logger.info(f"[MODO TESTE] Documento gerado: {document_url} (Não atualizado na planilha)")
+                logger.info(f"[MODO TESTE] Título gerado: {titulo_gerado} (Não atualizado na planilha)")
+            
+            time.sleep(DELAY_ENTRE_CHAMADAS_GEMINI) # Pausa configurável
+
+        # ... (resumo de execução, chamadas de verificação de duplicatas, etc.) ...
         logger.info(f"\n{'='*50}")
         logger.info(f"RESUMO DE EXECUÇÃO - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        logger.info(f"Total de artigos processados: {len(df_para_processar_final)}")
+        logger.info(f"Total de artigos processados: {total_linhas_a_processar}")
         logger.info(f"Tokens de entrada: {tokens_entrada_total}")
         logger.info(f"Tokens de saída: {tokens_saida_total}")
-        logger.info(f"Custo total estimado: ${custo_total:.4f} USD (aproximadamente R${custo_total*5:.2f})")
+        logger.info(f"Custo total estimado: ${custo_total:.4f} USD (aproximadamente R${custo_total * USD_TO_BRL_RATE:.2f})")
         logger.info(f"{'='*50}")
         
-        # Verifica e corrige títulos duplicados, similaridade e termos proibidos (somente se não estiver em modo de teste)
-        if not modo_teste and limite_linhas is None:
-            logger.info("Iniciando verificação de títulos duplicados...")
-            verificar_titulos_duplicados(sheets, gemini, docs, modo_teste=False)
-            
-            logger.info("Iniciando verificação de similaridade entre conteúdos...")
-            verificar_similaridade_conteudos(sheets, gemini, docs, limiar_similaridade=0.4, modo_teste=False)
-            
-            logger.info("Iniciando verificação de termos proibidos...")
-            corrigir_termos_proibidos(sheets, docs, modo_teste=False)
+        if not modo_teste and (limite_linhas is None and quantidade_especifica is None and not categorias_selecionadas): # Só roda se processou tudo
+            logger.info("Iniciando verificações de qualidade pós-processamento...")
+            verificar_titulos_duplicados(sheets, gemini, docs, modo_teste=False, spreadsheet_id_param=SPREADSHEET_ID, sheet_name_param=SHEET_NAME, drive_folder_id_param=DRIVE_FOLDER_ID)
+            verificar_similaridade_conteudos(sheets, gemini, docs, limiar_similaridade=0.4, modo_teste=False, spreadsheet_id_param=SPREADSHEET_ID, sheet_name_param=SHEET_NAME, drive_folder_id_param=DRIVE_FOLDER_ID)
+            corrigir_termos_proibidos(sheets, docs, modo_teste=False, spreadsheet_id_param=SPREADSHEET_ID, sheet_name_param=SHEET_NAME, drive_folder_id_param=DRIVE_FOLDER_ID)
         elif not modo_teste:
-            logger.info("Processamento com limite de linhas. Verificações de duplicidade, similaridade e termos proibidos serão ignoradas.")
+            logger.info("Processamento com filtros/limites. Verificações de qualidade (duplicidade, similaridade, termos proibidos) serão ignoradas no final.")
         else:
-            logger.info("Modo de teste ativo. Verificações de duplicidade, similaridade e termos proibidos serão ignoradas.")
+            logger.info("Modo de teste ativo. Verificações de qualidade (duplicidade, similaridade, termos proibidos) serão ignoradas no final.")
+
     except Exception as e:
-        logger.error(f"Erro durante a execução do script: {e}")
-        logger.exception("Detalhes do erro:")
+        logger.error(f"Erro GERAL durante a execução do script: {e}")
+        logger.exception("Detalhes do erro GERAL:")
+    finally:
+        logger.info(f"Script SEO-LinkBuilder finalizado - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
 if __name__ == "__main__":
     import argparse

@@ -5,6 +5,11 @@ import re
 import sys
 from datetime import datetime
 import tiktoken
+from collections import Counter
+import unicodedata # Para normalização de acentos
+
+# Configura o logger para este módulo
+logger = logging.getLogger(__name__)
 
 # Configuração de logging
 def configurar_logging(nivel=logging.INFO):
@@ -298,7 +303,7 @@ def converter_markdown_para_docs(texto, info_link=None):
                     }
                 })
                 
-                logging.getLogger('seo_linkbuilder.utils').info(
+                logger.info(
                     f"Link aplicado à palavra '{palavra}' no parágrafo {paragrafo_alvo} posição {posicao_inicio}-{posicao_fim}"
                 )
                 return requests
@@ -356,7 +361,7 @@ def converter_markdown_para_docs(texto, info_link=None):
                     }
                 })
                 
-                logging.getLogger('seo_linkbuilder.utils').info(
+                logger.info(
                     f"Link aplicado à palavra '{palavra}' no parágrafo {num_paragrafo} posição {posicao_inicio}-{posicao_fim}"
                 )
                 break
@@ -375,7 +380,7 @@ def contar_tokens(texto, modelo="gpt-3.5-turbo"):
         return len(codificador.encode(texto))
     except Exception as e:
         # Fallback: estimativa aproximada baseada em palavras
-        logging.warning(f"Erro ao contar tokens com tiktoken: {e}")
+        logger.warning(f"Erro ao contar tokens com tiktoken: {e}")
         palavras = texto.split()
         # Aproximação: ~0.75 tokens por palavra para inglês, ~0.6 para português
         return int(len(palavras) * 0.6)
@@ -545,3 +550,142 @@ def substituir_links_markdown(texto, palavra_ancora, url_ancora):
     }
     
     return texto, info_link 
+
+# Lista de stopwords em português (expandida e normalizada)
+PORTUGUESE_STOPWORDS = set([
+    "de", "a", "o", "que", "e", "do", "da", "em", "um", "para", "com", "nao", "uma", # "não" normalizado
+    "os", "no", "se", "na", "por", "mais", "as", "dos", "como", "mas", "foi", "ao", "ele",
+    "das", "tem", "a", "seu", "sua", "ou", "ser", "quando", "muito", "ha", "nos", "ja", # "à", "há", "já" normalizados
+    "esta", "eu", "tambem", "so", "pelo", "pela", "ate", "isso", "ela", "entre", "era", # "está", "também", "só", "até" normalizados
+    "depois", "sem", "mesmo", "aos", "ter", "seus", "quem", "nas", "me", "esse", "eles",
+    "estao", "voce", "tinha", "foram", "essa", "num", "nem", "suas", "meu", "as", "minha", # "estão", "você", "às" normalizados
+    "numa", "pelos", "elas", "havia", "seja", "qual", "sera", "nos", "tenho", "lhe", "deles", # "será" normalizado
+    "essas", "esses", "pelas", "este", "fosse", "dele", "tu", "te", "voces", "vos", "lhes", # "vocês" normalizado
+    "meus", "minhas", "teu", "tua", "teus", "tuas", "nosso", "nossa", "nossos", "nossas",
+    "dela", "delas", "esta", "estes", "estas", "aquele", "aquela", "aqueles", "aquelas",
+    "isto", "aquilo", "estou", "estamos", "estavam", "estive", "esteve", "estivemos",
+    "estiveram", "estivesse", "estivessemos", "estivessem", "estiver", "estivermos",
+    "estiverem", "hei", "ha", "havemos", "hao", "houve", "houvemos", "houveram", "houvera", # "hão" normalizado
+    "houveramos", "haja", "hajamos", "hajam", "houvesse", "houvessemos", "houvessem",
+    "houver", "houvermos", "houverem", "houverei", "houvera", "houveremos", "houverao", # "houverá", "houverão" normalizados
+    "houveria", "houveriamos", "houveriam", "sou", "somos", "sao", "era", "eramos", "eram", # "são", "éramos" normalizados
+    "fui", "foi", "fomos", "foram", "fora", "foramos", "seja", "sejamos", "sejam", "fosse", # "fôramos" normalizado
+    "fossemos", "fossem", "for", "formos", "forem", "serei", "sera", "seremos", "serao", # "será", "serão" normalizados
+    "seria", "seriamos", "seriam", "tenho", "tem", "temos", "tem", "tinha", "tinhamos", # "têm", "tínhamos" normalizados
+    "tinham", "tive", "teve", "tivemos", "tiveram", "tivera", "tiveramos", "tenha", # "tivéramos" normalizado
+    "tenhamos", "tenham", "tivesse", "tivessemos", "tivessem", "tiver", "tivermos",
+    "tiverem", "terei", "tera", "teremos", "terao", "teria", "teriamos", "teriam", # "terá", "terão" normalizados
+    # Adicionando algumas palavras curtas que podem ser comuns em títulos mas não são stopwords clássicas
+    "sobre", "onde", "como", "porque", "pra", "pro", "pras", "pros", "quer", "ver", "vai", "sao", "guia", "dicas"
+])
+
+def normalizar_texto(texto: str) -> str:
+    """Remove acentos e converte para minúsculas."""
+    if not isinstance(texto, str):
+        return ""
+    # Normalização para decompor acentos
+    nfkd_form = unicodedata.normalize('NFKD', texto.lower())
+    # Mantém apenas caracteres ASCII (remove acentos)
+    return "".join([c for c in nfkd_form if not unicodedata.combining(c)])
+
+def identificar_palavras_frequentes_em_titulos(
+    titulos: list[str],
+    limiar_percentual: float = 0.5,
+    min_titulos_para_analise: int = 10,
+    min_palavra_len: int = 4
+) -> list[str]:
+    """
+    Identifica palavras (excluindo stopwords) que aparecem em uma alta porcentagem de títulos.
+    Args:
+        titulos: Lista de strings, onde cada string é um título.
+        limiar_percentual: Percentual de títulos em que uma palavra deve aparecer para ser considerada frequente.
+        min_titulos_para_analise: Número mínimo de títulos válidos para realizar a análise.
+        min_palavra_len: Comprimento mínimo da palavra (normalizada) para ser considerada.
+    Returns:
+        Lista de palavras frequentes (normalizadas) a serem evitadas.
+    """
+    titulos_validos_normalizados = [
+        normalizar_texto(str(t)) for t in titulos 
+        if t and isinstance(t, str) and normalizar_texto(str(t)).strip() and normalizar_texto(str(t)).strip() != "sem titulo"
+    ]
+
+    if not titulos_validos_normalizados or len(titulos_validos_normalizados) < min_titulos_para_analise:
+        logger.info(
+            f"Número de títulos válidos ({len(titulos_validos_normalizados)}) é menor que "
+            f"o mínimo para análise ({min_titulos_para_analise}). Nenhuma palavra será marcada como frequente."
+        )
+        return []
+
+    contador_palavras_em_titulos = Counter()
+    total_titulos_analisados = len(titulos_validos_normalizados)
+
+    for titulo_norm in titulos_validos_normalizados:
+        palavras = re.findall(r'\b\w+\b', titulo_norm) # \w+ já lida bem com texto normalizado sem acentos
+        palavras_unicas_no_titulo = set()
+        for palavra_norm in palavras:
+            if palavra_norm not in PORTUGUESE_STOPWORDS and len(palavra_norm) >= min_palavra_len:
+                palavras_unicas_no_titulo.add(palavra_norm)
+        
+        for palavra_unica_norm in palavras_unicas_no_titulo:
+            contador_palavras_em_titulos[palavra_unica_norm] += 1
+            
+    palavras_frequentes = []
+    if not contador_palavras_em_titulos:
+        logger.info("Nenhuma palavra candidata encontrada após filtragem de stopwords e tamanho.")
+        return []
+
+    logger.debug(f"Contagem de palavras nos títulos (top 10): {contador_palavras_em_titulos.most_common(10)}")
+
+    for palavra_norm, contagem in contador_palavras_em_titulos.items():
+        percentual_ocorrencia = contagem / total_titulos_analisados
+        # logger.debug(f"Palavra: '{palavra_norm}', Contagem: {contagem}, Total Títulos: {total_titulos_analisados}, Percentual: {percentual_ocorrencia:.2f}")
+        if percentual_ocorrencia > limiar_percentual:
+            palavras_frequentes.append(palavra_norm)
+            
+    if palavras_frequentes:
+        logger.info(
+            f"Palavras frequentes identificadas (ocorrem em > {limiar_percentual*100:.0f}% de {total_titulos_analisados} títulos): "
+            f"{palavras_frequentes}"
+        )
+    else:
+        logger.info(
+            f"Nenhuma palavra excedeu o limiar de frequência de {limiar_percentual*100:.0f}% nos {total_titulos_analisados} títulos analisados."
+        )
+        
+    return palavras_frequentes 
+
+def limpar_nome_arquivo(nome_arquivo: str) -> str:
+    """
+    Limpa uma string para ser usada como nome de arquivo, removendo caracteres inválidos
+    e substituindo espaços. Utiliza a função normalizar_texto para remover acentos.
+    """
+    if not isinstance(nome_arquivo, str):
+        logger.warning(f"Tentativa de limpar nome de arquivo não string: {type(nome_arquivo)}. Retornando fallback.")
+        return "documento_sem_nome_valido"
+    
+    nome_normalizado = normalizar_texto(nome_arquivo) # Remove acentos e converte para minúsculas
+    
+    # Remove caracteres que não são alfanuméricos, espaço, ponto, hífen ou underscore
+    nome_limpo = re.sub(r'[^a-z0-9\s._-]', '', nome_normalizado)
+    
+    # Substitui um ou mais espaços, hífens ou underscores por um único hífen
+    nome_limpo = re.sub(r'[\s_-]+', '-', nome_limpo)
+    
+    # Remove hífens do início e do fim
+    nome_limpo = nome_limpo.strip('-')
+    
+    # Garante que não seja apenas um ponto ou vazio
+    if not nome_limpo or nome_limpo == '.':
+        logger.warning(f"Nome de arquivo ficou vazio ou inválido após limpeza de '{nome_arquivo}'. Retornando fallback.")
+        # Tenta usar uma parte do original se possível, ou um nome genérico
+        fallback_match = re.search(r'[a-z0-9]+', normalizar_texto(nome_arquivo))
+        if fallback_match:
+            return fallback_match.group(0)[:50] # Pega a primeira sequência alfanumérica
+        return "documento_gerado"
+        
+    # Limitar o comprimento (opcional, mas bom para alguns sistemas de arquivos)
+    # max_len = 100
+    # if len(nome_limpo) > max_len:
+    #     nome_limpo = nome_limpo[:max_len].rsplit('-', 1)[0] # Tenta cortar em um hífen para não quebrar palavras
+        
+    return nome_limpo 

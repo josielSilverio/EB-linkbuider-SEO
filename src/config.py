@@ -52,9 +52,15 @@ GEMINI_MODEL = os.getenv("GEMINI_MODEL", DEFAULT_GEMINI_MODEL) # Usa o padrão d
 GEMINI_MAX_OUTPUT_TOKENS = int(os.getenv("GEMINI_MAX_OUTPUT_TOKENS", 8192))
 GEMINI_TEMPERATURE = float(os.getenv("GEMINI_TEMPERATURE", 0.3))
 
+# Delay entre chamadas da API Gemini (em segundos)
+DELAY_ENTRE_CHAMADAS_GEMINI = float(os.getenv("DELAY_ENTRE_CHAMADAS_GEMINI", 1.0)) # Padrão de 1 segundo
+
 # Preços do Gemini (manter apenas se for usar estimativa de custo)
 GEMINI_PRECO_ENTRADA = float(os.getenv("GEMINI_PRECO_ENTRADA", 0.00025))
 GEMINI_PRECO_SAIDA = float(os.getenv("GEMINI_PRECO_SAIDA", 0.0005))
+
+# Taxa de Câmbio (pode ser ajustada ou carregada do .env se necessário no futuro)
+USD_TO_BRL_RATE = float(os.getenv("USD_TO_BRL_RATE", 5.0)) # Valor padrão de 5.0
 
 # Configurações de colunas da planilha (ajustado conforme a estrutura real da planilha)
 COLUNAS = {

@@ -89,7 +89,7 @@ REGRAS OBRIGATÓRIAS:
 - NÃO mencione nomes de casas de apostas ou sites de jogos.
 - NÃO use frases como "ganhe mais", "aproveite agora", "clique aqui", "multiplique seus ganhos", "domine o jogo", "experimente já".
 - NÃO faça promessas de ganhos fáceis ou garantidos.
-- NÃO direcione o conteúdo a menores de idade.
+- NÃO direcione o conteúdo a menores de idade.  
 - NÃO inclua informações enganosas sobre probabilidades de ganho.
 - NÃO promova bônus de cadastro de forma irresponsável.
 - SEMPRE inclua avisos sobre a importância de jogar com responsabilidade e limites.
