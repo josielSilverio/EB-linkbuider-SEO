@@ -122,22 +122,29 @@ class SheetsHandler:
             self.logger.error(f"Erro ao listar abas da planilha {spreadsheet_id}: {e}")
             return []
     
-    def ler_planilha(self, limite_linhas: Optional[int] = None, apenas_dados: bool = False, spreadsheet_id=None, sheet_name=None, filtrar_processados=True):
+    def ler_planilha(self, 
+                     limite_linhas: Optional[int] = None, 
+                     apenas_dados: bool = False, 
+                     spreadsheet_id: Optional[str] = None, 
+                     sheet_name: Optional[str] = None, 
+                     filtrar_processados: bool = True,
+                     linha_inicial: Optional[int] = None):
         """
         Lê a planilha do Google Sheets e retorna os dados como um DataFrame pandas.
         Adiciona uma coluna 'sheet_row_num' com o número original da linha na planilha.
         
         Args:
-            limite_linhas: Opcional. Limita o número de linhas a serem lidas.
+            limite_linhas: Opcional. Limita o número de linhas a serem lidas (APÓS filtro de linha_inicial).
             apenas_dados: Se True, retorna todos os dados sem aplicar filtros adicionais de ID.
             spreadsheet_id: ID da planilha. Se None, usa o ID configurado no .env
             sheet_name: Nome da aba. Se None, usa o nome configurado no .env
             filtrar_processados: Se True, filtra linhas que já foram processadas (têm URL de documento).
+            linha_inicial: Opcional. Número da linha da planilha a partir da qual começar (1-based).
         
         Returns:
             DataFrame com os dados da planilha e a coluna 'sheet_row_num'.
         """
-        self.logger.debug(f"Iniciando leitura da planilha. Limite: {limite_linhas}, Apenas Dados: {apenas_dados}, Filtrar Processados: {filtrar_processados}")
+        self.logger.debug(f"Iniciando leitura da planilha. Limite: {limite_linhas}, Linha Inicial: {linha_inicial}, Apenas Dados: {apenas_dados}, Filtrar Processados: {filtrar_processados}")
 
         current_spreadsheet_id = spreadsheet_id if spreadsheet_id else SPREADSHEET_ID
         current_sheet_name = sheet_name if sheet_name else SHEET_NAME
@@ -231,15 +238,30 @@ class SheetsHandler:
 
             # Ordenar por 'sheet_row_num' para garantir que processamos na ordem da planilha
             # Isso é importante se o limite_linhas for aplicado.
-            df = df.sort_values(by='sheet_row_num').reset_index(drop=True) # Resetar índice após ordenação
-                                                                        # para que .head() funcione previsivelmente.
+            df = df.sort_values(by='sheet_row_num').reset_index(drop=True)
+                                                                        
+            self.logger.info(f"DataFrame preparado com {len(df)} linhas antes do filtro de linha inicial. Próximas (sheet_row_num): {df['sheet_row_num'].head().tolist() if not df.empty else 'N/A'}")
 
-            self.logger.info(f"DataFrame preparado com {len(df)} linhas. Próximas linhas (sheet_row_num): {df['sheet_row_num'].head().tolist() if not df.empty else 'N/A'}")
-            
+            # Aplicar filtro de linha_inicial, se especificado
+            if linha_inicial is not None and isinstance(linha_inicial, int) and linha_inicial > 1: # Deve ser > 1 pois linha 1 é cabeçalho
+                self.logger.info(f"Aplicando filtro para começar a partir da linha da planilha: {linha_inicial}")
+                df = df[df['sheet_row_num'] >= linha_inicial]
+                df = df.reset_index(drop=True) # Resetar índice após esta filtragem crucial
+                if df.empty:
+                    self.logger.warning(f"Nenhuma linha restante após filtrar pela linha inicial {linha_inicial}.")
+                else:
+                    self.logger.info(f"{len(df)} linhas restantes após filtro de linha inicial. Próximas (sheet_row_num): {df['sheet_row_num'].head().tolist()}")
+            elif linha_inicial is not None:
+                 self.logger.warning(f"Parâmetro 'linha_inicial' ({linha_inicial}) é inválido ou <= 1. Ignorando filtro de linha inicial.")
+
+            # Aplicar limite_linhas APÓS o filtro de linha_inicial
             if limite_linhas is not None and isinstance(limite_linhas, int) and limite_linhas > 0:
                 if not df.empty:
-                    df = df.head(limite_linhas)
-                    self.logger.info(f"{len(df)} linhas após aplicar limite de {limite_linhas}.")
+                    if limite_linhas < len(df):
+                        self.logger.info(f"Aplicando limite de {limite_linhas} linhas ao DataFrame resultante.")
+                        df = df.head(limite_linhas)
+                    # else: o df já é menor ou igual ao limite, nada a fazer
+                    self.logger.info(f"{len(df)} linhas no DataFrame final após todos os filtros e limites.")
             
             return df if not apenas_dados else df.values.tolist()
 
