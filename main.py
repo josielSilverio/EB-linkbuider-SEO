@@ -1107,38 +1107,81 @@ def processar_linha(linha, indice, df, df_original, modo_teste, spreadsheet_id, 
 
 def extrair_titulo(conteudo, palavra_ancora: str):
     """
-    Extrai o título do conteúdo gerado (primeira linha não vazia) e garante que tenha um comprimento adequado.
-    Também verifica a presença da palavra-âncora.
+    Extrai o título do conteúdo gerado, priorizando H1 (#) ou H2 (##).
+    Aplica validações e correções subsequentes.
     """
-    # A importação de verificar_e_corrigir_titulo já está no escopo global de gemini_handler,
-    # mas para clareza se esta função fosse movida, poderia ser importada aqui.
-    # from src.gemini_handler import verificar_e_corrigir_titulo 
-    
+    from src.gemini_handler import verificar_e_corrigir_titulo # Importa aqui para clareza
+    logger = logging.getLogger('seo_linkbuilder.main') # Usar o logger apropriado
+
     linhas = conteudo.strip().split('\n')
+    titulo_markdown_h1 = None
+    titulo_markdown_h2 = None
+    primeira_linha_nao_vazia = None
+
     for linha_atual in linhas:
         linha_limpa = linha_atual.strip()
-        if linha_limpa and not linha_limpa.startswith('#'):
-            titulo_bruto = re.sub(r'[*_#]', '', linha_limpa)
-            # Aplica verificação e correção, passando a palavra_ancora
-            titulo_verificado = verificar_e_corrigir_titulo(titulo_bruto, palavra_ancora)
-            if titulo_verificado: # Se retornou um título válido
-                return titulo_verificado
-            # Se retornou None, o título foi rejeitado, continuamos para tentar outra linha ou fallback
-            # Isso pode acontecer se a primeira linha parecer um título mas não tiver a âncora, por exemplo.
+        if not linha_limpa:
+            continue
+
+        if not primeira_linha_nao_vazia:
+            primeira_linha_nao_vazia = linha_limpa
+
+        if linha_limpa.startswith("# "):
+            if titulo_markdown_h1 is None: # Pega o primeiro H1
+                titulo_markdown_h1 = linha_limpa[2:].strip()
+        elif linha_limpa.startswith("## "):
+            if titulo_markdown_h2 is None: # Pega o primeiro H2
+                titulo_markdown_h2 = linha_limpa[3:].strip()
     
-    # Fallback: Se nenhum título claro foi encontrado nas primeiras linhas ou foram rejeitados
-    # Tenta criar um título com as primeiras palavras e a palavra-âncora, e então verifica.
-    palavras_conteudo = conteudo.split()[:7] # Pega um pouco mais para dar contexto
-    titulo_fallback_bruto = ' '.join(palavras_conteudo)
+    titulo_bruto_selecionado = None
+    if titulo_markdown_h1:
+        logger.info(f"Título H1 detectado: '{titulo_markdown_h1}'")
+        titulo_bruto_selecionado = titulo_markdown_h1
+    elif titulo_markdown_h2:
+        logger.info(f"Título H2 detectado (H1 ausente): '{titulo_markdown_h2}'")
+        titulo_bruto_selecionado = titulo_markdown_h2
+    elif primeira_linha_nao_vazia:
+        # Fallback para a primeira linha não vazia SOMENTE se não for um H1/H2 já processado
+        # e se não começar com outros # (H3, H4 etc) que não queremos como título principal.
+        if not (primeira_linha_nao_vazia.startswith("#") and primeira_linha_nao_vazia not in [titulo_markdown_h1, titulo_markdown_h2]):
+             logger.warning(f"Nenhum H1 ou H2 encontrado. Usando primeira linha não vazia como fallback: '{primeira_linha_nao_vazia}'")
+             titulo_bruto_selecionado = primeira_linha_nao_vazia
+        else:
+            logger.warning(f"Primeira linha é um H3+ ('{primeira_linha_nao_vazia}'). Não usando como título principal. Tentando fallback mais robusto.")
+
+    if titulo_bruto_selecionado:
+        titulo_verificado = verificar_e_corrigir_titulo(titulo_bruto_selecionado, palavra_ancora)
+        if titulo_verificado:
+            logger.info(f"Título bruto '{titulo_bruto_selecionado}' verificado para '{titulo_verificado}'")
+            return titulo_verificado
+        else:
+            logger.warning(f"Título bruto '{titulo_bruto_selecionado}' foi rejeitado por verificar_e_corrigir_titulo. Tentando fallback.")
+
+    # Fallback final se nada acima funcionou ou foi rejeitado
+    logger.warning("Nenhum título claro encontrado ou todos foram rejeitados. Construindo fallback.")
+    palavras_conteudo = [p for p in conteudo.split() if p.strip()][:10] # Pega as primeiras 10 palavras significativas
+    titulo_fallback_bruto = ' '.join(palavras_conteudo).strip()
+    
+    # Garante que a âncora esteja no fallback se possível, sem duplicar
     if palavra_ancora.lower() not in titulo_fallback_bruto.lower():
         titulo_fallback_bruto = f"{palavra_ancora}: {titulo_fallback_bruto}"
     
+    # Tenta verificar o fallback construído
     titulo_fallback_verificado = verificar_e_corrigir_titulo(titulo_fallback_bruto, palavra_ancora)
     if titulo_fallback_verificado:
+        logger.info(f"Usando título de fallback verificado: '{titulo_fallback_verificado}'")
         return titulo_fallback_verificado
     
-    # Se até o fallback falhar, retorna um título genérico com a âncora (menos ideal)
-    return f"Artigo sobre {palavra_ancora} (Título Provisório)"
+    # Último recurso se até o fallback verificado falhar (raro, mas para segurança)
+    fallback_final_seguro = f"Artigo sobre {palavra_ancora}"
+    # Tenta dar um tamanho mínimo, se possível, com base na âncora e algumas palavras
+    if len(fallback_final_seguro) < 30 and palavras_conteudo:
+        complemento = ' '.join(palavras_conteudo[:max(0, 9 - len(fallback_final_seguro.split()))]) # Tenta chegar a ~9 palavras
+        if complemento:
+            fallback_final_seguro = f"{fallback_final_seguro} - {complemento}"
+
+    logger.error(f"Todos os métodos de extração de título falharam. Usando fallback genérico final: '{fallback_final_seguro}'")
+    return fallback_final_seguro.strip()
 
 def apresentar_menu_pasta_drive() -> str:
     """

@@ -94,14 +94,16 @@ def extrair_instrucao_especial_jogo(palavra_ancora: str) -> str:
         "crash": "Destaque o elemento de estratégia e timing. Explique como o jogo oferece uma experiência diferente dos slots tradicionais, com foco na tomada de decisões e controle.",
         
         # Slots populares
-        "gates of olympus": "Foque na rica temática mitológica grega. Descreva como o jogo incorpora Zeus e outros elementos da mitologia em sua mecânica. Mencione os multiplicadores e o sistema de rodadas bônus.",
-        "fortune rabbit": "Enfatize a temática asiática e os elementos culturais de sorte. Descreva os símbolos especiais e como eles se conectam com as tradições de fortuna. Mencione as mecânicas de bônus.",
-        "sweet bonanza": "Destaque o visual colorido e a temática de doces. Explique o sistema único de pagamentos em cluster em vez de linhas tradicionais. Mencione as rodadas bônus e multiplicadores.",
+        "gates of olympus": "Foque na rica temática mitológica grega. Descreva como o jogo incorpora Zeus e outros elementos da mitologia em sua mecânica. Mencione os multiplicadores e o sistema de rodadas bônus. Explore ângulos como: a popularidade de temas míticos em slots, ou como a volatilidade do jogo se alinha com a natureza dos deuses.",
+        "fortune rabbit": "Enfatize a temática asiática e os elementos culturais de sorte. Descreva os símbolos especiais e como eles se conectam com as tradições de fortuna. Mencione as mecânicas de bônus. Sugira títulos que explorem a simbologia da sorte ou o design visual do jogo.",
+        "sweet bonanza": "Destaque o visual colorido e a temática de doces. Explique o sistema único de pagamentos em cluster em vez de linhas tradicionais. Mencione as rodadas bônus e multiplicadores. Incentive títulos que brinquem com a experiência sensorial ou a inovação da mecânica de cluster.",
+        "lucky dragons": "Explore a mística dos dragões asiáticos neste slot. Além das mecânicas de bônus e visuais, sugira ângulos como: o simbolismo dos dragões na cultura dos jogos de sorte, comparativos com outros slots de temática similar, ou a experiência do jogador em busca da sorte do dragão.",
         
         # Jogos de mesa
-        "blackjack": "Aborde o equilíbrio entre sorte e estratégia. Explique a mecânica básica e por que o jogo atrai tanto jogadores iniciantes quanto experientes. Mencione a importância das decisões estratégicas.",
-        "poker": "Destaque o elemento de habilidade e psicologia. Explique como o jogo se diferencia de outros jogos de cassino pelo componente estratégico. Mencione as variantes mais populares.",
-        "roleta": "Explique a elegância e simplicidade do jogo. Descreva os diferentes tipos de apostas possíveis e como a roleta mantém seu charme através dos séculos. Mencione as diferenças entre as versões online e físicas, como dealers ao vivo e variedades exclusivas da web.",
+        "blackjack": "Aborde o equilíbrio entre sorte e estratégia. Explique a mecânica básica e por que o jogo atrai tanto jogadores iniciantes quanto experientes. Mencione a importância das decisões estratégicas. Sugira análises sobre a psicologia do jogador de blackjack ou a evolução das estratégias.",
+        "poker": "Destaque o elemento de habilidade e psicologia. Explique como o jogo se diferencia de outros jogos de cassino pelo componente estratégico. Mencione as variantes mais populares. Encoraje discussões sobre o poker como esporte mental ou a importância do bluff.",
+        "roleta": "Explique a elegância e simplicidade do jogo. Descreva os diferentes tipos de apostas possíveis e como a roleta mantém seu charme através dos séculos. Mencione as diferenças entre as versões online e físicas, como dealers ao vivo e variedades exclusivas da web. Incentive ângulos como: a matemática por trás da roleta, ou o glamour associado ao jogo.",
+        "bacbo": "Este jogo combina elementos do Bacará com dados. Explique essa fusão única e como ela atrai jogadores. Considere ângulos como: Bacbo é uma simplificação bem-vinda do Bacará? Como a adição de dados muda a dinâmica do jogo? A experiência é mais rápida ou tensa? Explore a popularidade crescente de jogos de cassino ao vivo com mecânicas inovadoras.",
         
         # Termos genéricos de apostas - NOVAS ADIÇÕES
         "casa de apostas": "Foque nos aspectos de confiança, segurança, variedade de mercados (esportes, cassino), qualidade do atendimento e experiência do usuário na plataforma. Ângulos possíveis: O que procurar em uma casa de apostas de excelência? Como a tecnologia está transformando as casas de apostas? Comparativos de funcionalidades.",
@@ -120,16 +122,16 @@ def extrair_instrucao_especial_jogo(palavra_ancora: str) -> str:
     
     # Instruções padrão baseadas em categorias de jogos
     if any(termo in palavra_ancora.lower() for termo in ["fortune", "lucky", "tiger", "gold", "gems", "dragon"]):
-        return "Destaque a temática de fortuna e riqueza do jogo. Explique os símbolos especiais e como eles se conectam com o tema principal. Descreva as mecânicas de bônus e o visual distintivo."
+        return "Destaque a temática de fortuna e riqueza do jogo. Além de explicar símbolos e bônus, explore ângulos como: a psicologia da busca pela sorte nesses jogos, o design visual que evoca riqueza, ou um comparativo com outros jogos de temática similar."
     
     if any(termo in palavra_ancora.lower() for termo in ["book", "dead", "egypt", "vikings", "aztec"]):
-        return "Enfatize o tema histórico ou mitológico. Explique como o jogo incorpora elementos culturais autênticos em sua mecânica. Descreva os símbolos e recursos especiais que o tornam único."
+        return "Enfatize o tema histórico ou mitológico. Além de explicar mecânicas, explore o apelo dessas narrativas nos jogos, como o jogo se compara a lendas reais, ou a experiência de 'aventura' que ele proporciona."
     
     if any(termo in palavra_ancora.lower() for termo in ["fruit", "candy", "sweet", "fish"]):
-        return "Destaque o visual colorido e temático. Explique como o jogo se diferencia com seus símbolos e mecânicas especiais. Descreva a experiência visual e as funcionalidades exclusivas."
+        return "Destaque o visual colorido e temático. Além das mecânicas, explore como o design influencia o humor do jogador, a nostalgia (no caso de frutas), ou a simplicidade divertida que esses temas oferecem."
     
     # Instrução genérica para garantir originalidade
-    return "Destaque o que torna este jogo único entre seus concorrentes. Explique as mecânicas principais, recursos especiais e elementos visuais distintivos. Mantenha o foco nas características específicas deste jogo."
+    return "Para este jogo, destaque o que o torna verdadeiramente único. Vá além da simples descrição de mecânicas e visuais. Explore ângulos como: Qual é a experiência central que ele oferece ao jogador? Como ele se posiciona em relação a outros jogos do mesmo gênero? Existe algum aspecto cultural ou tendência que ele reflete? O objetivo é encontrar uma perspectiva nova e interessante para o título e o artigo."
 
 
 def verificar_e_corrigir_titulo(titulo: str, palavra_ancora: str) -> Optional[str]:
@@ -154,12 +156,31 @@ def verificar_e_corrigir_titulo(titulo: str, palavra_ancora: str) -> Optional[st
     # Remove espaços extras e quebras de linha
     titulo_processado = re.sub(r'\\s+', ' ', titulo).strip()
 
-    # Remover prefixo "Título: " (case-insensitive)
-    if titulo_processado.lower().startswith("título:"):
-        titulo_processado = titulo_processado[len("título:"):].strip()
-        logger.info(f"Prefixo 'Título:' removido. Novo título para processamento: '{titulo_processado}'")
-        if not titulo_processado: # Se o título ficou vazio após remover "Título:"
-            logger.warning("Título ficou vazio após remover prefixo 'Título:'.")
+    # Remover prefixos como "Título:", "**Título:**", "Tema:", etc. de forma flexível.
+    # Esta regex remove espaços, markdown opcional (**, *), a palavra "título" ou "tema" (com ou sem acento),
+    # e um dois-pontos opcional, tudo no início da string, case-insensitive.
+    # A palavra "palavra-chave" ou "palavra chave" também foi adicionada aos prefixos a remover.
+    padrao_prefixo = r"^\s*(\*\*|\*|)(t[íi]tulo|tema|palavra-chave|palavra chave)\s*[:：]?\s*"
+    titulo_limpo_de_prefixo = re.sub(padrao_prefixo, "", titulo_processado, flags=re.IGNORECASE).strip()
+    
+    # Remove também quaisquer asteriscos ou # que possam ter sobrado no início após a remoção do prefixo
+    # ou que foram gerados incorretamente pelo modelo.
+    titulo_limpo_de_prefixo = re.sub(r"^\s*(\*\*|\*|#)+\s*", "", titulo_limpo_de_prefixo).strip()
+
+    if titulo_limpo_de_prefixo != titulo_processado:
+        logger.info(f"Prefixo de título/tema/palavra-chave removido. Título antes: '{titulo_processado}'. Depois: '{titulo_limpo_de_prefixo}'")
+        titulo_processado = titulo_limpo_de_prefixo
+        if not titulo_processado: # Se o título ficou vazio após remover o prefixo
+            logger.warning("Título ficou vazio após remover prefixo e será rejeitado.")
+            return None
+
+    # NOVA LIMPEZA: Remover asteriscos/cerquilhas do final do título processado
+    titulo_processado_antes_final_clean = titulo_processado
+    titulo_processado = re.sub(r"\s*(\*\*|\*|#)+$", "", titulo_processado).strip() # Regex para o final
+    if titulo_processado != titulo_processado_antes_final_clean:
+        logger.info(f"Caracteres de formatação removidos do final do título. Antes: '{titulo_processado_antes_final_clean}'. Depois: '{titulo_processado}'")
+        if not titulo_processado: # Se ficou vazio após remover do final
+            logger.warning("Título ficou vazio após remover formatação final e será rejeitado.")
             return None
 
     # Lista de frases de continuação a serem rejeitadas no início do título
