@@ -743,12 +743,19 @@ def extrair_titulos_por_ancora(df, coluna_titulo, coluna_ancora):
     """
     logger = logging.getLogger('seo_linkbuilder.utils')
     
-    titulos_por_ancora = {}
+    if df.empty:
+        logger.warning("DataFrame vazio em extrair_titulos_por_ancora.")
+        return {}
     
-    # Verificar se as colunas existem no DataFrame
-    if coluna_titulo >= len(df.columns) or coluna_ancora >= len(df.columns):
-        logger.warning(f"Colunas necessárias não encontradas no DataFrame. Colunas disponíveis: {df.columns}")
-        return titulos_por_ancora
+    # Verifica se as colunas de título e âncora existem no DataFrame
+    if coluna_titulo not in df.columns:
+        logger.error(f"Coluna de título '{coluna_titulo}' não encontrada no DataFrame.")
+        return {}
+    if coluna_ancora not in df.columns:
+        logger.error(f"Coluna de âncora '{coluna_ancora}' não encontrada no DataFrame.")
+        return {}
+
+    titulos_por_ancora = {}
     
     for idx, row in df.iterrows():
         if pd.isna(row[coluna_ancora]) or pd.isna(row[coluna_titulo]):

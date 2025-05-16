@@ -1,4 +1,4 @@
-# SEO-LinkBuilder - Versão 2.3
+# SEO-LinkBuilder - Versão 2.4
 
 **SEO-LinkBuilder** é uma solução automatizada para geração de conteúdo em larga escala para Link Building SEO. Utilizando inteligência artificial para gerar conteúdo de alta qualidade, o script gerencia o fluxo completo desde dados iniciais em uma planilha do Google Sheets até a criação de documentos no Google Docs com conteúdo otimizado.
 
@@ -8,21 +8,21 @@ Este projeto automatiza o fluxo de trabalho para geração de conteúdo SEO a pa
 
 1.  Permite selecionar a planilha e aba desejada.
 2.  Lê os dados da aba selecionada.
-3.  Apresenta um menu interativo para selecionar categorias de trabalho (baseado na coluna "Palavra-Âncora") ou uma quantidade específica de itens.
+3.  Apresenta um menu interativo para selecionar categorias de trabalho (baseado na coluna "Palavra-Âncora"), processar uma linha específica por ID (perguntando a quantidade de itens subsequentes), ou uma quantidade específica de itens.
 4.  Estima o custo de processamento com base na seleção.
-5.  Gera artigos otimizados utilizando a API do Gemini para os itens selecionados.
+5.  Gera artigos otimizados utilizando a API do Gemini para os itens selecionados, com foco em naturalidade, "brasilidade", coerência e originalidade, seguindo as diretrizes do `prompt.txt`.
 6.  Cria documentos no Google Docs com o conteúdo gerado, salvando-os em uma pasta específica no Google Drive.
-7.  Atualiza a planilha original com os títulos gerados e as URLs dos documentos criados nas colunas corretas.
+7.  Atualiza a planilha original com os títulos gerados (apenas o título na coluna "tema") e as URLs dos documentos criados nas colunas corretas.
 8.  Opcionalmente, realiza verificações de qualidade (títulos duplicados, similaridade de conteúdo, termos proibidos) após a geração.
 
 ## Funcionalidades Principais
 
 - **Seleção de Planilha/Aba**: Menu interativo para escolher qual planilha e aba do Google Sheets usar.
-- **Menu de Categorias Interativo**: Selecione categorias específicas (baseadas na palavra-âncora), todos os itens, ou uma quantidade aleatória para processar.
+- **Menu de Categorias Interativo**: Selecione categorias específicas (baseadas na palavra-âncora), todos os itens, uma quantidade aleatória, ou uma linha específica por ID para processar (com opção de definir quantos itens a partir dali).
 - **Estimativa de Custos**: Visualize o custo estimado por categoria e total antes de executar o processamento.
-- **Geração de Artigos com Gemini AI**: Cria conteúdo otimizado para SEO, incluindo links âncora de forma natural.
+- **Geração de Artigos com Gemini AI**: Cria conteúdo otimizado para SEO, incluindo links âncora de forma natural. O processo é guiado por um `prompt.txt` customizável para garantir alta qualidade, tom jornalístico brasileiro e originalidade.
 - **Integração Completa**: Google Sheets, Google Docs e Google Drive em um fluxo automatizado.
-- **Controle de Qualidade**: Funções para verificar e corrigir títulos duplicados, conteúdos com alta similaridade e termos proibidos (executadas após a geração principal, se não houver limite de linhas).
+- **Controle de Qualidade**: Funções para verificar e corrigir títulos duplicados, conteúdos com alta similaridade e termos proibidos (executadas após a geração principal, se não houver limite de linhas). A coluna "tema" na planilha é preenchida somente com o título extraído do conteúdo.
 - **Detecção e Substituição de Termos Proibidos**: Sistema automático para manter o conteúdo de acordo com as políticas.
 
 ## Pré-requisitos
@@ -149,6 +149,7 @@ Ao executar, o script apresentará os seguintes menus:
     *   Todos os itens válidos encontrados.
     *   Itens de uma categoria específica (ex: todos os "Aviator").
     *   Uma quantidade específica de itens aleatórios dentre os válidos.
+    *   **Processar por ID Específico (Opção 'L'):** Permite digitar o ID de uma linha específica. Em seguida, o script pergunta quantos itens devem ser processados a partir dessa linha (inclusive ela).
 4.  **Confirmação de Custo**: Exibe o custo total estimado para a seleção feita, com base nos preços configurados no `.env` e na contagem estimada de tokens. Pede confirmação ('s' ou 'n') para prosseguir com a geração.
 
 ## Estrutura do Projeto
@@ -194,7 +195,7 @@ Para que o script funcione corretamente, a planilha e a aba selecionadas devem t
 
 ## Personalização
 
-- **Prompt do Gemini**: Edite o arquivo `data/prompt.txt` para modificar as instruções, o tom, o estilo e a estrutura do conteúdo que o Gemini irá gerar. Experimente diferentes abordagens para otimizar os resultados.
+- **Prompt do Gemini**: Edite o arquivo `data/prompt.txt` para modificar as instruções, o tom (foco no jornalismo brasileiro), o estilo e a estrutura do conteúdo que o Gemini irá gerar. Este é o principal arquivo para refinar a "voz" da IA e garantir a "brasilidade" e qualidade do texto. Experimente diferentes abordagens para otimizar os resultados.
 - **Configurações (`.env`)**: Ajuste as configurações no arquivo `.env` para suas chaves de API, o modelo Gemini desejado (`GEMINI_MODEL`), a temperatura (`GEMINI_TEMPERATURE`), os preços de token (para estimativas de custo mais precisas), etc.
 - **Mapeamento de Colunas (`src/config.py`)**: Se a estrutura da sua planilha for diferente (ex: a Palavra-Âncora está na coluna F em vez de G), modifique o dicionário `COLUNAS` no arquivo `src/config.py`. Lembre-se que a contagem de colunas começa em 0 (A=0, B=1, C=2, ...).
 - **Nome do Arquivo do Google Doc (`src/config.py`)**: O formato do nome do arquivo é definido na função `gerar_nome_arquivo` dentro de `src/config.py`. O formato atual é `"[ID] - [Site] - [Ancora] - [4 Primeiras Palavras do Título]"`. Você pode alterar essa função para usar outras colunas ou um formato diferente.
@@ -245,7 +246,7 @@ Aqui está um detalhamento do propósito e das funções principais de cada arqu
 
 ### 📄 `main.py` - O Maestro da Orquestra
 
-*   **Propósito:** Ponto de entrada principal. Orquestra todo o fluxo: menus, leitura da planilha, filtragem, loop de processamento (chamando Gemini e Docs), atualização da planilha e controle de qualidade opcional.
+*   **Propósito:** Ponto de entrada principal. Orquestra todo o fluxo: menus (incluindo seleção por ID e quantidade), leitura da planilha, filtragem, loop de processamento (chamando Gemini e Docs), atualização da planilha e controle de qualidade opcional.
 *   **Funções Principais:**
     *   `main()`: Orquestra todo o fluxo principal.
     *   `apresentar_menu_planilha()`: Pede ID/URL da planilha, valida, lista abas e obtém a seleção do usuário.
@@ -285,7 +286,7 @@ Aqui está um detalhamento do propósito e das funções principais de cada arqu
 
 ### ✨ `src/gemini_handler.py` - O Escritor Criativo (IA)
 
-*   **Propósito:** Interage com a API do Google Gemini para gerar o conteúdo dos artigos. Constrói o prompt, faz a chamada à API, processa a resposta e realiza verificações.
+*   **Propósito:** Interage com a API do Google Gemini para gerar o conteúdo dos artigos. Constrói o prompt (baseado no `data/prompt.txt`), faz a chamada à API, processa a resposta e realiza verificações.
 *   **Classe Principal:** `GeminiHandler`
 *   **Métodos Principais:**
     *   `carregar_prompt_template()`: Carrega o conteúdo do arquivo `data/prompt.txt`.
@@ -329,4 +330,4 @@ Aqui está um detalhamento do propósito e das funções principais de cada arqu
 *   **Logging Detalhado**: Logs em arquivo (`logs/`) com codificação UTF-8 para facilitar diagnóstico de erros, incluindo informações sobre qual linha/célula está sendo atualizada.
 *   **Tratamento de Erros Aprimorado**: Mensagens de erro mais claras e tratamento específico para problemas comuns de autenticação, API e acesso a arquivos.
 *   **Estrutura de Código Refatorada**: Melhor organização em módulos (`src/`) para facilitar a manutenção e futuras expansões.
-*   **README Atualizado**: Documentação mais completa e clara. 
+*   **README Atualizado (Versão 2.4)**: Documentação mais completa e clara, refletindo as últimas funcionalidades e refinamentos no processo de geração de conteúdo. 

@@ -134,7 +134,7 @@ def extrair_instrucao_especial_jogo(palavra_ancora: str) -> str:
     return "Para este jogo, destaque o que o torna verdadeiramente único. Vá além da simples descrição de mecânicas e visuais. Explore ângulos como: Qual é a experiência central que ele oferece ao jogador? Como ele se posiciona em relação a outros jogos do mesmo gênero? Existe algum aspecto cultural ou tendência que ele reflete? O objetivo é encontrar uma perspectiva nova e interessante para o título e o artigo."
 
 
-def verificar_e_corrigir_titulo(titulo: str, palavra_ancora: str) -> Optional[str]:
+def verificar_e_corrigir_titulo(titulo: str, palavra_ancora: str, is_document_title: bool = False) -> Tuple[bool, str]:
     """
     Verifica e corrige o comprimento do título, garantindo que tenha entre 9-15 palavras,
     não ultrapasse 100 caracteres, contenha a palavra-âncora e não termine com reticências.
@@ -143,24 +143,33 @@ def verificar_e_corrigir_titulo(titulo: str, palavra_ancora: str) -> Optional[st
     Args:
         titulo: O título a ser verificado
         palavra_ancora: A palavra-âncora que deve estar presente no título
+        is_document_title: Se True, aceita títulos menores para documentos já existentes
         
     Returns:
-        Título corrigido e válido, ou None se não puder ser validado/corrigido.
+        Tupla (sucesso, titulo_corrigido)
+        - sucesso: Boolean indicando se o título é válido 
+        - titulo_corrigido: Título corrigido e formatado corretamente
     """
     logger = logging.getLogger('seo_linkbuilder.gemini')
     
     if not titulo:
         logger.warning("Título vazio recebido para verificação.")
-        return None
+        return False, "Sem título"
     
     # Remove espaços extras e quebras de linha
     titulo_processado = re.sub(r'\\s+', ' ', titulo).strip()
+
+    # NOVA LIMPEZA: Remover todos os asteriscos de marcação markdown do título
+    titulo_original = titulo_processado
+    titulo_processado = re.sub(r"\*\*|\*", "", titulo_processado).strip()
+    if titulo_processado != titulo_original:
+        logger.info(f"Marcações Markdown (asteriscos) removidos do título: '{titulo_original}' -> '{titulo_processado}'")
 
     # Remover prefixos como "Título:", "**Título:**", "Tema:", etc. de forma flexível.
     # Esta regex remove espaços, markdown opcional (**, *), a palavra "título" ou "tema" (com ou sem acento),
     # e um dois-pontos opcional, tudo no início da string, case-insensitive.
     # A palavra "palavra-chave" ou "palavra chave" também foi adicionada aos prefixos a remover.
-    padrao_prefixo = r"^\s*(\*\*|\*|)(t[íi]tulo|tema|palavra-chave|palavra chave)\s*[:：]?\s*"
+    padrao_prefixo = r"^\s*(\*\*|\*|)(t[íi]tulo|tema|palavra-chave|palavra chave|conteudo|texto|conclusão)\s*[:：]?\s*"
     titulo_limpo_de_prefixo = re.sub(padrao_prefixo, "", titulo_processado, flags=re.IGNORECASE).strip()
     
     # Remove também quaisquer asteriscos ou # que possam ter sobrado no início após a remoção do prefixo
@@ -168,11 +177,11 @@ def verificar_e_corrigir_titulo(titulo: str, palavra_ancora: str) -> Optional[st
     titulo_limpo_de_prefixo = re.sub(r"^\s*(\*\*|\*|#)+\s*", "", titulo_limpo_de_prefixo).strip()
 
     if titulo_limpo_de_prefixo != titulo_processado:
-        logger.info(f"Prefixo de título/tema/palavra-chave removido. Título antes: '{titulo_processado}'. Depois: '{titulo_limpo_de_prefixo}'")
+        logger.info(f"Prefixo de título/tema/palavra-chave/marcador removido. Título antes: '{titulo_processado}'. Depois: '{titulo_limpo_de_prefixo}'")
         titulo_processado = titulo_limpo_de_prefixo
         if not titulo_processado: # Se o título ficou vazio após remover o prefixo
             logger.warning("Título ficou vazio após remover prefixo e será rejeitado.")
-            return None
+            return False, "Sem título após limpeza"
 
     # NOVA LIMPEZA: Remover asteriscos/cerquilhas do final do título processado
     titulo_processado_antes_final_clean = titulo_processado
@@ -181,7 +190,7 @@ def verificar_e_corrigir_titulo(titulo: str, palavra_ancora: str) -> Optional[st
         logger.info(f"Caracteres de formatação removidos do final do título. Antes: '{titulo_processado_antes_final_clean}'. Depois: '{titulo_processado}'")
         if not titulo_processado: # Se ficou vazio após remover do final
             logger.warning("Título ficou vazio após remover formatação final e será rejeitado.")
-            return None
+            return False, "Sem título após limpeza final"
 
     # Lista de frases de continuação a serem rejeitadas no início do título
     frases_de_continuacao_proibidas = [
@@ -194,7 +203,7 @@ def verificar_e_corrigir_titulo(titulo: str, palavra_ancora: str) -> Optional[st
     for frase_proibida in frases_de_continuacao_proibidas:
         if titulo_lower_para_verificacao.startswith(frase_proibida):
             logger.warning(f"Título rejeitado por começar com frase de continuação proibida ('{frase_proibida}'): '{titulo_processado}'")
-            return None
+            return False, titulo_processado
 
     # Nova verificação: Rejeitar títulos que terminam de forma incompleta
     terminacoes_incompletas_proibidas = [
@@ -210,7 +219,7 @@ def verificar_e_corrigir_titulo(titulo: str, palavra_ancora: str) -> Optional[st
     # Também verifica se termina com ponto e vírgula simples, o que pode indicar continuação
     if titulo_processado.endswith(";"):
         logger.warning(f"Título rejeitado por terminar com ponto e vírgula, sugerindo incompletude: '{titulo_processado}'")
-        return None
+        return False, titulo_processado
 
     titulo_lower_para_final = titulo_processado.lower()
     for term_proibido in terminacoes_incompletas_proibidas:
@@ -219,14 +228,14 @@ def verificar_e_corrigir_titulo(titulo: str, palavra_ancora: str) -> Optional[st
             # Para os outros com espaço antes, o endswith continuará funcionando bem após o strip() no term_proibido
             if term_proibido == "; é" and titulo_lower_para_final.endswith("; é"):
                  logger.warning(f"Título rejeitado por terminar com padrão proibido indicando incompletude ('{term_proibido}'): '{titulo_processado}'")
-                 return None
+                 return False, titulo_processado
             elif term_proibido != "; é" and titulo_lower_para_final.endswith(term_proibido): # Garante que não é um falso positivo com "; é"
                  # Verifica se a palavra antes da terminação não a torna válida (ex: "Guia Completo de A a Z")
                  # Esta é uma heurística e pode precisar de refinamento.
                  partes = titulo_processado.rsplit(None, 1) # Divide na última palavra
                  if len(partes) > 1 and partes[-1].lower() == term_proibido.strip():
                     logger.warning(f"Título rejeitado por terminar com palavra/frase que sugere incompletude ('{term_proibido.strip()}'): '{titulo_processado}'")
-                    return None
+                    return False, titulo_processado
     
     # Verificar se a string é realmente o conteúdo completo em vez de um título
     if len(titulo_processado) > 250:  # Se é muito longo, provavelmente não é um título
@@ -244,12 +253,15 @@ def verificar_e_corrigir_titulo(titulo: str, palavra_ancora: str) -> Optional[st
         logger.info(f"Reticências removidas do final do título: '{titulo_processado}'")
         if not titulo_processado: # Se o título ficou vazio após remover "..."
             logger.warning("Título ficou vazio após remover reticências.")
-            return None
+            return False, "Sem título após remover reticências"
 
     # 2. Verificar presença da palavra-âncora (case-insensitive)
-    if palavra_ancora.lower() not in titulo_processado.lower():
-        logger.warning(f"Palavra-âncora '{palavra_ancora}' não encontrada no título: '{titulo_processado}'. O título será rejeitado.")
-        return None # Rejeita o título se a palavra-âncora não estiver presente
+    if palavra_ancora and palavra_ancora.strip() and palavra_ancora.lower() not in titulo_processado.lower():
+        if not is_document_title:  # Só rejeitamos se for um novo título, não se estivermos corrigindo um existente
+            logger.warning(f"Palavra-âncora '{palavra_ancora}' não encontrada no título: '{titulo_processado}'. O título será rejeitado.")
+            return False, titulo_processado # Rejeita o título se a palavra-âncora não estiver presente
+        else:
+            logger.info(f"Palavra-âncora '{palavra_ancora}' não encontrada no título existente: '{titulo_processado}', mas não rejeitando por ser documento existente.")
 
     # Conta palavras
     palavras = titulo_processado.split()
@@ -260,7 +272,7 @@ def verificar_e_corrigir_titulo(titulo: str, palavra_ancora: str) -> Optional[st
     if len(titulo_processado) > MAX_CARACTERES:
         logger.warning(f"Título excede {MAX_CARACTERES} caracteres: '{titulo_processado}' ({len(titulo_processado)} caracteres)")
         # Reduz o título para caber no limite de caracteres, tenta não cortar palavras-chave
-        if palavra_ancora.lower() in titulo_processado.lower():
+        if palavra_ancora and palavra_ancora.strip() and palavra_ancora.lower() in titulo_processado.lower():
             # Tenta preservar a palavra_ancora ao truncar
             idx_ancora = titulo_processado.lower().find(palavra_ancora.lower())
             fim_ancora = idx_ancora + len(palavra_ancora)
@@ -276,7 +288,7 @@ def verificar_e_corrigir_titulo(titulo: str, palavra_ancora: str) -> Optional[st
 
             elif len(titulo_processado) > MAX_CARACTERES : # Ancora no inicio ou meio
                  titulo_processado = titulo_processado[:MAX_CARACTERES].rsplit(' ', 1)[0]
-        else: # Se âncora não está (não deveria acontecer devido à checagem anterior), trunca normalmente
+        else: # Se âncora não está ou não foi fornecida, trunca normalmente
             titulo_processado = titulo_processado[:MAX_CARACTERES].rsplit(' ', 1)[0]
 
         logger.info(f"Título reduzido para: '{titulo_processado}' ({len(titulo_processado)} caracteres)")
@@ -284,16 +296,20 @@ def verificar_e_corrigir_titulo(titulo: str, palavra_ancora: str) -> Optional[st
         num_palavras = len(palavras)
 
     # Verifica se está dentro dos limites de palavras (9-15)
-    if not (9 <= num_palavras <= 15):
+    if not (9 <= num_palavras <= 15) and not is_document_title:
         logger.warning(f"Título com número de palavras fora do intervalo (9-15): '{titulo_processado}' ({num_palavras} palavras).")
+        # Para títulos de documentos existentes, somos mais tolerantes
+        if is_document_title:
+            logger.info(f"Aceitando título existente com {num_palavras} palavras pois is_document_title=True")
+            return True, titulo_processado
         # Títulos fora da contagem de palavras após ajustes são rejeitados para nova geração.
         # A lógica de expansão/redução anterior era muito propensa a criar títulos de baixa qualidade.
         # É melhor o Gemini tentar novamente com as restrições do prompt.
-        return None 
+        return False, titulo_processado 
         
     # Se todas as verificações passaram
     logger.info(f"Título validado e corrigido: '{titulo_processado}'")
-    return titulo_processado
+    return True, titulo_processado
 
 
 class GeminiHandler:
@@ -822,31 +838,15 @@ class GeminiHandler:
                 
                 # Aplica verificação e correção de comprimento e palavra-âncora no título
                 # A palavra_ancora é crucial aqui
-                titulo_corrigido_ou_none = verificar_e_corrigir_titulo(titulo_gerado, palavra_ancora)
+                sucesso, titulo_corrigido = verificar_e_corrigir_titulo(titulo_gerado, palavra_ancora)
                 
                 # Se o título foi corrigido, substitui no conteúdo
                 # Se for None, significa que é inválido e precisa regenerar.
-                if titulo_corrigido_ou_none is None:
-                    self.logger.warning(f"Título gerado '{titulo_gerado}' foi rejeitado por verificar_e_corrigir_titulo (ausência de âncora, reticências, ou tamanho).")
-                    # Prepara para próxima tentativa
-                elif titulo_gerado != titulo_corrigido_ou_none:
-                    self.logger.info(f"Título corrigido de '{titulo_gerado}' para '{titulo_corrigido_ou_none}' por verificar_e_corrigir_titulo.")
-                    if linhas:
-                        linhas[0] = titulo_corrigido_ou_none
-                        conteudo_gerado = '\n'.join(linhas)
-                
-                # Verifica o título (corrigido ou original se não foi corrigido) com verificar_titulo_gerado
-                # A função verificar_titulo_gerado também precisa da palavra_ancora
-                titulo_para_verificar = titulo_corrigido_ou_none if titulo_corrigido_ou_none else titulo_gerado
-
-                if titulo_corrigido_ou_none and self.verificar_titulo_gerado(titulo_para_verificar, palavra_ancora, palavras_a_evitar, titulos_existentes):
-                    self.logger.info(f"Título gerado é aceitável: '{titulo_para_verificar}'")
+                if sucesso:
+                    self.logger.info(f"Título gerado é aceitável: '{titulo_corrigido}'")
                     break # Sai do loop de tentativas
                 else:
-                    if not titulo_corrigido_ou_none:
-                        self.logger.warning(f"Título '{titulo_gerado}' invalidado por verificar_titulo_gerado. Tentando novamente.")
-                    else:
-                        self.logger.warning(f"Título '{titulo_para_verificar}' rejeitado por verificar_titulo_gerado. Tentando novamente.")
+                    self.logger.warning(f"Título '{titulo_gerado}' invalidado por verificar_e_corrigir_titulo. Tentando novamente.")
 
                 # Título contém padrões proibidos ou é inválido, tenta novamente com temperatura mais alta
                 self.temperatura_atual = min(0.95, self.temperatura_atual + 0.1)
@@ -859,20 +859,56 @@ class GeminiHandler:
             # Restaura a temperatura original para próximas chamadas
             self.temperatura_atual = temperatura_original
             
+            # 'conteudo_gerado' é o texto completo da última tentativa da API (ou da primeira bem-sucedida)
+            # 'titulo_corrigido' é o título dessa mesma tentativa, após passar por verificar_e_corrigir_titulo no loop
+
+            # Extrai o corpo do conteúdo gerado, removendo o título original (que poderia estar em qualquer formato)
+            linhas_conteudo_original = conteudo_gerado.strip().split('\n')
+            corpo_do_texto = ""
+            if linhas_conteudo_original:
+                primeira_linha_original = linhas_conteudo_original[0].strip()
+                # Remove marcadores H1/H2/H3 etc. da primeira linha original para evitar duplicação ao reconstruir o corpo
+                primeira_linha_sem_h = re.sub(r"^#+\s*", "", primeira_linha_original).strip()
+                
+                # Compara o título corrigido (sem marcadores) com a primeira linha original (sem marcadores)
+                # Se forem iguais, o corpo começa da segunda linha. Senão, a primeira linha já é parte do corpo.
+                if normalizar_texto(titulo_corrigido.lower()) == normalizar_texto(primeira_linha_sem_h.lower()):
+                    corpo_do_texto = "\n".join(linhas_conteudo_original[1:]).strip()
+                    self.logger.info("Título original encontrado na primeira linha e removido para reconstrução do corpo.")
+                else:
+                    # Se o título corrigido não bate com a primeira linha, considera a primeira linha já é parte do corpo
+                    # Isso pode acontecer se o título foi extraído de um H2 ou H3, ou se era um parágrafo.
+                    corpo_do_texto = "\n".join(linhas_conteudo_original).strip()
+                    self.logger.info("Primeira linha original não corresponde ao título corrigido, mantida como parte do corpo.")
+            else:
+                self.logger.warning("Conteúdo gerado pela API estava vazio, resultando em corpo vazio.")
+
+            # Reconstrói o conteúdo com o título H1 formatado e o corpo
+            conteudo_com_titulo_formatado = f"# {titulo_corrigido}\n\n{corpo_do_texto}"
+            self.logger.info(f"Conteúdo formatado com título H1: '# {titulo_corrigido}'")
+            
+            # Insere a palavra-âncora no texto formatado
+            # A variável 'palavra_ancora' já está definida no escopo de gerar_conteudo (vinda de 'dados')
+            conteudo_processado, info_link = substituir_links_markdown(
+                conteudo_com_titulo_formatado, 
+                palavra_ancora, 
+                dados.get('url_ancora', '')
+            )
+            
             # Monta métricas para logging e custos
+            # tokens_entrada e custo_estimado são da última tentativa bem sucedida ou da última tentativa falha.
             metricas = {
-                'tokens_entrada': tokens_entrada,
-                'tokens_saida': tokens_saida,
-                'custo_estimado': custo_estimado,
-                'tentativas': tentativas
+                'input_token_count': tokens_entrada, 
+                'output_token_count': contar_tokens(conteudo_gerado), # Baseado no output bruto da API
+                'cost_usd': custo_estimado,
+                'tentativas': tentativas,
+                'block_reason': resposta.prompt_feedback.block_reason if resposta.prompt_feedback else None,
+                'block_reason_message': resposta.prompt_feedback.block_reason_message if resposta.prompt_feedback else None
             }
             
-            # Insere a palavra-âncora no texto (agora com verificação de contexto natural)
-            conteudo_processado, info_link = substituir_links_markdown(conteudo_gerado, palavra_ancora, dados.get('url_ancora', ''))
-            
             # Logs sobre o processamento
-            self.logger.info(f"Conteúdo gerado com {tokens_saida} tokens de saída")
-            self.logger.info(f"Custo estimado: ${custo_estimado:.6f} USD")
+            self.logger.info(f"Conteúdo gerado com {metricas['output_token_count']} tokens de saída (baseado na resposta da API)")
+            self.logger.info(f"Custo estimado: ${metricas['cost_usd']:.6f} USD")
             
             if info_link:
                 self.logger.info(f"Palavra-âncora '{palavra_ancora}' inserida no parágrafo {info_link['paragrafo']}")

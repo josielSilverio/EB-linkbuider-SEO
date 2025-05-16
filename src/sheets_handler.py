@@ -1,15 +1,12 @@
 # Módulo para interagir com a API do Google Sheets
 import logging
 import pandas as pd
-from typing import List, Dict, Any, Optional
-import re
-import os
+from typing import List, Dict, Any, Optional, Tuple
 
 from src.config import (
     SPREADSHEET_ID, 
     SHEET_NAME, 
-    COLUNAS, 
-    LINHA_INICIAL
+    COLUNAS_MAPEAMENTO_NOMES
 )
 from src.auth_handler import obter_credenciais, criar_servico_sheets, criar_servico_drive
 
@@ -24,6 +21,7 @@ class SheetsHandler:
             self.service = criar_servico_sheets(self.credenciais)
             self.service_drive = criar_servico_drive(self.credenciais)
             self.logger.info("Serviços do Google Sheets e Drive inicializados com sucesso para SheetsHandler")
+            self.sheet_metadata_cache: Dict[Tuple[str, str], Optional[Tuple[int, List[str], Dict[str, Dict[str, Any]]]]] = {}
         except Exception as e:
             self.logger.error(f"Erro ao inicializar serviços para SheetsHandler: {e}")
             raise
@@ -153,239 +151,350 @@ class SheetsHandler:
             self.logger.error("ID da planilha ou nome da aba não especificados.")
             return pd.DataFrame() if not apenas_dados else []
 
+        header_info = self._find_header_and_map_columns(current_spreadsheet_id, current_sheet_name)
+        if not header_info:
+            self.logger.error(f"Não foi possível obter metadados do cabeçalho para {current_spreadsheet_id}/{current_sheet_name}. Impossível ler a planilha.")
+            return pd.DataFrame()
+        
+        header_row_index_on_sheet, actual_header_content, dynamic_column_map = header_info
+        
+        # A linha de início para leitura dos DADOS é a linha seguinte ao cabeçalho
+        data_start_row_on_sheet = header_row_index_on_sheet + 1 + 1 # +1 para 0-based -> 1-based, +1 para próxima linha
+
         try:
-            self.logger.info(f"Lendo dados da planilha: '{current_spreadsheet_id}', Aba: '{current_sheet_name}'")
-            max_col_index = 0
-            if isinstance(COLUNAS, dict):
-                max_col_index = max(COLUNAS.values()) if COLUNAS else 0
-            
-            ultima_coluna_letra = self.get_column_letter(max_col_index + 5)
-            range_para_ler = f"{current_sheet_name}!A:{ultima_coluna_letra}"
-            self.logger.debug(f"Range de leitura definido para: {range_para_ler}")
+            # Determinar a última coluna a ser lida com base no cabeçalho encontrado
+            num_header_cols = len(actual_header_content)
+            if num_header_cols == 0:
+                self.logger.error(f"Cabeçalho encontrado em {current_spreadsheet_id}/{current_sheet_name} está vazio. Impossível determinar range.")
+                return pd.DataFrame()
+
+            ultima_coluna_letra_header = self.get_column_letter(num_header_cols -1)
+            range_para_ler_dados = f"{current_sheet_name}!A{data_start_row_on_sheet}:{ultima_coluna_letra_header}"
+            self.logger.info(f"Lendo dados da planilha: '{current_spreadsheet_id}', Aba: '{current_sheet_name}', Range: '{range_para_ler_dados}'")
 
             result = self.service.spreadsheets().values().get(
                 spreadsheetId=current_spreadsheet_id,
-                range=range_para_ler
+                range=range_para_ler_dados
             ).execute()
-            data_rows = result.get('values', [])
+            data_rows_list = result.get('values', [])
 
-            if not data_rows:
-                self.logger.warning(f"Nenhum dado encontrado na aba '{current_sheet_name}' da planilha '{current_spreadsheet_id}'.")
-                return pd.DataFrame() if not apenas_dados else []
+            if not data_rows_list:
+                self.logger.warning(f"Nenhum dado encontrado (após cabeçalho) na aba '{current_sheet_name}'.")
+                return pd.DataFrame()
 
-            self.logger.info(f"Recebidos {len(data_rows)} linhas da API do Google Sheets.")
+            self.logger.info(f"Recebidas {len(data_rows_list)} linhas de dados da API do Google Sheets.")
             
-            if data_rows: # Somente processa se houver alguma linha (incluindo cabeçalho)
-                header = data_rows[0]
-                num_header_cols = len(header)
-                
-                # Normaliza as linhas de dados para terem o mesmo número de colunas que o cabeçalho
-                processed_data_rows = []
-                for row in data_rows[1:]:
-                    # Garante que a linha tenha o mesmo número de colunas que o cabeçalho,
-                    # preenchendo com strings vazias se for mais curta.
-                    # Se for mais longa, trunca para o tamanho do cabeçalho (menos provável, mas seguro)
-                    normalized_row = (row + [''] * num_header_cols)[:num_header_cols]
-                    processed_data_rows.append(normalized_row)
-                
-                if processed_data_rows: # Se houver linhas de dados após o cabeçalho
-                    df = pd.DataFrame(processed_data_rows, columns=header)
-                else: # Só havia cabeçalho, ou nenhuma linha de dados real
-                    df = pd.DataFrame(columns=header) # DataFrame vazio com colunas do cabeçalho
-                
-                # Como COLUNAS usa índices numéricos, resetamos as colunas do df para índices numéricos.
-                # Isso mantém a consistência com o restante do código que espera df.columns ser numérico.
-                df.columns = range(df.shape[1]) # df.shape[1] dará o número de colunas do cabeçalho
-            else:
-                # Nenhuma linha recebida da API, nem mesmo cabeçalho
-                df = pd.DataFrame()
-            
-            coluna_id_idx = COLUNAS.get('id', -1)
-            coluna_url_idx = COLUNAS.get('url_documento', -1)
+            # Criar DataFrame com os nomes de coluna do cabeçalho real
+            df = pd.DataFrame(data_rows_list, columns=actual_header_content)
 
-            if coluna_id_idx != -1 and coluna_id_idx < len(df.columns):
-                df[coluna_id_idx] = df[coluna_id_idx].astype(str)
+            # --- FILTRAGENS ---
+            # Filtrar por ID válido (se a coluna ID foi mapeada)
+            id_col_map_info = dynamic_column_map.get('id')
+            if id_col_map_info and id_col_map_info['name'] in df.columns:
+                id_col_name = id_col_map_info['name']
+                df[id_col_name] = df[id_col_name].astype(str)
                 original_row_count = len(df)
-                df = df[df[coluna_id_idx].notna() & (df[coluna_id_idx].str.strip() != '')]
-                self.logger.info(f"{original_row_count - len(df)} linhas removidas por ID inválido/vazio. {len(df)} linhas restantes.")
+                df = df[df[id_col_name].notna() & (df[id_col_name].str.strip() != '')]
+                self.logger.info(f"{original_row_count - len(df)} linhas removidas por ID inválido/vazio (coluna '{id_col_name}'). {len(df)} linhas restantes.")
             else:
-                self.logger.warning(f"Coluna ID (índice {coluna_id_idx}) não encontrada. Não foi possível filtrar por IDs válidos.")
+                self.logger.warning("Coluna 'id' não mapeada ou não encontrada no DataFrame. Não foi possível filtrar por IDs válidos.")
 
+            # Filtrar itens já processados (se a coluna url_documento foi mapeada)
             if filtrar_processados:
-                if coluna_url_idx != -1 and coluna_url_idx < len(df.columns):
-                    df[coluna_url_idx] = df[coluna_url_idx].astype(str) # Converte a coluna para string
+                url_doc_col_map_info = dynamic_column_map.get('url_documento')
+                if url_doc_col_map_info and url_doc_col_map_info['name'] in df.columns:
+                    url_doc_col_name = url_doc_col_map_info['name']
+                    df[url_doc_col_name] = df[url_doc_col_name].astype(str)
                     original_row_count = len(df)
-
-                    # Mantém linhas onde a URL é NaN (pandas considera nulo) OU a string está vazia.
-                    # pd.NA não é pego por isna() em colunas de objeto, então converter para string e checar é mais robusto.
-                    df = df[df[coluna_url_idx].fillna('').str.strip() == '']
-                    self.logger.info(f"{original_row_count - len(df)} linhas removidas por já terem URL. {len(df)} linhas restantes para processamento.")
+                    df = df[df[url_doc_col_name].fillna('').str.strip() == '']
+                    self.logger.info(f"{original_row_count - len(df)} linhas removidas por já terem URL (coluna '{url_doc_col_name}'). {len(df)} linhas restantes.")
                 else:
-                    self.logger.warning(f"Coluna URL (índice {coluna_url_idx}) não encontrada. Não foi possível filtrar por itens já processados.")
+                    self.logger.warning("Coluna 'url_documento' não mapeada ou não encontrada. Não foi possível filtrar por itens já processados.")
             else:
-                self.logger.info("Filtragem de itens já processados foi pulada (filtrar_processados=False).")
+                self.logger.info("Filtragem de itens já processados foi pulada.")
             
             if df.empty:
-                self.logger.warning("Nenhuma linha restante após as filtragens.")
-                return pd.DataFrame() if not apenas_dados else []
+                self.logger.warning("Nenhuma linha restante após as filtragens de ID e URL.")
+                return pd.DataFrame()
 
-            # Adicionar 'sheet_row_num' APÓS as filtragens que podem alterar o número de linhas,
-            # mas ANTES de qualquer ordenação que possa bagunçar a correspondência com a planilha original se o índice for resetado.
-            # O df.index neste ponto ainda deve corresponder aos índices da leitura original (0-based).
-            # Adicionamos 2: 1 para converter para 1-based e 1 porque a linha 1 da planilha é geralmente cabeçalho.
-            # Esta coluna é crucial para atualizar a célula correta na planilha.
-            df['sheet_row_num'] = df.index + 2 
-
-            # Ordenar por 'sheet_row_num' para garantir que processamos na ordem da planilha
-            # Isso é importante se o limite_linhas for aplicado.
-            df = df.sort_values(by='sheet_row_num').reset_index(drop=True)
+            # Adicionar 'sheet_row_num' (1-based, número da linha original na planilha)
+            # df.index é 0-based para as linhas de DADOS lidas.
+            # data_start_row_on_sheet é 1-based e é a primeira linha de DADOS na planilha.
+            df['sheet_row_num'] = df.index + data_start_row_on_sheet
+            df = df.sort_values(by='sheet_row_num').reset_index(drop=True) # Garante ordem e reseta índice
                                                                         
-            self.logger.info(f"DataFrame preparado com {len(df)} linhas antes do filtro de linha inicial. Próximas (sheet_row_num): {df['sheet_row_num'].head().tolist() if not df.empty else 'N/A'}")
+            self.logger.info(f"DataFrame preparado com {len(df)} linhas antes do filtro de 'linha_inicial' da planilha. Próximas (sheet_row_num): {df['sheet_row_num'].head().tolist() if not df.empty else 'N/A'}")
 
-            # Aplicar filtro de linha_inicial, se especificado
-            if linha_inicial is not None and isinstance(linha_inicial, int) and linha_inicial > 1: # Deve ser > 1 pois linha 1 é cabeçalho
+            # Aplicar filtro de linha_inicial (1-based, da planilha), se especificado
+            if linha_inicial is not None and isinstance(linha_inicial, int) and linha_inicial >= data_start_row_on_sheet:
                 self.logger.info(f"Aplicando filtro para começar a partir da linha da planilha: {linha_inicial}")
                 df = df[df['sheet_row_num'] >= linha_inicial]
-                df = df.reset_index(drop=True) # Resetar índice após esta filtragem crucial
+                df = df.reset_index(drop=True) 
                 if df.empty:
-                    self.logger.warning(f"Nenhuma linha restante após filtrar pela linha inicial {linha_inicial}.")
+                    self.logger.warning(f"Nenhuma linha restante após filtrar pela linha inicial da planilha {linha_inicial}.")
                 else:
-                    self.logger.info(f"{len(df)} linhas restantes após filtro de linha inicial. Próximas (sheet_row_num): {df['sheet_row_num'].head().tolist()}")
+                    self.logger.info(f"{len(df)} linhas restantes após filtro de linha inicial da planilha. Próximas (sheet_row_num): {df['sheet_row_num'].head().tolist()}")
             elif linha_inicial is not None:
-                 self.logger.warning(f"Parâmetro 'linha_inicial' ({linha_inicial}) é inválido ou <= 1. Ignorando filtro de linha inicial.")
+                 self.logger.warning(f"Parâmetro 'linha_inicial' ({linha_inicial}) é inválido ou anterior ao início dos dados ({data_start_row_on_sheet}). Ignorando.")
 
-            # Aplicar limite_linhas APÓS o filtro de linha_inicial
+            # Aplicar limite_linhas
             if limite_linhas is not None and isinstance(limite_linhas, int) and limite_linhas > 0:
-                if not df.empty:
-                    if limite_linhas < len(df):
-                        self.logger.info(f"Aplicando limite de {limite_linhas} linhas ao DataFrame resultante.")
-                        df = df.head(limite_linhas)
-                    # else: o df já é menor ou igual ao limite, nada a fazer
-                    self.logger.info(f"{len(df)} linhas no DataFrame final após todos os filtros e limites.")
+                if not df.empty and limite_linhas < len(df):
+                    self.logger.info(f"Aplicando limite de {limite_linhas} linhas ao DataFrame resultante.")
+                    df = df.head(limite_linhas)
+                self.logger.info(f"{len(df)} linhas no DataFrame final após todos os filtros e limites.")
             
-            return df if not apenas_dados else df.values.tolist()
+            # O argumento 'apenas_dados' parece não fazer mais sentido com o retorno de DataFrame
+            # Se precisar de uma lista de listas, pode ser df.values.tolist() no final.
+            # Por ora, a função sempre retorna um DataFrame.
+            return df
 
         except Exception as e:
-            self.logger.error(f"Erro ao ler a planilha: {e}")
-            self.logger.exception("Detalhes do erro:")
-            raise
-    
-    def extrair_dados_linha(self, linha_df: pd.Series) -> Dict[str, str]:
+            self.logger.error(f"Erro ao ler a planilha '{current_spreadsheet_id}/{current_sheet_name}': {e}")
+            self.logger.exception("Detalhes do erro em ler_planilha:")
+            return pd.DataFrame() # Retorna DataFrame vazio em caso de erro
+
+    def extrair_dados_linha(self, linha_df: pd.Series, dynamic_column_map: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
         """
-        Extrai os dados relevantes de uma linha do DataFrame.
-        
-        Args:
-            linha_df: Uma linha do DataFrame (como Series)
-        
-        Returns:
-            Dicionário com os dados extraídos
+        Extrai os dados relevantes de uma linha do DataFrame, usando o mapeamento dinâmico de colunas.
         """
+        dados: Dict[str, Any] = {}
         try:
-            # Mapeamento usando os índices numéricos das colunas
-            # Se o índice existe no DataFrame, usa o valor, senão None
-            dados = {
-                'id': linha_df.get(COLUNAS["id"]) if COLUNAS["id"] in linha_df.index else None,
-                'tema': linha_df.get(COLUNAS["tema"]) if COLUNAS["tema"] and COLUNAS["tema"] in linha_df.index else None,
-                'site': linha_df.get(COLUNAS["site"]) if COLUNAS["site"] in linha_df.index else None,
-                'palavra_ancora': linha_df.get(COLUNAS["palavra_ancora"]) if COLUNAS["palavra_ancora"] in linha_df.index else None,
-                'url_ancora': linha_df.get(COLUNAS["url_ancora"]) if COLUNAS["url_ancora"] in linha_df.index else None,
-                'titulo': linha_df.get(COLUNAS["titulo"]) if COLUNAS["titulo"] in linha_df.index else None
-            }
+            for internal_key, map_info in dynamic_column_map.items():
+                actual_col_name = map_info['name']
+                if actual_col_name in linha_df.index:
+                    dados[internal_key] = linha_df[actual_col_name]
+                else:
+                    # Se a coluna esperada (mesmo que mapeada) não estiver na linha_df (pouco provável se linha_df vem de ler_planilha)
+                    dados[internal_key] = None 
+                    self.logger.debug(f"Coluna '{actual_col_name}' (para chave interna '{internal_key}') não encontrada na linha_df fornecida.")
             
-            # Limpa os valores None ou vazios
-            dados = {k: v if v and str(v).strip() else f"Sem {k}" for k, v in dados.items()}
-            
-            # Não precisamos mais verificar campos nulos, já que sabemos que tema e título geralmente são vazios
-            # e serão gerados automaticamente
-            
-            return dados
+            # Limpeza básica ou preenchimento de defaults
+            # As chaves em 'dados' agora são as chaves internas do script
+            cleaned_dados: Dict[str, str] = {}
+            for internal_key in COLUNAS_MAPEAMENTO_NOMES.keys(): # Iterar sobre todas as chaves internas esperadas
+                value = dados.get(internal_key)
+                cleaned_dados[internal_key] = str(value).strip() if value and str(value).strip() else "" # "" em vez de "Sem {k}"
+                                
+            return cleaned_dados
         
         except Exception as e:
-            self.logger.error(f"Erro ao extrair dados da linha: {e}")
-            self.logger.error(f"Índices disponíveis: {linha_df.index.tolist()}")
-            self.logger.error(f"Valores: {linha_df.values}")
-            raise
-    
-    def atualizar_url_documento(self, sheet_row_num: int, url_documento: str, spreadsheet_id=None, sheet_name=None) -> bool:
-        """
-        Atualiza a URL do documento criado na coluna correspondente da planilha.
-        
-        Args:
-            sheet_row_num: Número da linha na planilha (1-based) a ser atualizada.
-            url_documento: URL do documento do Google Docs
-            spreadsheet_id: ID da planilha. Se None, usa o ID configurado no .env
-            sheet_name: Nome da aba. Se None, usa o nome configurado no .env
-            
-        Returns:
-            True se a atualização foi bem-sucedida, False caso contrário
-        """
+            self.logger.error(f"Erro ao extrair dados da linha com mapeamento dinâmico: {e}")
+            self.logger.error(f"Linha fornecida (índices): {linha_df.index.tolist() if isinstance(linha_df, pd.Series) else 'Não é Series'}")
+            self.logger.error(f"Mapeamento dinâmico: {dynamic_column_map}")
+            # Retorna um dict parcialmente preenchido ou vazio para evitar quebrar o fluxo, mas loga o erro.
+            # É importante que as chaves internas existam, mesmo que com valor vazio.
+            fallback_dados = {key: "" for key in COLUNAS_MAPEAMENTO_NOMES.keys()}
+            return fallback_dados
+
+    def _find_header_and_map_columns(self, spreadsheet_id: str, sheet_name: str) -> Optional[Tuple[int, List[str], Dict[str, Dict[str, Any]]]]:
+        cache_key = (spreadsheet_id, sheet_name)
+        if cache_key in self.sheet_metadata_cache:
+            self.logger.info(f"Metadados do cabeçalho encontrados no cache para {spreadsheet_id}/{sheet_name}.")
+            return self.sheet_metadata_cache[cache_key]
+
+        self.logger.info(f"Procurando cabeçalho em {spreadsheet_id}/{sheet_name}...")
         try:
-            id_planilha = spreadsheet_id or SPREADSHEET_ID
-            nome_aba = sheet_name or SHEET_NAME
-            linha_sheets = sheet_row_num # Usa o número da linha diretamente
-            coluna_url = 'J' # Assume que é sempre a coluna J
-            range_atualizacao = f"{nome_aba}!{coluna_url}{linha_sheets}"
+            # Ler um bloco inicial da planilha para encontrar o cabeçalho (ex: primeiras 20 linhas)
+            # O range A:Z é uma simplificação, idealmente seria até a última coluna com dados, mas para achar o header costuma ser suficiente.
+            # Limitamos a 20 linhas para não ler a planilha inteira só para achar o header.
+            range_to_scan_header = f"{sheet_name}!A1:Z20" 
+            result = self.service.spreadsheets().values().get(
+                spreadsheetId=spreadsheet_id, range=range_to_scan_header
+            ).execute()
+            rows_for_header_scan = result.get('values', [])
+
+            if not rows_for_header_scan:
+                self.logger.error(f"Nenhuma linha encontrada na planilha {spreadsheet_id}/{sheet_name} para escanear o cabeçalho.")
+                return None
+
+            best_header_row_index = -1
+            best_header_row_content: List[str] = []
+            max_score = 0
+            temp_dynamic_column_map: Dict[str, Dict[str, Any]] = {}
+
+            MIN_MATCHING_HEADERS = 3 # Pelo menos 3 colunas conhecidas devem bater
+
+            for i, row_list in enumerate(rows_for_header_scan):
+                current_score = 0
+                current_temp_map: Dict[str, Dict[str, Any]] = {}
+                # Preencher com strings vazias se a linha for mais curta que outras, para consistência
+                # Isso é importante se algumas linhas de cabeçalho candidatas tiverem menos colunas que outras.
+                # No entanto, a linha de cabeçalho REAL deve ter todos os seus nomes.
+                # A normalização de tamanho não é feita aqui, mas sim ao construir o DF.
+                
+                # Limpar e normalizar os nomes na linha atual para comparação
+                cleaned_row_headers = [str(h).strip().lower() for h in row_list if str(h).strip()] # Ignora vazios na contagem/comparação
+                
+                # Não considera linhas com poucas colunas preenchidas como cabeçalho potencial
+                if len(cleaned_row_headers) < MIN_MATCHING_HEADERS:
+                    continue
+
+                # Verifica quantas colunas da nossa configuração batem com esta linha
+                possible_internal_keys_found = set()
+                for internal_key, config_info in COLUNAS_MAPEAMENTO_NOMES.items():
+                    possible_names_for_key = config_info.get('nomes', [])
+                    # Encontrar a primeira correspondência para esta internal_key na linha atual da planilha
+                    found_match_for_this_internal_key = False
+                    for header_idx, header_name_on_sheet_raw in enumerate(row_list):
+                        header_name_on_sheet = str(header_name_on_sheet_raw).strip()
+                        if not header_name_on_sheet: # Pula células de cabeçalho vazias
+                            continue
+                        
+                        for pn_config in possible_names_for_key:
+                            if pn_config.lower() == header_name_on_sheet.lower():
+                                # Match! Se já mapeamos essa internal_key com outra coluna, não sobrescrever.
+                                # A prioridade é dada pela ordem em COLUNAS_MAPEAMENTO_NOMES e a primeira coluna correspondente.
+                                if internal_key not in current_temp_map: 
+                                    current_temp_map[internal_key] = {
+                                        'name': header_name_on_sheet, # Nome original da planilha
+                                        'index_in_header': header_idx # Índice 0-based na linha do cabeçalho
+                                    }
+                                    possible_internal_keys_found.add(internal_key)
+                                    found_match_for_this_internal_key = True
+                                    break # Passa para a próxima internal_key
+                        if found_match_for_this_internal_key:
+                            break # Já achou esta internal_key na linha, vai para a próxima internal_key
+                
+                current_score = len(possible_internal_keys_found)
+
+                if current_score >= MIN_MATCHING_HEADERS and current_score > max_score:
+                    max_score = current_score
+                    best_header_row_index = i
+                    best_header_row_content = [str(h).strip() for h in row_list] # Conteúdo original, com strip
+                    temp_dynamic_column_map = current_temp_map
             
-            self.logger.info(f"Preparando para atualizar URL na Planilha: {id_planilha}")
-            self.logger.info(f"Aba: '{nome_aba}', Célula: {coluna_url}{linha_sheets} (Range: {range_atualizacao})")
-            self.logger.info(f"Sheet Row Number: {sheet_row_num}")
-            self.logger.info(f"URL a ser inserida: {url_documento}")
+            if best_header_row_index == -1:
+                self.logger.error(f"Nenhuma linha de cabeçalho válida encontrada em {spreadsheet_id}/{sheet_name} com pelo menos {MIN_MATCHING_HEADERS} colunas correspondentes.")
+                return None
+
+            self.logger.info(f"Cabeçalho encontrado na linha {best_header_row_index + 1} da planilha (índice 0-based: {best_header_row_index}) com pontuação {max_score}.")
+
+            # Garantir nomes de coluna únicos para o DataFrame e atualizar o mapa
+            # best_header_row_content pode ter menos colunas que o DataFrame final se houver colunas vazias à direita no cabeçalho
+            # mas dados abaixo. `pd.DataFrame` lidará com isso, mas é bom ter os nomes exatos que serão usados.
             
-            # (Opcional, mas recomendado) Verificar se a aba existe (código omitido para brevidade, mas estava presente antes)
-            # ... (código de verificação da aba) ...
+            final_unique_header_names: List[str] = []
+            name_counts: Dict[str, int] = {}
+            # Pad o best_header_row_content para o número máximo de colunas que podem existir, se soubermos.
+            # Por enquanto, vamos apenas unificar o que temos em best_header_row_content.
+            # Se a linha de cabeçalho for curta, colunas de dados sem nome de cabeçalho serão numeradas pelo pandas.
             
-            resultado = self.service.spreadsheets().values().update(
-                spreadsheetId=id_planilha,
+            for original_header_name in best_header_row_content:
+                if not original_header_name: # Tratar nomes de cabeçalho vazios como "Unnamed_X"
+                    col_idx_for_unnamed = len(final_unique_header_names)
+                    unique_name = f"Unnamed_{col_idx_for_unnamed}"
+                    while unique_name in name_counts: # Garantir que até o Unnamed seja único
+                        col_idx_for_unnamed +=1
+                        unique_name = f"Unnamed_{col_idx_for_unnamed}"
+                    name_counts[unique_name] = 1
+                    final_unique_header_names.append(unique_name)
+                    continue
+
+                if original_header_name in name_counts:
+                    name_counts[original_header_name] += 1
+                    unique_name = f"{original_header_name}.{name_counts[original_header_name]-1}"
+                    # Garantir que o nome gerado (ex: Col.1) também não colida se "Col.1" já existir como nome original
+                    while unique_name in name_counts:
+                         unique_name = f"{unique_name}.dup"
+                else:
+                    name_counts[original_header_name] = 1
+                    unique_name = original_header_name
+                final_unique_header_names.append(unique_name)
+            
+            # Atualizar o `temp_dynamic_column_map` para usar os nomes unificados
+            final_dynamic_column_map: Dict[str, Dict[str, Any]] = {}
+            for internal_key, map_info in temp_dynamic_column_map.items():
+                original_index = map_info['index_in_header']
+                if 0 <= original_index < len(final_unique_header_names):
+                    map_info['name'] = final_unique_header_names[original_index]
+                    final_dynamic_column_map[internal_key] = map_info
+                else:
+                    self.logger.warning(f"Erro de índice ao tentar mapear nome único para {internal_key}. Índice {original_index} fora do range de cabeçalhos únicos {len(final_unique_header_names)}.")
+
+            self.logger.info(f"Mapeamento de colunas dinâmico criado para {spreadsheet_id}/{sheet_name}: {final_dynamic_column_map}")
+            self.logger.debug(f"Conteúdo do cabeçalho (nomes únicos): {final_unique_header_names}")
+            
+            # Adiciona ao cache
+            self.sheet_metadata_cache[cache_key] = (best_header_row_index, final_unique_header_names, final_dynamic_column_map)
+            return best_header_row_index, final_unique_header_names, final_dynamic_column_map
+
+        except Exception as e:
+            self.logger.error(f"Erro ao tentar encontrar cabeçalho ou mapear colunas para {spreadsheet_id}/{sheet_name}: {e}")
+            self.logger.exception("Detalhes do erro em _find_header_and_map_columns:")
+            return None
+
+    def _get_column_letter_for_internal_key(self, internal_key: str, spreadsheet_id: str, sheet_name: str) -> Optional[str]:
+        """Helper para obter a letra da coluna para uma chave interna."""
+        header_info = self._find_header_and_map_columns(spreadsheet_id, sheet_name)
+        if not header_info:
+            self.logger.error(f"Não foi possível obter metadados do cabeçalho para {spreadsheet_id}/{sheet_name} ao tentar encontrar a letra da coluna para '{internal_key}'.")
+            return None
+        _, _, dynamic_column_map = header_info
+        
+        col_info = dynamic_column_map.get(internal_key)
+        if not col_info or 'index_in_header' not in col_info:
+            self.logger.error(f"Chave interna '{internal_key}' não encontrada no mapeamento de colunas ou falta 'index_in_header' para {spreadsheet_id}/{sheet_name}.")
+            return None
+        
+        try:
+            return self.get_column_letter(col_info['index_in_header'])
+        except ValueError as e:
+            self.logger.error(f"Erro ao converter índice de coluna para letra para '{internal_key}': {e}")
+            return None
+
+    def atualizar_url_documento(self, sheet_row_num: int, url_documento: str, spreadsheet_id: Optional[str] = None, sheet_name: Optional[str] = None) -> bool:
+        current_spreadsheet_id = spreadsheet_id or SPREADSHEET_ID
+        current_sheet_name = sheet_name or SHEET_NAME
+
+        if not current_spreadsheet_id or not current_sheet_name:
+            self.logger.error("ID da planilha ou nome da aba não especificados para atualizar_url_documento.")
+            return False
+
+        col_letter = self._get_column_letter_for_internal_key('url_documento', current_spreadsheet_id, current_sheet_name)
+        if not col_letter:
+            self.logger.error(f"Não foi possível determinar a coluna para 'url_documento' em {current_spreadsheet_id}/{current_sheet_name}.")
+            return False
+            
+        range_atualizacao = f"{current_sheet_name}!{col_letter}{sheet_row_num}"
+        self.logger.info(f"Preparando para atualizar URL na Planilha: {current_spreadsheet_id}, Aba: '{current_sheet_name}', Célula: {col_letter}{sheet_row_num}, URL: '{url_documento}'")
+        try:
+            self.service.spreadsheets().values().update(
+                spreadsheetId=current_spreadsheet_id,
                 range=range_atualizacao,
                 valueInputOption="USER_ENTERED",
                 body={"values": [[url_documento]]}
             ).execute()
-            
-            # ... (logging do resultado) ...
+            self.logger.info(f"✓ URL atualizada com sucesso em {range_atualizacao}.")
             return True
         except Exception as e:
-            self.logger.error(f"Erro ao atualizar URL na linha {sheet_row_num} (Planilha {id_planilha}, Aba '{nome_aba}', Célula {coluna_url}{linha_sheets}): {e}")
-            # ... (logging da exceção) ...
+            self.logger.error(f"Erro ao atualizar URL na linha {sheet_row_num} (Range: {range_atualizacao}): {e}")
             return False
 
-    def atualizar_titulo_documento(self, sheet_row_num: int, titulo: str, spreadsheet_id=None, sheet_name=None) -> bool:
-        """
-        Atualiza o título do documento na coluna correspondente da planilha.
-        
-        Args:
-            sheet_row_num: Número da linha na planilha (1-based) a ser atualizada.
-            titulo: Título do documento gerado
-            spreadsheet_id: ID da planilha. Se None, usa o ID configurado no .env
-            sheet_name: Nome da aba. Se None, usa o nome configurado no .env
-            
-        Returns:
-            True se a atualização foi bem-sucedida, False caso contrário
-        """
+    def atualizar_titulo_documento(self, sheet_row_num: int, titulo: str, spreadsheet_id: Optional[str] = None, sheet_name: Optional[str] = None) -> bool:
+        current_spreadsheet_id = spreadsheet_id or SPREADSHEET_ID
+        current_sheet_name = sheet_name or SHEET_NAME
+
+        if not current_spreadsheet_id or not current_sheet_name:
+            self.logger.error("ID da planilha ou nome da aba não especificados para atualizar_titulo_documento.")
+            return False
+
+        col_letter = self._get_column_letter_for_internal_key('titulo', current_spreadsheet_id, current_sheet_name)
+        if not col_letter:
+            self.logger.error(f"Não foi possível determinar a coluna para 'titulo' em {current_spreadsheet_id}/{current_sheet_name}.")
+            return False
+
+        range_atualizacao = f"{current_sheet_name}!{col_letter}{sheet_row_num}"
+        self.logger.info(f"Preparando para atualizar Título na Planilha: {current_spreadsheet_id}, Aba: '{current_sheet_name}', Célula: {col_letter}{sheet_row_num}, Título: '{titulo}'")
         try:
-            id_planilha = spreadsheet_id or SPREADSHEET_ID
-            nome_aba = sheet_name or SHEET_NAME
-            linha_sheets = sheet_row_num # Usa o número da linha diretamente
-            coluna_titulo = 'I' # Assume que é sempre a coluna I
-            range_atualizacao = f"{nome_aba}!{coluna_titulo}{linha_sheets}"
-
-            self.logger.info(f"Preparando para atualizar Título na Planilha: {id_planilha}")
-            self.logger.info(f"Aba: '{nome_aba}', Célula: {coluna_titulo}{linha_sheets} (Range: {range_atualizacao})")
-            self.logger.info(f"Sheet Row Number: {sheet_row_num}")
-            self.logger.info(f"Título a ser inserido: '{titulo}'")
-
-            # (Opcional, mas recomendado) Verificar se a aba existe (código omitido para brevidade)
-            # ... (código de verificação da aba) ...
-
-            resultado = self.service.spreadsheets().values().update(
-                spreadsheetId=id_planilha,
+            self.service.spreadsheets().values().update(
+                spreadsheetId=current_spreadsheet_id,
                 range=range_atualizacao,
                 valueInputOption="USER_ENTERED",
                 body={"values": [[titulo]]}
             ).execute()
-
-            # ... (logging do resultado) ...
+            self.logger.info(f"✓ Título atualizado com sucesso em {range_atualizacao}.")
             return True
         except Exception as e:
-            self.logger.error(f"Erro ao atualizar título na linha {sheet_row_num} (Planilha {id_planilha}, Aba '{nome_aba}', Célula {coluna_titulo}{linha_sheets}): {e}")
-            # ... (logging da exceção) ...
+            self.logger.error(f"Erro ao atualizar título na linha {sheet_row_num} (Range: {range_atualizacao}): {e}")
             return False

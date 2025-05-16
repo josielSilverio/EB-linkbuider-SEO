@@ -62,21 +62,41 @@ GEMINI_PRECO_SAIDA = float(os.getenv("GEMINI_PRECO_SAIDA", 0.0005))
 # Taxa de Câmbio (pode ser ajustada ou carregada do .env se necessário no futuro)
 USD_TO_BRL_RATE = float(os.getenv("USD_TO_BRL_RATE", 5.0)) # Valor padrão de 5.0
 
-# Configurações de colunas da planilha (ajustado conforme a estrutura real da planilha)
-COLUNAS = {
-    'id': 0,                 # A - ID
-    'site': 1,               # B - Site
-    'as': 2,                 # C - AS
-    'da': 3,                 # D - DA
-    'trafego': 4,            # E - Tráfego
-    'valor': 5,               # F - Preço (R$)
-    'palavra_ancora': 6,     # G - Âncora
-    'url_ancora': 7,         # H - URL de Destino
-    'titulo': 8,             # I - Tema 
-    'url_documento': 9,      # J - Conteúdo (Drive)
-    'observacao': 11,        # L - Observação
-    'url_publicada': 12      # M - URL Publicada
+# Novo: Mapeamento de nomes de coluna esperados para flexibilizar a leitura de planilhas
+# As chaves são os identificadores internos usados pelo script.
+# Os valores são listas de possíveis nomes de cabeçalho que podem ser encontrados na planilha.
+# A ordem na lista pode indicar preferência, mas o sistema tentará encontrar qualquer um deles.
+COLUNAS_MAPEAMENTO_NOMES = {
+    'id': {'nomes': ['ID', 'Id', 'id', 'ID da Campanha']},
+    'site': {'nomes': ['Site', 'site', 'Website', 'Domínio']},
+    'as': {'nomes': ['AS', 'Authority Score', 'AS (Semrush)']},
+    'da': {'nomes': ['DA', 'Domain Authority']},
+    'trafego': {'nomes': ['Tráfego', 'Trafego', 'Tráfego Estimado', 'Tráfego Estimado (Semrush)']},
+    'valor': {'nomes': ['Preço (R$)', 'Preço', 'Valor', 'Custo']},
+    'palavra_ancora': {'nomes': ['Âncora', 'Ancora', 'Palavra-chave', 'Palavra Chave', 'Keyword', 'KW']},
+    'url_ancora': {'nomes': ['URL de Destino', 'URL Destino', 'Link de Destino', 'URL Âncora', 'URL Ancora', 'URL Alvo']},
+    'titulo': {'nomes': ['Tema', 'Título', 'Titulo', 'Título do Artigo', 'Título Gerado']},
+    'url_documento': {'nomes': ['Conteúdo (Drive)', 'URL Conteúdo', 'URL Documento', 'Link Documento', 'URL Drive']},
+    'observacao': {'nomes': ['Observação', 'Observacoes', 'Obs', 'Comentários']},
+    'url_publicada': {'nomes': ['URL Publicada', 'Link Publicado', 'URL Final']},
+    'data_publicacao': {'nomes': ['Data Publicação', 'YYYY/MM', 'Data Prevista', 'Mês/Ano']}
 }
+
+# Configurações de colunas da planilha (ajustado conforme a estrutura real da planilha)
+# COLUNAS = {
+#     'id': 0,                 # A - ID
+#     'site': 1,               # B - Site
+#     'as': 2,                 # C - AS
+#     'da': 3,                 # D - DA
+#     'trafego': 4,            # E - Tráfego
+#     'valor': 5,               # F - Preço (R$)
+#     'palavra_ancora': 6,     # G - Âncora
+#     'url_ancora': 7,         # H - URL de Destino
+#     'titulo': 8,             # I - Tema
+#     'url_documento': 9,      # J - Conteúdo (Drive)
+#     'observacao': 11,        # L - Observação
+#     'url_publicada': 12      # M - URL Publicada
+# }
 
 # Dicionário com nomes de meses
 MESES = {
@@ -95,7 +115,7 @@ MESES = {
 }
 
 # Configurações de filtragem
-LINHA_INICIAL = 0       # Inicia da primeira linha (antes era 674)
+# LINHA_INICIAL = 0       # Inicia da primeira linha (antes era 674)
 
 # Função para gerar o nome do arquivo
 def gerar_nome_arquivo(id: str, site: str, ancora: str, titulo: Optional[str] = None) -> str:
