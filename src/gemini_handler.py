@@ -992,47 +992,72 @@ class GeminiHandler:
     def gerar_titulos(self, dados: Dict[str, str], quantidade: int = 1) -> List[str]:
         """
         Gera apenas títulos para o conteúdo, sem gerar o corpo do texto.
-        
         Args:
             dados: Dicionário com os dados necessários (palavra_ancora, etc)
             quantidade: Quantidade de títulos a serem gerados
-            
         Returns:
             Lista de títulos gerados
         """
         self.logger.info(f"Gerando {quantidade} título(s) para palavra-âncora: {dados.get('palavra_ancora')}")
-        
+
         # Carrega o template de prompt para títulos
         prompt_template = self.carregar_prompt_template('titulos')
-        
+        palavra_ancora = dados.get('palavra_ancora', '')
+
         # Constrói o prompt específico para geração de títulos
         prompt = self._construir_prompt(dados, prompt_template)
-        
-        # Adiciona instrução para gerar múltiplos títulos se necessário
+
+        # Adiciona instrução para gerar múltiplos títulos se necessário, forçando diversidade
         if quantidade > 1:
-            prompt += f"\n\nGere {quantidade} títulos diferentes e únicos, um por linha."
-        
+            prompt += f"""
+\n\nGere {quantidade} títulos únicos e criativos para o tema '{palavra_ancora}'. Cada título deve:
+- Usar uma estrutura diferente (ex: pergunta provocativa, frase de efeito, metáfora, afirmação ousada, etc.)
+- NÃO repetir padrões comuns como 'Erros Críticos', 'Dicas Essenciais', 'Guia Completo', etc.
+- Ser original, instigante e fugir do óbvio.
+Exemplos de estruturas:
+1. Pergunta provocativa: "Que verdade sobre {palavra_ancora} iniciantes descobrem tarde demais (e custa caro)?"
+2. Frase de efeito: "{palavra_ancora}: Convertendo Simples Palpites em Decisões Calculadas"
+3. Metáfora: "Entendendo {palavra_ancora}: Menos [Comparação A Menos Atrativa] e Mais [Comparação B Mais Estratégica/Interessante]."
+4. Afirmação ousada: "Quase Tudo Que Você Sabe Sobre {palavra_ancora} Pode Estar Errado."
+"""
+
+        # Aumenta levemente a temperatura para títulos
+        temp_titulos = min(1.0, GEMINI_TEMPERATURE + 0.15)
+        generation_config = {
+            "temperature": temp_titulos,
+            "max_output_tokens": GEMINI_MAX_OUTPUT_TOKENS,
+        }
+
         # Gera os títulos
-        response = self._make_api_call(self.model.generate_content, prompt)
-        
+        response = self._make_api_call(self.model.generate_content, prompt, generation_config=generation_config)
+
         if not response or not response.text:
             self.logger.error("Falha ao gerar títulos: resposta vazia da API")
             return []
-        
+
         # Processa a resposta para extrair os títulos
         titulos = []
+        titulos_existentes = set()
         for linha in response.text.split('\n'):
             titulo = linha.strip()
             if titulo and not titulo.startswith(('#', '*', '-', '1.', '2.', '3.')):
                 # Verifica se o título é válido
                 sucesso, titulo_corrigido = verificar_e_corrigir_titulo(
                     titulo, 
-                    dados.get('palavra_ancora', ''),
+                    palavra_ancora,
                     is_document_title=False
                 )
+                # Rejeita títulos muito similares aos já aceitos
                 if sucesso:
+                    titulo_norm = normalizar_texto(titulo_corrigido.lower())
+                    if any(self._calcular_similaridade_palavras(titulo_norm, normalizar_texto(t.lower())) > 0.7 for t in titulos_existentes):
+                        self.logger.warning(f"Título rejeitado por ser muito similar a outro já aceito: '{titulo_corrigido}'")
+                        continue
                     titulos.append(titulo_corrigido)
-        
+                    titulos_existentes.add(titulo_corrigido)
+                else:
+                    self.logger.info(f"Título rejeitado por não passar validação: '{titulo}'")
+
         self.logger.info(f"Títulos gerados com sucesso: {len(titulos)}")
         return titulos
 
@@ -1084,25 +1109,22 @@ class GeminiHandler:
 
     def _exponential_backoff(self, attempt: int) -> float:
         """Calcula o tempo de espera com backoff exponencial e jitter."""
-        delay = min(self.base_delay * (2 ** attempt) + random.uniform(0, 1), self.max_delay)
+        delay = min(self.base_delay * (2 ** attempt) + random.uniform(0, 1), 120)
         return delay
 
     def _make_api_call(self, func, *args, **kwargs):
-        """Faz chamada à API com retry e backoff exponencial."""
+        """Faz chamada à API com retry e backoff exponencial, tentando indefinidamente em caso de erro de cota."""
         attempt = 0
-        while attempt < self.max_retries:
+        while True:  # Tenta até conseguir
             try:
                 return func(*args, **kwargs)
             except ResourceExhausted as e:
                 attempt += 1
-                if attempt == self.max_retries:
-                    raise
-                # Extrai o tempo de espera sugerido pela API, se disponível, mas nunca ultrapassa max_delay
+                # Extrai o tempo de espera sugerido pela API, se disponível, mas nunca ultrapassa 120 segundos
                 wait_time = self._exponential_backoff(attempt)
                 if hasattr(e, 'retry_delay') and e.retry_delay:
-                    wait_time = min(self.max_delay, e.retry_delay.seconds)
-                self.logger.warning(f"Rate limit atingido. Tentativa {attempt}/{self.max_retries}. "
-                                  f"Aguardando {wait_time:.1f} segundos...")
+                    wait_time = min(120, e.retry_delay.seconds)
+                self.logger.warning(f"Rate limit atingido (erro 429). Tentativa {attempt}. Aguardando {wait_time:.1f} segundos antes de tentar novamente...")
                 time.sleep(wait_time)
             except Exception as e:
                 raise

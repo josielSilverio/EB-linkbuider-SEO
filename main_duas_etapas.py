@@ -12,24 +12,15 @@ from src.utils import configurar_logging
 from src.sheets_handler import SheetsHandler
 from src.gemini_handler import GeminiHandler
 from src.docs_handler import DocsHandler
-from src.config import (
-    gerar_nome_arquivo,
-    estimar_custo_gemini,
-    GEMINI_MAX_OUTPUT_TOKENS,
-    MESES,
-    SPREADSHEET_ID,
-    SHEET_NAME,
-    DRIVE_FOLDER_ID,
-    USD_TO_BRL_RATE,
-    DELAY_ENTRE_CHAMADAS_GEMINI,
-    LAST_SELECTION_FILE
-)
+from src.menu_handler import MenuHandler
+from src.processor import ContentProcessor
+from src.config import config
 
 def carregar_ultima_selecao() -> Dict:
     """Carrega a última seleção salva"""
     try:
-        if os.path.exists(LAST_SELECTION_FILE):
-            with open(LAST_SELECTION_FILE, 'r', encoding='utf-8') as f:
+        if os.path.exists(config.LAST_SELECTION_FILE):
+            with open(config.LAST_SELECTION_FILE, 'r', encoding='utf-8') as f:
                 return json.load(f)
     except Exception as e:
         logging.error(f"Erro ao carregar última seleção: {e}")
@@ -38,11 +29,11 @@ def carregar_ultima_selecao() -> Dict:
 def salvar_ultima_selecao(selecao: Dict):
     """Salva a seleção atual"""
     try:
-        os.makedirs(os.path.dirname(LAST_SELECTION_FILE), exist_ok=True)
-        with open(LAST_SELECTION_FILE, 'w', encoding='utf-8') as f:
+        os.makedirs(os.path.dirname(config.LAST_SELECTION_FILE), exist_ok=True)
+        with open(config.LAST_SELECTION_FILE, 'w', encoding='utf-8') as f:
             json.dump(selecao, f, indent=4)
     except Exception as e:
-        logging.error(f"Erro ao salvar última seleção em {LAST_SELECTION_FILE}: {e}")
+        logging.error(f"Erro ao salvar última seleção em {config.LAST_SELECTION_FILE}: {e}")
 
 def apresentar_menu_planilha(sheets_handler: SheetsHandler, ultima_selecao: Dict) -> Optional[Tuple[str, str, str]]:
     """Apresenta menu para seleção da planilha e pasta do Drive"""
@@ -299,7 +290,11 @@ def processar_linhas(sheets: SheetsHandler, gemini: GeminiHandler, docs: DocsHan
         total_custo = sum(c['metricas'].get('cost_usd', 0) for c in conteudos_lote)
         total_palavras = sum(c['metricas'].get('num_palavras', 0) for c in conteudos_lote)
         total_caracteres = sum(c['metricas'].get('num_caracteres', 0) for c in conteudos_lote)
+        # Exibir dados principais das linhas processadas
         print(f"\nResumo do lote de conteúdos gerados ({linhas_processadas_lote}):")
+        for c in conteudos_lote:
+            dados = c['dados']
+            print(f"ID: {dados.get('id', '')} | Título: {dados.get('titulo', '')} | Palavra-âncora: {dados.get('palavra_ancora', '')} | Site: {dados.get('site', '')}")
         print(f"Tokens de entrada: {total_tokens_entrada}")
         print(f"Tokens de saída: {total_tokens_saida}")
         print(f"Custo estimado (USD): {total_custo:.6f}")
@@ -327,106 +322,84 @@ def processar_linhas(sheets: SheetsHandler, gemini: GeminiHandler, docs: DocsHan
             print(f"Documento criado para ID {dados['id']}: {doc_url}")
 
 def main(modo_teste: bool = False):
-    """Função principal com menu interativo"""
+    """Função principal do script"""
     try:
-        # Inicializa handlers
-        sheets = SheetsHandler()
-        gemini = GeminiHandler()
-        docs = DocsHandler()
-        
+        # Configuração inicial
+        configurar_logging()
+        logger = logging.getLogger('seo_linkbuilder.main')
+        logger.info("Iniciando execução do script")
+
+        # Inicialização dos handlers
+        sheets_handler = SheetsHandler()
+        gemini_handler = GeminiHandler()
+        docs_handler = DocsHandler()
+        menu_handler = MenuHandler(sheets_handler)
+        processor = ContentProcessor(sheets_handler, gemini_handler, docs_handler)
+
         # Carrega última seleção
         ultima_selecao = carregar_ultima_selecao()
-        
-        # Menu de planilha e pasta do Drive
-        planilha_info = apresentar_menu_planilha(sheets, ultima_selecao)
-        if not planilha_info:
+
+        # Menu de seleção da planilha
+        selecao = menu_handler.apresentar_menu_planilha(ultima_selecao)
+        if not selecao:
+            logger.info("Operação cancelada pelo usuário")
             return
-        
-        spreadsheet_id, sheet_name, drive_folder_id = planilha_info
-        
-        # Sugestão do último ID da pasta do Drive
-        if ultima_selecao and ultima_selecao.get('drive_folder_id') and drive_folder_id == '__SUGERIR__':
-            sugestao = ultima_selecao['drive_folder_id']
-            drive_folder_id_input = input(f"\nPressione Enter para usar a última pasta do Drive ({sugestao}) ou digite um novo ID: ").strip()
-            if drive_folder_id_input:
-                drive_folder_id = drive_folder_id_input
-            else:
-                drive_folder_id = sugestao
-        
-        # Salva seleção atual
-        selecao_atual = {
+
+        spreadsheet_id, sheet_name, drive_folder_id = selecao
+
+        # Menu de processamento
+        modo_processamento = menu_handler.apresentar_menu_processamento()
+        if modo_processamento == "0":
+            logger.info("Operação cancelada pelo usuário")
+            return
+
+        # Menu de quantidade
+        limite_linhas = menu_handler.apresentar_menu_quantidade()
+        if limite_linhas == 'cancelar':
+            logger.info("Operação cancelada pelo usuário")
+            return
+
+        # Perguntar se deseja começar de um ID específico
+        id_inicial = None
+        usar_id_inicial = input("Deseja começar a partir de um ID específico? (S/N): ").strip().upper()
+        if usar_id_inicial == 'S':
+            id_inicial = input("Digite o ID inicial: ").strip()
+            if not id_inicial:
+                id_inicial = None
+
+        # Carrega dados da planilha
+        df = sheets_handler.carregar_dados_planilha(spreadsheet_id, sheet_name)
+        if df is None:
+            logger.error("Erro ao carregar dados da planilha")
+            return
+
+        # Mapeamento dinâmico de colunas
+        dynamic_column_map = sheets_handler.dynamic_column_map
+
+        # Processa as linhas
+        processor.processar_linhas(
+            df=df,
+            dynamic_column_map=dynamic_column_map,
+            modo_teste=modo_teste,
+            limite_linhas=limite_linhas,
+            modo_processamento=modo_processamento,
+            spreadsheet_id=spreadsheet_id,
+            sheet_name=sheet_name,
+            id_inicial=id_inicial
+        )
+
+        # Salva última seleção
+        salvar_ultima_selecao({
             'spreadsheet_id': spreadsheet_id,
             'sheet_name': sheet_name,
             'drive_folder_id': drive_folder_id
-        }
-        salvar_ultima_selecao(selecao_atual)
-        
-        # Carrega dados da planilha (todas as linhas, sem filtro de processados)
-        df = sheets.ler_planilha(spreadsheet_id=spreadsheet_id, sheet_name=sheet_name, filtrar_processados=False)
-        if df is None or df.empty:
-            print("\nNenhum dado encontrado na planilha/aba selecionada.")
-            return
-        # Atualiza o dynamic_column_map após leitura
-        header_info = sheets._find_header_and_map_columns(spreadsheet_id, sheet_name)
-        if header_info:
-            _, _, sheets.dynamic_column_map = header_info
-        
-        # Se não houver linhas após o filtro, perguntar se deseja processar todas as linhas
-        if df.empty:
-            escolha = input("\nNenhuma linha nova encontrada. Deseja processar todas as linhas da aba mesmo assim? (S/N): ").strip().upper()
-            if escolha == 'S':
-                df = sheets.ler_planilha(spreadsheet_id=spreadsheet_id, sheet_name=sheet_name, apenas_dados=True, filtrar_processados=False)
-                if df is None or df.empty:
-                    print("\nAinda não há dados na planilha/aba selecionada.")
-                    return
-                # Atualiza o dynamic_column_map novamente
-                header_info = sheets._find_header_and_map_columns(spreadsheet_id, sheet_name)
-                if header_info:
-                    _, _, sheets.dynamic_column_map = header_info
-            else:
-                return
-        
-        # Menu de processamento
-        modo_processamento = apresentar_menu_processamento()
-        if modo_processamento == "0":
-            return
-        
-        # Menu de quantidade
-        resultado_qtd = apresentar_menu_quantidade()
-        if resultado_qtd == 'cancelar':
-            return
-        limite_linhas = resultado_qtd
-        
-        # Pergunta sobre ID inicial
-        id_inicial = input("\nDigite o ID inicial para processamento (Enter para começar do início): ").strip()
-        if not id_inicial:
-            id_inicial = None
-        
-        # Processa as linhas
-        processar_linhas(
-            sheets,
-            gemini,
-            docs,
-            df,
-            sheets.dynamic_column_map,
-            modo_teste,
-            limite_linhas,
-            modo_processamento,
-            id_inicial,
-            spreadsheet_id,
-            sheet_name
-        )
-        
-        print("\nProcessamento concluído!")
-        
+        })
+
+        logger.info("Processamento concluído com sucesso")
+
     except Exception as e:
-        logging.error(f"Erro no processamento principal: {e}")
+        logger.error(f"Erro durante a execução: {e}")
         raise
 
 if __name__ == "__main__":
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--teste", action="store_true", help="Executa em modo teste")
-    args = parser.parse_args()
-    
-    main(modo_teste=args.teste) 
+    main() 

@@ -498,3 +498,47 @@ class SheetsHandler:
         except Exception as e:
             self.logger.error(f"Erro ao atualizar título na linha {sheet_row_num} (Range: {range_atualizacao}): {e}")
             return False
+
+    def carregar_dados_planilha(self, spreadsheet_id: str, sheet_name: str) -> Optional[pd.DataFrame]:
+        """
+        Carrega dados da planilha do Google Sheets.
+        
+        Args:
+            spreadsheet_id: ID da planilha
+            sheet_name: Nome da aba
+            
+        Returns:
+            DataFrame com os dados da planilha ou None em caso de erro
+        """
+        try:
+            # Obtém os dados da planilha
+            result = self.service.spreadsheets().values().get(
+                spreadsheetId=spreadsheet_id,
+                range=f"{sheet_name}!A:Z"  # Lê todas as colunas de A até Z
+            ).execute()
+            
+            values = result.get('values', [])
+            if not values:
+                self.logger.warning("Nenhum dado encontrado na planilha")
+                return None
+                
+            # Encontra o cabeçalho e mapeia as colunas
+            header_info = self._find_header_and_map_columns(spreadsheet_id, sheet_name)
+            if not header_info:
+                self.logger.error("Não foi possível encontrar o cabeçalho da planilha")
+                return None
+                
+            header_row, header_values, self.dynamic_column_map = header_info
+            
+            # Cria o DataFrame
+            df = pd.DataFrame(values[header_row + 1:], columns=header_values)
+            
+            # Adiciona número da linha na planilha para referência
+            df['sheet_row_num'] = range(header_row + 2, len(values) + 1)
+            
+            self.logger.info(f"Dados carregados com sucesso: {len(df)} linhas")
+            return df
+            
+        except Exception as e:
+            self.logger.error(f"Erro ao carregar dados da planilha: {e}")
+            return None

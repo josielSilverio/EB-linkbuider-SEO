@@ -12,15 +12,24 @@ Crie artigos com títulos OBRIGATORIAMENTE únicos, criativos e variados que NUN
 
 1. Mantenha o título fornecido exatamente como está
 2. O conteúdo DEVE ter no mínimo 8 parágrafos e 400 palavras
-3. ** Inclua a palavra-âncora "{{palavra_ancora}}" como link para "{{url_ancora}}" nos 3 primeiros parágrafos **
+3. Inclua a palavra-âncora "{{palavra_ancora}}" como hyperlink (não cite a URL) no segundo parágrafo do conteúdo, de forma natural.
 4. Não use tags do HTML no conteúdo (<H1>, <H2>, <H3>, <a>...)
-5. Inclua pelo menos 2 listas com marcadores
-6. Mantenha parágrafos curtos e objetivos
-7. Não utilize caracteres especiais (#, *) em titulos, substitulos, palavra-chave ou partes em negrito
-8. Todos os links para as palavras-ancoras devem ser geradas no formato do DOCS do Google.
-9. Quando utlizar listas, use a formatação tradicional de listas
-10. Desenvolvimento com dados, contexto histórico, análise, comparativos e curiosidades
+5. NUNCA use <a href=...> ou qualquer tag HTML para links. Apenas escreva a palavra-âncora normalmente, pois o sistema aplicará o hyperlink automaticamente.
+6. Inclua pelo menos 2 listas com marcadores
+7. Mantenha parágrafos curtos e objetivos
+8. Não utilize caracteres especiais (#, *) em titulos, substitulos, palavra-chave ou partes em negrito
+9. Todos os links para as palavras-ancoras devem ser geradas no formato do DOCS do Google.
+10. Quando utlizar listas, use a formatação tradicional de listas
+11. Desenvolvimento com dados, contexto histórico, análise, comparativos e curiosidades
 
+## INSTRUÇÃO CRÍTICA DE DIVERSIDADE E ANTI-REPETIÇÃO (NOVA):
+
+- Antes de gerar o conteúdo, consulte a lista de títulos e estruturas já utilizados para esta palavra-âncora e EVITE QUALQUER repetição de frases, inícios, estruturas ou temas centrais.
+- É PROIBIDO usar frases, inícios ou estruturas já utilizados em outros artigos para a mesma palavra-âncora.
+- VARIE radicalmente a abordagem, o estilo e o ângulo do texto. Se um artigo já abordou "erros comuns", o próximo deve focar em outro aspecto (ex: tendências, psicologia, dados, experiência do usuário, etc.).
+- NÃO use frases ou inícios como: "A Evolução", "A Análise", "A Fascinante História", "O Guia Definitivo", "Como Dominar", "Dicas Essenciais", "Tudo Sobre", ou qualquer estrutura já usada em títulos anteriores para esta palavra-âncora.
+- Consulte exemplos de padrões proibidos e EXEMPLOS DE TÍTULOS PROIBIDOS para garantir que não está repetindo ideias, frases ou estruturas.
+- O objetivo é que cada artigo pareça vir de uma ideia completamente nova, não uma leve reformulação do anterior.
 
 ## ESTRUTURA DO CONTEÚDO:
 

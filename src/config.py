@@ -2,9 +2,11 @@
 import os
 import dotenv
 from datetime import datetime
-from typing import Optional, Dict, List, Tuple
+from typing import Optional, Dict, List, Tuple, Any
 import re
 import logging
+from dataclasses import dataclass, field
+from pathlib import Path
 
 # Tenta carregar as variáveis de ambiente do arquivo .env
 try:
@@ -163,3 +165,89 @@ def estimar_custo_gemini(tokens_entrada: int, tokens_saida: int) -> float:
 
 # Configuração do arquivo de última seleção
 LAST_SELECTION_FILE = os.getenv("LAST_SELECTION_FILE", DEFAULT_LAST_SELECTION_FILE) 
+
+@dataclass
+class Config:
+    # API Settings
+    GEMINI_MAX_OUTPUT_TOKENS: int = 2048
+    DELAY_ENTRE_CHAMADAS_GEMINI: float = 1.0
+    USD_TO_BRL_RATE: float = 5.0
+    GEMINI_TEMPERATURE: float = 0.3
+    
+    # File Paths
+    BASE_DIR: Path = field(default_factory=lambda: Path(__file__).parent.parent)
+    LOGS_DIR: Path = field(default_factory=lambda: Path(__file__).parent.parent / "logs")
+    DATA_DIR: Path = field(default_factory=lambda: Path(__file__).parent.parent / "data")
+    CREDENTIALS_DIR: Path = field(default_factory=lambda: Path(__file__).parent.parent / "credentials")
+    LAST_SELECTION_FILE: Path = field(default_factory=lambda: Path(__file__).parent.parent / "data" / "last_selection.json")
+    
+    # Google Services
+    SPREADSHEET_ID: str = ""
+    SHEET_NAME: str = "Sheet1"
+    DRIVE_FOLDER_ID: str = ""
+    GOOGLE_API_KEY: str = field(default_factory=lambda: os.getenv("GOOGLE_API_KEY", "AIzaSyCK8kLwIdwK-MKTrt-JEQ5eTQUB_Ryw9ws"))
+    GEMINI_API_KEY: str = field(default_factory=lambda: os.getenv("GEMINI_API_KEY", "AIzaSyB-rrVr5TMdLgFYROocyQRFJ21bONrOjHE"))
+    CREDENTIALS_FILE_PATH: str = field(default_factory=lambda: os.getenv("CREDENTIALS_FILE_PATH", "credentials/credentials.json"))
+    
+    # Processing Settings
+    MESES: Dict[str, str] = field(default_factory=lambda: {
+        "01": "janeiro", "02": "fevereiro", "03": "março",
+        "04": "abril", "05": "maio", "06": "junho",
+        "07": "julho", "08": "agosto", "09": "setembro",
+        "10": "outubro", "11": "novembro", "12": "dezembro"
+    })
+    
+    # Column Mappings
+    DEFAULT_COLUMN_MAP: Dict[str, Any] = field(default_factory=lambda: {
+        "id": "ID",
+        "titulo": "Título",
+        "conteudo": "Conteúdo",
+        "palavra_ancora": "Palavra-âncora",
+        "url_ancora": "URL da âncora"
+    })
+    
+    # Gemini Settings
+    GEMINI_MODEL: str = field(default_factory=lambda: os.getenv("GEMINI_MODEL", "gemini-1.5-flash"))
+    GEMINI_PRECO_ENTRADA: float = field(default_factory=lambda: float(os.getenv("GEMINI_PRECO_ENTRADA", "0.00025")))
+    GEMINI_PRECO_SAIDA: float = field(default_factory=lambda: float(os.getenv("GEMINI_PRECO_SAIDA", "0.0005")))
+    
+    # File Naming
+    NOME_ARQUIVO_PADRAO: str = field(default_factory=lambda: os.getenv("NOME_ARQUIVO_PADRAO", "{id} - {site} - {ancora}"))
+    
+    @classmethod
+    def load_from_env(cls) -> 'Config':
+        """Load configuration from environment variables"""
+        config = cls()
+        
+        # Load from environment variables if they exist
+        if os.getenv('GEMINI_MAX_OUTPUT_TOKENS'):
+            config.GEMINI_MAX_OUTPUT_TOKENS = int(os.getenv('GEMINI_MAX_OUTPUT_TOKENS'))
+        if os.getenv('DELAY_ENTRE_CHAMADAS_GEMINI'):
+            config.DELAY_ENTRE_CHAMADAS_GEMINI = float(os.getenv('DELAY_ENTRE_CHAMADAS_GEMINI'))
+        if os.getenv('USD_TO_BRL_RATE'):
+            config.USD_TO_BRL_RATE = float(os.getenv('USD_TO_BRL_RATE'))
+        if os.getenv('SPREADSHEET_ID'):
+            config.SPREADSHEET_ID = os.getenv('SPREADSHEET_ID')
+        if os.getenv('SHEET_NAME'):
+            config.SHEET_NAME = os.getenv('SHEET_NAME')
+        if os.getenv('DRIVE_FOLDER_ID'):
+            config.DRIVE_FOLDER_ID = os.getenv('DRIVE_FOLDER_ID')
+        if os.getenv('GEMINI_TEMPERATURE'):
+            config.GEMINI_TEMPERATURE = float(os.getenv('GEMINI_TEMPERATURE'))
+            
+        return config
+
+def gerar_nome_arquivo(tipo: str, palavra_ancora: str) -> str:
+    """Generate a standardized filename based on type and anchor word"""
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    return f"{tipo}_{palavra_ancora}_{timestamp}.txt"
+
+def estimar_custo_gemini(tokens_input: int, tokens_output: int) -> float:
+    """Estimate the cost of a Gemini API call in USD"""
+    config = Config.load_from_env()
+    input_cost = (tokens_input / 1000) * config.GEMINI_PRECO_ENTRADA
+    output_cost = (tokens_output / 1000) * config.GEMINI_PRECO_SAIDA
+    return input_cost + output_cost
+
+# Create a global config instance
+config = Config.load_from_env() 
