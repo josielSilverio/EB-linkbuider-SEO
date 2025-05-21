@@ -931,352 +931,95 @@ def apresentar_menu_planilha(sheets_handler: SheetsHandler) -> Optional[Tuple[st
         logger.error(f"Erro ao apresentar menu de planilhas: {e}")
         return None
 
-def processar_planilha(limite_linhas: Optional[int] = None, 
-                         linha_inicial_desejada: Optional[int] = None,
-                         id_linha_especifica: Optional[str] = None, # Novo parâmetro
-                         reprocessar_concluidos: bool = False, 
-                         modo_teste: bool = False, 
-                         spreadsheet_id: Optional[str] = None, 
-                         sheet_name: Optional[str] = None):
+def processar_linhas(sheets: SheetsHandler, gemini: GeminiHandler, docs: DocsHandler, df: pd.DataFrame, dynamic_column_map: Dict, modo_teste: bool = False, limite_linhas: Optional[int] = None):
     """
-    Processa as linhas da planilha, gerando conteúdo e criando documentos.
+    Processa as linhas selecionadas em duas etapas:
+    1. Gera títulos
+    2. Gera conteúdo para cada título
     """
-    logger = logging.getLogger('seo_linkbuilder')
+    logger = logging.getLogger('seo_linkbuilder.main')
     
-    # Inicialização dos Handlers
-    try:
-        sheets = SheetsHandler()
-        gemini = GeminiHandler()
-        docs = DocsHandler()
-    except Exception as e:
-        logger.error(f"Erro ao inicializar handlers: {e}. Encerrando.")
-        return
-
-    # Usa o ID e nome da aba fornecidos ou os globais (atualizados pelo menu)
-    current_spreadsheet_id = spreadsheet_id or SPREADSHEET_ID
-    current_sheet_name = sheet_name or SHEET_NAME
-
-    if not current_spreadsheet_id or not current_sheet_name:
-        logger.error("ID da Planilha ou Nome da Aba não foram definidos. Use o menu para selecioná-los.")
-        return
-
-    # 1. Obter o mapeamento de colunas ANTES de qualquer leitura de dados
-    header_info = sheets._find_header_and_map_columns(current_spreadsheet_id, current_sheet_name)
-    if not header_info:
-        logger.error(f"Não foi possível obter o mapeamento de colunas para {current_spreadsheet_id}/{current_sheet_name}. Encerrando processamento.")
-        return
-    _, _, dynamic_column_map = header_info # header_row_index, actual_header_content, dynamic_column_map
+    # Contador para linhas processadas
+    linhas_processadas = 0
     
-    # Obtém os nomes reais das colunas necessárias para extrair_titulos_por_ancora
-    col_titulo_real = dynamic_column_map.get('titulo', {}).get('name')
-    col_palavra_ancora_real = dynamic_column_map.get('palavra_ancora', {}).get('name')
-
-    # 2. Análise de títulos existentes (opcional, mas útil para evitar repetições)
-    logger.info("Analisando todos os títulos existentes na planilha...")
-    try:
-        # Passar filtrar_processados=False aqui para analisar TODOS os títulos existentes, mesmo os já processados
-        df_todos_titulos = sheets.ler_planilha( # Ajuste para desempacotar tupla -> REMOVIDO DESEMPACOTAMENTO
-            spreadsheet_id=current_spreadsheet_id, 
-            sheet_name=current_sheet_name,
-            filtrar_processados=False, # Ler todos para análise de títulos
-            apenas_dados=True # Indicar que é apenas para leitura de dados brutos
-        )
-
-        titulos_existentes = []
-        if df_todos_titulos is not None and not df_todos_titulos.empty and col_titulo_real and col_titulo_real in df_todos_titulos.columns:
-            titulos_existentes = df_todos_titulos[col_titulo_real].dropna().astype(str).tolist()
-        
-        # Identificar palavras frequentes nos títulos existentes
-        palavras_frequentes_a_evitar = identificar_palavras_frequentes_em_titulos(
-            titulos_existentes, 
-            limiar_percentual=0.5, # Ex: se "apostas" aparece em >50% dos títulos
-            min_titulos_para_analise=10
-        )
-        if palavras_frequentes_a_evitar:
-            logger.info(f"Novos títulos tentarão EVITAR (normalizadas): {palavras_frequentes_a_evitar}")
-        
-        # Identificar padrões por âncora
-        padroes_por_ancora_a_evitar = {}
-        if df_todos_titulos is not None and not df_todos_titulos.empty and col_palavra_ancora_real and col_palavra_ancora_real in df_todos_titulos.columns and col_titulo_real:
-            logger.info("Analisando títulos por palavra-âncora para padrões repetitivos...")
-            titulos_agrupados = extrair_titulos_por_ancora(df_todos_titulos, col_titulo_real, col_palavra_ancora_real)
-            padroes_por_ancora_a_evitar = identificar_padroes_por_ancora(titulos_agrupados)
-            if padroes_por_ancora_a_evitar:
-                logger.info(f"Identificados padrões para {len(padroes_por_ancora_a_evitar)} palavras-âncora.")
-
-    except Exception as e:
-        logger.error(f"Erro durante a análise de títulos existentes: {e}")
-        palavras_frequentes_a_evitar = []
-        padroes_por_ancora_a_evitar = {}
+    # Lista para armazenar títulos gerados
+    titulos_gerados = []
     
-    instrucao_base_evitar = ""
-    if palavras_frequentes_a_evitar:
-        instrucao_base_evitar += f" EVITE usar excessivamente as seguintes palavras e seus derivados no título: {', '.join(palavras_frequentes_a_evitar)}."
+    # Primeira etapa: Geração de títulos
+    logger.info("Iniciando primeira etapa: Geração de títulos")
+    for _, row in df.iterrows():
+        if limite_linhas and linhas_processadas >= limite_linhas:
+            break
+            
+        # Prepara dados para geração
+        dados = {
+            'id': str(row[dynamic_column_map['id']]),
+            'site': str(row[dynamic_column_map['site']]),
+            'palavra_ancora': str(row[dynamic_column_map['palavra_ancora']]),
+            'url_ancora': str(row[dynamic_column_map['url_ancora']])
+        }
+        
+        # Gera título
+        titulos = gemini.gerar_titulos(dados)
+        if not titulos:
+            logger.warning(f"Falha ao gerar título para ID {dados['id']}")
+            continue
+            
+        titulo = titulos[0]  # Pega o primeiro título gerado
+        titulos_gerados.append((dados['id'], titulo))
+        
+        # Atualiza o título na planilha
+        sheet_row_num = row.name + 2  # +2 porque o índice começa em 0 e a planilha em 1
+        sheets.atualizar_titulo_documento(sheet_row_num, titulo)
+        
+        linhas_processadas += 1
+        if modo_teste:
+            break
     
-    # 3. Ler a planilha para processamento efetivo, aplicando filtros conforme necessário
-    logger.info(f"Lendo dados da planilha '{current_sheet_name}' ({current_spreadsheet_id}) para processamento efetivo...")
-
-    df_para_processar = None
-
-    if id_linha_especifica:
-        logger.info(f"Tentando localizar linha com ID específico: {id_linha_especifica} para processar {limite_linhas if limite_linhas is not None and limite_linhas > 0 else 'todas disponíveis a partir dela'} linha(s).")
-        df_completo = sheets.ler_planilha(
-            spreadsheet_id=current_spreadsheet_id, 
-            sheet_name=current_sheet_name,
-            filtrar_processados=False, # Ler tudo para encontrar o ID e fatiar
-            apenas_dados=True
-        )
-        if df_completo is not None and not df_completo.empty:
-            col_id_nome_interno = dynamic_column_map.get('id', {}).get('name')
-            if col_id_nome_interno and col_id_nome_interno in df_completo.columns:
-                df_completo[col_id_nome_interno] = df_completo[col_id_nome_interno].astype(str)
-                
-                indices_encontrados = df_completo.index[df_completo[col_id_nome_interno] == str(id_linha_especifica)].tolist()
-
-                if indices_encontrados:
-                    indice_inicio = indices_encontrados[0] 
-                    df_para_processar = df_completo.loc[indice_inicio:].head(limite_linhas if limite_linhas is not None and limite_linhas > 0 else None).copy()
-                    
-                    logger.info(f"Linha com ID '{id_linha_especifica}' encontrada no índice {indice_inicio}. Serão consideradas {len(df_para_processar)} linha(s) para processamento a partir dela.")
-                    
-                    if df_para_processar.empty:
-                        logger.warning(f"Apesar do ID '{id_linha_especifica}' ter sido encontrado, nenhuma linha ficou selecionada para processamento.")
-                        return
-                else:
-                    logger.warning(f"Nenhuma linha encontrada com o ID '{id_linha_especifica}'. Verifique o ID e a planilha.")
-                    return
-            else:
-                logger.error(f"Coluna de ID ('{col_id_nome_interno or 'id'}') não encontrada no mapeamento ou DataFrame ao buscar por ID. Não é possível prosseguir.")
-                return
-        else:
-            logger.warning("Planilha vazia ou erro ao ler para buscar ID específico.")
-            return
+    logger.info(f"Primeira etapa concluída: {len(titulos_gerados)} títulos gerados")
+    
+    # Segunda etapa: Geração de conteúdo
+    logger.info("Iniciando segunda etapa: Geração de conteúdo")
+    for id_original, titulo in titulos_gerados:
+        # Encontra a linha correspondente
+        row = df[df[dynamic_column_map['id']] == id_original].iloc[0]
         
-        if not reprocessar_concluidos and df_para_processar is not None and not df_para_processar.empty:
-            col_url_documento_nome_interno = dynamic_column_map.get('url_documento', {}).get('name')
-            if col_url_documento_nome_interno and col_url_documento_nome_interno in df_para_processar.columns:
-                urls_existentes_mask = pd.notna(df_para_processar[col_url_documento_nome_interno]) & \
-                                     (df_para_processar[col_url_documento_nome_interno].astype(str).str.strip() != '')
-                linhas_com_url_antes_filtro = urls_existentes_mask.sum()
-
-                if linhas_com_url_antes_filtro > 0:
-                    logger.info(f"Das {len(df_para_processar)} linhas selecionadas a partir do ID '{id_linha_especifica}', {linhas_com_url_antes_filtro} já possuem URL e o reprocessamento está DESATIVADO.")
-                    df_para_processar = df_para_processar[~urls_existentes_mask]
-                    logger.info(f"Após filtro de reprocessamento, {len(df_para_processar)} linhas restam para processamento.")
-                
-                if df_para_processar.empty and linhas_com_url_antes_filtro > 0:
-                    logger.warning(f"Todas as {linhas_com_url_antes_filtro} linhas selecionadas a partir do ID '{id_linha_especifica}' já estavam processadas e o reprocessamento está DESATIVADO. Nada a fazer.")
-                    return
-            else:
-                logger.warning(f"Coluna URL ('{col_url_documento_nome_interno}') não encontrada no mapeamento ao tentar aplicar filtro de reprocessamento para ID específico.")
-
-    else: # Lógica original para linha_inicial_desejada e limite_linhas
-        _filtrar_processados_na_leitura_inicial = not reprocessar_concluidos
-        if linha_inicial_desejada is not None:
-            _filtrar_processados_na_leitura_inicial = False
+        # Prepara dados para geração de conteúdo
+        dados = {
+            'id': str(row[dynamic_column_map['id']]),
+            'site': str(row[dynamic_column_map['site']]),
+            'palavra_ancora': str(row[dynamic_column_map['palavra_ancora']]),
+            'url_ancora': str(row[dynamic_column_map['url_ancora']]),
+            'titulo': titulo
+        }
         
-        df_lido_da_planilha = sheets.ler_planilha(
-            limite_linhas=limite_linhas, 
-            linha_inicial=linha_inicial_desejada,
-            spreadsheet_id=current_spreadsheet_id, 
-            sheet_name=current_sheet_name,
-            filtrar_processados=_filtrar_processados_na_leitura_inicial
+        # Gera conteúdo
+        conteudo, metricas, info_link = gemini.gerar_conteudo_por_titulo(dados, titulo)
+        if not conteudo:
+            logger.warning(f"Falha ao gerar conteúdo para ID {dados['id']}")
+            continue
+        
+        # Gera nome do arquivo
+        nome_arquivo = gerar_nome_arquivo(
+            dados['id'],
+            dados['site'],
+            dados['palavra_ancora'],
+            titulo
         )
         
-        if df_lido_da_planilha is None or df_lido_da_planilha.empty:
-            logger.warning("Nenhuma linha disponível para processamento após leitura inicial da planilha (sem ID específico).")
-            if linha_inicial_desejada is not None and not _filtrar_processados_na_leitura_inicial:
-                limite_log = limite_linhas if limite_linhas is not None and limite_linhas > 0 else 'N/A (todas após linha inicial)'
-                logger.info(f"Isso significa que não há linhas a partir da linha {linha_inicial_desejada} ou o limite {limite_log} resultou em zero linhas.")
-            elif _filtrar_processados_na_leitura_inicial: 
-                logger.info("Isso pode ter ocorrido porque todas as linhas elegíveis (dentro do limite, se houver) já estavam processadas e o reprocessamento de concluídos está DESATIVADO.")
-            # Casos onde limite_linhas == 0 (ou None) significa "todos"
-            elif reprocessar_concluidos and (limite_linhas == 0 or limite_linhas is None) and linha_inicial_desejada is None:
-                 logger.info("Modo 'reprocessar concluídos' ATIVO, mas parece que a planilha está vazia ou não há linhas após o cabeçalho.")
-            elif not reprocessar_concluidos and (limite_linhas == 0 or limite_linhas is None) and linha_inicial_desejada is None:
-                 logger.info("Nenhuma linha pendente encontrada. Para reprocessar linhas já concluídas, reinicie e escolha a opção correspondente.")
-            return
-
-        df_para_processar = df_lido_da_planilha.copy()
-
-        if linha_inicial_desejada is not None and not reprocessar_concluidos:
-            col_url_documento_nome_interno = dynamic_column_map.get('url_documento', {}).get('name')
-            if col_url_documento_nome_interno and col_url_documento_nome_interno in df_para_processar.columns:
-                linhas_antes_filtro_manual = len(df_para_processar)
-                df_para_processar = df_para_processar[
-                    df_para_processar[col_url_documento_nome_interno].isna() |
-                    (df_para_processar[col_url_documento_nome_interno] == '')
-                ]
-                linhas_filtradas_manualmente = linhas_antes_filtro_manual - len(df_para_processar)
-                if linhas_filtradas_manualmente > 0:
-                    logger.info(f"{linhas_filtradas_manualmente} linha(s) (das {linhas_antes_filtro_manual} lida(s) a partir da linha {linha_inicial_desejada}) foram removidas por já terem URL, pois o reprocessamento está desativado.")
-            else:
-                logger.warning(f"Não foi possível aplicar o filtro de reprocessamento manual: coluna URL '{col_url_documento_nome_interno}' não encontrada no mapeamento ou DataFrame.")
-
-    # Garantir que df_para_processar não seja None antes de verificar se está vazio
-    if df_para_processar is None or df_para_processar.empty:
-        logger.warning("Nenhuma linha para processar após todas as filtragens (ID específico ou outros critérios). Verifique as opções.")
-        return
-            
-    total_linhas_para_processar = len(df_para_processar)
-    logger.info(f"Total de {total_linhas_para_processar} linhas a serem processadas.")
-    if total_linhas_para_processar == 0:
-        logger.warning("Nenhuma linha para processar após todas as filtragens. Verifique as opções de linha inicial, limite e reprocessamento.")
-        return
+        # Cria documento
+        document_id, document_url = docs.criar_documento(titulo, conteudo, nome_arquivo, info_link)
         
-    custo_total_estimado_usd = 0
-    custo_total_estimado_brl = 0
-    documentos_gerados_sucesso = 0
-    ids_processados_com_sucesso = []
-    ids_com_erro = []
-
-    # Loop principal para processar cada linha do DataFrame
-    # Adicionado log antes do loop
-    logger.info(f"Preparando para iniciar o loop de processamento sobre {total_linhas_para_processar} linha(s) selecionada(s).")
-
-    for i, (original_index, row) in enumerate(df_para_processar.iterrows()):
-        # 'original_index' é o índice do DataFrame df_para_processar
-        # 'row' é uma Series do Pandas contendo os dados da linha
+        # Atualiza URL na planilha
+        sheet_row_num = row.name + 2
+        sheets.atualizar_url_documento(sheet_row_num, document_url)
         
-        # Adicionado log no início da iteração
-        # Tenta obter o ID da coluna 'id' do mapeamento dinâmico para log.
-        col_id_nome_log = dynamic_column_map.get('id', {}).get('name', 'ID_FALLBACK')
-        id_item_log = row.get(col_id_nome_log, f"ID_NAO_ENCONTRADO_EM_COL_{col_id_nome_log}")
-        sheet_row_num_original = row.get('sheet_row_num', "sheet_row_num_NAO_ENCONTRADO") # sheet_row_num é adicionado por ler_planilha
-
-        logger.info(f"Loop de processamento: Iteração {i+1}/{total_linhas_para_processar}. Processando linha original da planilha nº {sheet_row_num_original} (ID: {id_item_log}).")
-
-        try:
-            dados = sheets.extrair_dados_linha(row, dynamic_column_map)
-            if not dados:
-                logger.error(f"Falha ao extrair dados para a linha {sheet_row_num_original} (ID: {id_item_log}). Pulando esta linha.")
-                ids_com_erro.append(str(id_item_log))
-                continue
-            
-            logger.debug(f"Dados extraídos para linha {sheet_row_num_original} (ID: {dados.get('id', 'N/A')}): {dados}")
-
-            # Se estiver em modo de teste, processa apenas a primeira linha elegível
-            if modo_teste and documentos_gerados_sucesso >= 1:
-                logger.info(f"[MODO TESTE] Limite de 1 linha processada em modo teste atingido. Encerrando processamento de novas linhas.")
-                break 
-            
-            # Obter a palavra-âncora específica desta linha para refinar as instruções de "evitar padrões"
-            palavra_ancora_linha = dados.get('palavra_ancora', '')
-            instrucao_adicional_evitar = instrucao_base_evitar # Começa com a instrução base
-            
-            if palavra_ancora_linha and padroes_por_ancora_a_evitar.get(palavra_ancora_linha.lower()):
-                padroes_especificos = padroes_por_ancora_a_evitar[palavra_ancora_linha.lower()]
-                instrucao_adicional_evitar += f" Para a âncora '{palavra_ancora_linha}', EVITE especificamente os seguintes padrões de título já usados: {', '.join(padroes_especificos)}."
-                logger.info(f"Instrução adicional para evitar padrões para âncora '{palavra_ancora_linha}' adicionada.")
-
-            # Adicionado log antes de chamar Gemini
-            logger.info(f"Preparando para chamar API Gemini para ID: {dados.get('id')}, Palavra-âncora: '{dados.get('palavra_ancora', 'N/A')}'")
-            
-            conteudo_gerado, metricas_gemini, info_link_interno = gemini.gerar_conteudo(
-                dados=dados, # CORRIGIDO de dados_linha para dados
-                instrucao_adicional=instrucao_adicional_evitar.strip(),
-                titulos_existentes=titulos_existentes
-            )
-
-            logger.info(f"Conteúdo bruto gerado pela API Gemini para ID {dados.get('id', 'N/A')}: {str(conteudo_gerado)[:200]}...")
-            logger.debug(f"Métricas Gemini: {metricas_gemini}")
-            logger.debug(f"Info Link Interno: {info_link_interno}")
-
-            if not conteudo_gerado:
-                logger.error(f"API Gemini retornou conteúdo vazio para ID {dados.get('id', 'N/A')}. Pulando esta linha.")
-                ids_com_erro.append(str(dados.get('id', 'N/A')))
-                if metricas_gemini and metricas_gemini.get('block_reason'):
-                    logger.error(f"  Motivo do bloqueio: {metricas_gemini.get('block_reason_message')}")
-                sheets.atualizar_status(sheet_row_num_original, f"Erro Gemini: Conteúdo vazio ou bloqueado - {metricas_gemini.get('block_reason', 'N/D')}")
-                continue
-
-            # O título já foi processado e formatado como H1 pela gemini.gerar_conteudo
-            # e está na primeira linha de 'conteudo_gerado'.
-            # Extraímos ele daqui para uso em docs e sheets.
-            linhas_conteudo = conteudo_gerado.strip().split('\n')
-            titulo_para_doc_e_sheet = "Sem título"
-            if linhas_conteudo:
-                titulo_bruto_h1 = linhas_conteudo[0].strip()
-                # Remove o marcador H1 (ex: "# ") do início, se presente
-                titulo_para_doc_e_sheet = re.sub(r"^#+\s*", "", titulo_bruto_h1).strip()
-            
-            logger.info(f"Título extraído da primeira linha do conteúdo_gerado: '{titulo_para_doc_e_sheet}' para ID {dados.get('id', 'N/A')}")
-            
-            # Contar tokens e estimar custo para o item processado
-            # (Esta lógica de custo já existe mais abaixo, mas é bom ter a contagem de tokens aqui)
-            tokens_entrada = metricas_gemini.get('input_token_count', 0)
-            tokens_saida = metricas_gemini.get('output_token_count', contar_tokens(conteudo_gerado))
-            custo_item_usd = estimar_custo_gemini(tokens_entrada, tokens_saida) # CORRIGIDO: removido ", _"
-            custo_item_brl = custo_item_usd * USD_TO_BRL_RATE
-            custo_total_estimado_usd += custo_item_usd
-            custo_total_estimado_brl += custo_item_brl
-
-            logger.info(f"Estimativa de custo para este item (ID: {dados.get('id', 'N/A')}): USD {custo_item_usd:.4f} / BRL {custo_item_brl:.2f}")
-
-            if modo_teste:
-                logger.info(f"[MODO TESTE] ID: {dados.get('id', 'N/A')}, Linha Planilha: {sheet_row_num_original}")
-                logger.info(f"[MODO TESTE] Título: {titulo_para_doc_e_sheet}")
-                logger.info(f"[MODO TESTE] Conteúdo Gerado (início): {conteudo_gerado[:150]}...")
-                logger.info(f"[MODO TESTE] Link Interno Sugerido: {info_link_interno}")
-                logger.info(f"[MODO TESTE] Custo Estimado Item: USD {custo_item_usd:.4f} / BRL {custo_item_brl:.2f}")
-                documentos_gerados_sucesso += 1
-                ids_processados_com_sucesso.append(str(dados.get('id', 'N/A')))
-                # Simular atualização de status em modo teste, sem chamada real à planilha
-                logger.info(f"[MODO TESTE] Status seria atualizado para: 'Teste Concluído - {datetime.now().strftime('%Y-%m-%d %H:%M')}'")
-                logger.info(f"[MODO TESTE] URL do Documento (simulada): teste_doc_url_{dados.get('id', 'N/A')}")
-                logger.info("[MODO TESTE] Nenhuma alteração real será feita na planilha ou Google Docs.")
-                # Delay simulado em modo teste também, se configurado
-                if DELAY_ENTRE_CHAMADAS_GEMINI > 0:
-                    logger.info(f"[MODO TESTE] Aguardando {DELAY_ENTRE_CHAMADAS_GEMINI}s (delay simulado)...")
-                    time.sleep(DELAY_ENTRE_CHAMADAS_GEMINI)
-                continue # Pula para a próxima iteração em modo de teste APÓS a primeira execução bem-sucedida
-
-            # Criação do Documento no Google Docs
-            id_original_doc = dados.get('id', 'Sem-ID') # Renomeado para evitar conflito com id_item_log
-            site_doc = dados.get('site', 'Sem-site')
-            palavra_ancora_doc = dados.get('palavra_ancora', 'Tópico') # Renomeado
-            
-            nome_arquivo_gdoc = gerar_nome_arquivo(id_original_doc, site_doc, palavra_ancora_doc) # Sufixo padrão é _conteudo
-            logger.info(f"Preparando para criar/atualizar Google Doc com nome: {nome_arquivo_gdoc} para ID {id_original_doc}")
-
-            document_id, document_url = docs.criar_documento(
-                titulo=titulo_para_doc_e_sheet,  # Usar o título extraído aqui
-                conteudo=conteudo_gerado, # CORRIGIDO de corpo para conteudo
-                nome_arquivo=nome_arquivo_gdoc, # CORRIGIDO de nome_arquivo_sem_ext para nome_arquivo
-                info_link=info_link_interno
-            )
-
-            if document_url:
-                logger.info(f"Documento criado/atualizado com sucesso para ID {id_original_doc} (Linha {sheet_row_num_original}): {document_url}")
-                sheets.atualizar_url_documento(
-                    sheet_row_num_original, 
-                    document_url,
-                    spreadsheet_id=current_spreadsheet_id, # ADICIONADO
-                    sheet_name=current_sheet_name # ADICIONADO
-                )
-                sheets.atualizar_titulo_documento(
-                    sheet_row_num_original, 
-                    titulo_para_doc_e_sheet, # Usar o título extraído aqui
-                    spreadsheet_id=current_spreadsheet_id, # ADICIONADO
-                    sheet_name=current_sheet_name # ADICIONADO
-                )
-                logger.info(f"Custo e tokens para ID {id_original_doc} (Linha {sheet_row_num_original}) seriam atualizados aqui se a função existisse: Entrada={tokens_entrada}, Saída={tokens_saida}, USD={custo_item_usd:.4f}, BRL={custo_item_brl:.2f}")
-                status_final_sucesso = f"Concluído - {datetime.now().strftime('%Y-%m-%d %H:%M')}"
-                logger.info(f"Status para ID {id_original_doc} (Linha {sheet_row_num_original}) seria atualizado para '{status_final_sucesso}' aqui se a função existisse.")
-                documentos_gerados_sucesso += 1
-                ids_processados_com_sucesso.append(str(id_original_doc))
-            else:
-                logger.error(f"Falha ao criar/atualizar documento no Google Docs para ID {id_original_doc} (Linha {sheet_row_num_original}). URL não retornada.")
-                ids_com_erro.append(str(id_original_doc))
-                sheets.atualizar_status(sheet_row_num_original, "Erro Docs: Falha ao criar/obter URL")
-                # Não continuar se o doc falhou, pois não há URL para salvar.
-
-        except Exception as e:
-            id_item_excecao = dados.get('id', id_item_log if 'id_item_log' in locals() else f"Desconhecido_Iter_{i}")
-            logger.error(f"Erro inesperado ao processar linha {sheet_row_num_original} (ID: {id_item_excecao}): {e}")
-
-    logger.info(f"Processamento concluído. Documentos gerados com sucesso: {documentos_gerados_sucesso}, IDs processados: {ids_processados_com_sucesso}, IDs com erro: {ids_com_erro}")
-    return documentos_gerados_sucesso, ids_processados_com_sucesso, ids_com_erro
+        logger.info(f"Conteúdo gerado e documento criado para ID {dados['id']}")
+        
+        if modo_teste:
+            break
+    
+    logger.info("Segunda etapa concluída: Conteúdo gerado para todos os títulos")
 
 def print_menu(spreadsheet_id: Optional[str], sheet_name: Optional[str], drive_folder_id: Optional[str]):
     """Imprime o menu principal do aplicativo."""
@@ -1391,14 +1134,14 @@ def main(modo_teste: bool = False):
                     reprocessar_proc = True
             
             logger.info(f"Iniciando processamento de planilha. Limite: {limite_linhas_proc if limite_linhas_proc is not None else 'N/A'}, ID Linha Específica: {id_linha_proc if id_linha_proc else 'N/A'}, Reprocessar Concluídos: {reprocessar_proc}")
-            processar_planilha(
-                limite_linhas=limite_linhas_proc, 
-                # linha_inicial_desejada não é mais definida neste menu, id_linha_especifica tem prioridade
-                id_linha_especifica=id_linha_proc, 
-                reprocessar_concluidos=reprocessar_proc, 
+            processar_linhas(
+                sheets_handler,
+                gemini,
+                docs,
+                sheets_handler.ler_planilha(apenas_dados=True)[0],
+                sheets_handler._find_header_and_map_columns(spreadsheet_id_selecionado, sheet_name_selecionado)[2],
                 modo_teste=modo_teste,
-                spreadsheet_id=spreadsheet_id_selecionado, # Passa o ID da planilha selecionado
-                sheet_name=sheet_name_selecionado       # Passa o nome da aba selecionada
+                limite_linhas=limite_linhas_proc
             )
             # Fim da lógica restaurada para a ESCOLHA 1
 

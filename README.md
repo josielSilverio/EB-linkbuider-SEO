@@ -1,4 +1,4 @@
-# SEO-LinkBuilder - Versão 2.4
+# SEO-LinkBuilder - Versão 2.5
 
 **SEO-LinkBuilder** é uma solução automatizada para geração de conteúdo em larga escala para Link Building SEO. Utilizando inteligência artificial para gerar conteúdo de alta qualidade, o script gerencia o fluxo completo desde dados iniciais em uma planilha do Google Sheets até a criação de documentos no Google Docs com conteúdo otimizado.
 
@@ -13,7 +13,7 @@ Este projeto automatiza o fluxo de trabalho para geração de conteúdo SEO a pa
 5.  Gera artigos otimizados utilizando a API do Gemini para os itens selecionados, com foco em naturalidade, "brasilidade", coerência e originalidade, seguindo as diretrizes do `prompt.txt`.
 6.  Cria documentos no Google Docs com o conteúdo gerado, salvando-os em uma pasta específica no Google Drive.
 7.  Atualiza a planilha original com os títulos gerados (apenas o título na coluna "tema") e as URLs dos documentos criados nas colunas corretas.
-8.  Opcionalmente, realiza verificações de qualidade (títulos duplicados, similaridade de conteúdo, termos proibidos) após a geração.
+8.  Realiza verificações de qualidade (títulos duplicados, similaridade de conteúdo, termos proibidos) após a geração.
 
 ## Funcionalidades Principais
 
@@ -22,8 +22,15 @@ Este projeto automatiza o fluxo de trabalho para geração de conteúdo SEO a pa
 - **Estimativa de Custos**: Visualize o custo estimado por categoria e total antes de executar o processamento.
 - **Geração de Artigos com Gemini AI**: Cria conteúdo otimizado para SEO, incluindo links âncora de forma natural. O processo é guiado por um `prompt.txt` customizável para garantir alta qualidade, tom jornalístico brasileiro e originalidade.
 - **Integração Completa**: Google Sheets, Google Docs e Google Drive em um fluxo automatizado.
-- **Controle de Qualidade**: Funções para verificar e corrigir títulos duplicados, conteúdos com alta similaridade e termos proibidos (executadas após a geração principal, se não houver limite de linhas). A coluna "tema" na planilha é preenchida somente com o título extraído do conteúdo.
-- **Detecção e Substituição de Termos Proibidos**: Sistema automático para manter o conteúdo de acordo com as políticas.
+- **Controle de Qualidade Avançado**:
+  - **Verificação de Títulos Duplicados**: Sistema automático para identificar e corrigir títulos duplicados, gerando novos conteúdos únicos.
+  - **Análise de Similaridade**: Detecta conteúdos muito similares usando análise de similaridade de cosseno e TF-IDF, reescrevendo automaticamente quando necessário.
+  - **Detecção e Substituição de Termos Proibidos**: Sistema automático para manter o conteúdo de acordo com as políticas, substituindo termos sensíveis por alternativas adequadas.
+  - **Validação de Títulos**: Verifica e corrige títulos para garantir que tenham entre 9-15 palavras, não ultrapassem 100 caracteres, e contenham a palavra-âncora.
+- **Instruções Específicas por Jogo**: Sistema inteligente que gera instruções personalizadas baseadas no tipo de jogo ou categoria, garantindo conteúdo relevante e único.
+- **Persistência de Seleção**: Salva a última seleção de planilha/aba para facilitar o uso subsequente.
+- **Tratamento de Erros Robusto**: Sistema de retry com backoff exponencial para lidar com falhas de API.
+- **Logging Detalhado**: Sistema de logs abrangente para rastrear todo o processo de geração e identificar problemas.
 
 ## Pré-requisitos
 
@@ -125,32 +132,84 @@ Execute o script principal a partir do terminal, **com o ambiente virtual (`venv
 
 ```bash
 # Execução padrão (processa os 10 primeiros itens válidos após seleção)
-python main.py
+python main_duas_etapas.py
 
 # Modo teste (processa apenas o PRIMEIRO item válido selecionado, mas ATUALIZA a planilha para esse item)
 # Útil para verificar rapidamente o fluxo sem gastar muitas chamadas de API.
-python main.py --teste
+python main_duas_etapas.py --teste
 
 # Processar um número específico de itens válidos após seleção
-python main.py --limite 5
+python main_duas_etapas.py --limite 5
 
 # Processar TODOS os itens válidos selecionados (sem limite)
 # CUIDADO: Pode gerar custos significativos na API do Gemini dependendo da quantidade.
-python main.py --todos
+python main_duas_etapas.py --todos
+
+# Verificar e corrigir títulos duplicados em documentos existentes
+python main_duas_etapas.py --verificar-duplicados
+
+# Verificar e corrigir similaridade entre conteúdos existentes
+python main_duas_etapas.py --verificar-similaridade
+
+# Verificar e corrigir termos proibidos em documentos existentes
+python main_duas_etapas.py --verificar-termos
 ```
 
 ### Menus Interativos
 
 Ao executar, o script apresentará os seguintes menus:
 
-1.  **Configuração da Planilha**: Pede o **ID ou a URL completa** da planilha Google Sheets que contém os dados. Após validar o acesso, lista as abas (páginas) disponíveis para você selecionar pelo número ou nome.
-2.  **Configuração da Pasta do Google Drive**: Pede o **ID ou a URL completa** da pasta no Google Drive onde os documentos gerados pelo script serão salvos. Certifique-se de que a conta que autoriza o script tenha permissão de escrita nesta pasta.
-3.  **Seleção de Categorias/Quantidade**: Mostra um resumo dos itens encontrados na aba selecionada, agrupados por categorias (baseadas na coluna "Palavra-Âncora"). Permite escolher processar:
-    *   Todos os itens válidos encontrados.
-    *   Itens de uma categoria específica (ex: todos os "Aviator").
-    *   Uma quantidade específica de itens aleatórios dentre os válidos.
-    *   **Processar por ID Específico (Opção 'L'):** Permite digitar o ID de uma linha específica. Em seguida, o script pergunta quantos itens devem ser processados a partir dessa linha (inclusive ela).
-4.  **Confirmação de Custo**: Exibe o custo total estimado para a seleção feita, com base nos preços configurados no `.env` e na contagem estimada de tokens. Pede confirmação ('s' ou 'n') para prosseguir com a geração.
+1.  **Configuração da Planilha**: 
+    - Pede o **ID ou a URL completa** da planilha Google Sheets que contém os dados.
+    - Após validar o acesso, lista as abas (páginas) disponíveis para você selecionar pelo número ou nome.
+    - A última seleção é salva e oferecida como opção padrão nas próximas execuções.
+
+2.  **Configuração da Pasta do Google Drive**: 
+    - Pede o **ID ou a URL completa** da pasta no Google Drive onde os documentos gerados pelo script serão salvos.
+    - Certifique-se de que a conta que autoriza o script tenha permissão de escrita nesta pasta.
+    - A última seleção é salva e oferecida como opção padrão nas próximas execuções.
+
+3.  **Seleção de Categorias/Quantidade**: 
+    - Mostra um resumo dos itens encontrados na aba selecionada, agrupados por categorias (baseadas na coluna "Palavra-Âncora").
+    - Permite escolher processar:
+        *   Todos os itens válidos encontrados.
+        *   Itens de uma categoria específica (ex: todos os "Aviator").
+        *   Uma quantidade específica de itens aleatórios dentre os válidos.
+        *   **Processar por ID Específico (Opção 'L')**: Permite digitar o ID de uma linha específica. Em seguida, o script pergunta quantos itens devem ser processados a partir dessa linha (inclusive ela).
+    - Exibe o custo estimado por categoria e total.
+
+4.  **Confirmação de Custo**: 
+    - Exibe o custo total estimado para a seleção feita, com base nos preços configurados no `.env` e na contagem estimada de tokens.
+    - Pede confirmação ('s' ou 'n') para prosseguir com a geração.
+
+### Verificações de Qualidade
+
+Após a geração do conteúdo, o script realiza automaticamente as seguintes verificações de qualidade:
+
+1. **Verificação de Títulos Duplicados**:
+   - Identifica títulos idênticos ou muito similares
+   - Gera novos conteúdos únicos para substituir duplicatas
+   - Atualiza a planilha com os novos títulos e URLs
+
+2. **Análise de Similaridade de Conteúdo**:
+   - Usa TF-IDF e similaridade de cosseno para detectar conteúdos muito similares
+   - Reescreve automaticamente conteúdos que ultrapassam o limiar de similaridade
+   - Mantém a originalidade e diversidade do conteúdo
+
+3. **Verificação de Termos Proibidos**:
+   - Identifica e substitui termos sensíveis por alternativas adequadas
+   - Mantém o conteúdo em conformidade com as políticas
+   - Registra as substituições realizadas nos logs
+
+### Logs e Monitoramento
+
+- Os logs são salvos em `logs/seo_linkbuilder_AAAA-MM-DD.log`
+- Incluem informações detalhadas sobre:
+  - Processo de geração de conteúdo
+  - Verificações de qualidade realizadas
+  - Substituições de termos proibidos
+  - Erros e exceções encontradas
+  - Atualizações na planilha
 
 ## Estrutura do Projeto
 
@@ -313,6 +372,30 @@ Aqui está um detalhamento do propósito e das funções principais de cada arqu
     *   `converter_markdown_para_docs()`: Converte o texto (com possível Markdown simples) gerado pelo Gemini em uma lista de `requests` que a API do Google Docs entende para formatar o documento (parágrafos, título, negrito, links). **A lógica de formatação principal reside aqui.**
     *   `contar_tokens()`: Estima a contagem de tokens de um texto usando a API do Gemini (método `count_tokens`), necessário para a estimativa de custos.
     *   `substituir_links_markdown()`: Encontra a `palavra_ancora` no texto gerado e a marca de forma especial para que `converter_markdown_para_docs` saiba onde inserir o link HTML correto.
+
+## Novas Funcionalidades e Melhorias
+
+### Sistema de Verificação de Qualidade
+- **Verificação de Títulos Duplicados**: Identifica automaticamente títulos duplicados e gera novos conteúdos únicos para substituí-los.
+- **Análise de Similaridade**: Usa TF-IDF e similaridade de cosseno para detectar conteúdos muito similares, reescrevendo automaticamente quando necessário.
+- **Validação de Títulos**: Sistema robusto que verifica e corrige títulos para garantir qualidade e adequação.
+
+### Instruções Específicas por Jogo
+O sistema agora inclui um conjunto abrangente de instruções específicas para diferentes tipos de jogos:
+- Crash Games (Aviator, Spaceman)
+- Slots Populares (Gates of Olympus, Fortune Rabbit, Sweet Bonanza)
+- Jogos de Mesa (Blackjack, Poker, Roleta, Bacbo)
+- Termos Genéricos de Apostas (Casa de Apostas, Aposta Online, etc.)
+
+### Melhorias na Geração de Conteúdo
+- **Temperatura Adaptativa**: Ajusta automaticamente a temperatura do modelo para gerar conteúdo mais diverso quando necessário.
+- **Validação de Conteúdo**: Verifica e corrige problemas comuns como títulos incompletos, formatação incorreta e termos proibidos.
+- **Persistência de Seleção**: Salva a última seleção de planilha/aba para facilitar o uso subsequente.
+
+### Tratamento de Erros e Logging
+- **Sistema de Retry**: Implementa backoff exponencial para lidar com falhas de API.
+- **Logging Detalhado**: Sistema abrangente de logs para rastrear todo o processo de geração.
+- **Validação de Dados**: Verificações robustas em cada etapa do processo.
 
 ## O que há de novo na versão 3.0?
 

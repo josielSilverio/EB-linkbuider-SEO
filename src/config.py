@@ -18,6 +18,7 @@ DEFAULT_GEMINI_API_KEY = "AIzaSyB-rrVr5TMdLgFYROocyQRFJ21bONrOjHE"
 DEFAULT_CREDENTIALS_PATH = "credentials/credentials.json"
 DEFAULT_DRIVE_FOLDER_ID = "15B0tBT8UP6kyl7FxvVmuh4VBYZ9f48UG" # Pasta de Documentos josiel.nascimento@estrelabet.com
 DEFAULT_GEMINI_MODEL = "gemini-1.5-flash"
+DEFAULT_LAST_SELECTION_FILE = "data/last_selection.json"
 # Adicione SPREADSHEET_ID e SHEET_NAME padrão se necessário
 # DEFAULT_SPREADSHEET_ID = "SEU_SPREADSHEET_ID_PADRAO"
 # DEFAULT_SHEET_NAME = "SEU_SHEET_NAME_PADRAO"
@@ -159,3 +160,6 @@ def estimar_custo_gemini(tokens_entrada: int, tokens_saida: int) -> float:
     custo_entrada = (tokens_entrada / 1000) * GEMINI_PRECO_ENTRADA
     custo_saida = (tokens_saida / 1000) * GEMINI_PRECO_SAIDA
     return custo_entrada + custo_saida 
+
+# Configuração do arquivo de última seleção
+LAST_SELECTION_FILE = os.getenv("LAST_SELECTION_FILE", DEFAULT_LAST_SELECTION_FILE) 

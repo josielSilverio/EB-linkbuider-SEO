@@ -4,7 +4,11 @@ import logging
 import google.generativeai as genai
 import re
 import random
-from typing import Dict, Tuple, Optional
+import time
+from typing import Dict, Tuple, Optional, List
+from unidecode import unidecode
+from google.api_core import retry
+from google.api_core.exceptions import ResourceExhausted
 
 from src.config import (
     GOOGLE_API_KEY, 
@@ -343,18 +347,26 @@ class GeminiHandler:
         except Exception as e:
             self.logger.error(f"Erro ao inicializar a API do Gemini: {e}")
             raise
+        
+        self.max_retries = 5
+        self.base_delay = 2  # 60 segundos base delay
+        self.max_delay = 5  # 5 minutos máximo delay
     
-    def carregar_prompt_template(self) -> str:
+    def carregar_prompt_template(self, tipo: str = 'conteudo') -> str:
         """
-        Carrega o template do prompt do arquivo prompt.txt
+        Carrega o template do prompt do arquivo correto conforme o tipo ('titulos' ou 'conteudo').
         """
+        if tipo == 'titulos':
+            path = "data/prompt_titulos.txt"
+        else:
+            path = "data/prompt_conteudo.txt"
         try:
-            with open("data/prompt.txt", "r", encoding="utf-8") as f:
+            with open(path, "r", encoding="utf-8") as f:
                 prompt_template = f.read()
-            self.logger.info("Template de prompt carregado com sucesso")
+            self.logger.info(f"Template de prompt '{tipo}' carregado com sucesso")
             return prompt_template
         except Exception as e:
-            self.logger.error(f"Erro ao carregar template do prompt: {e}")
+            self.logger.error(f"Erro ao carregar template de prompt '{tipo}': {e}")
             raise
     
     def _verificar_diversidade_titulos(self, prompt: str, dados: Dict[str, str]) -> str:
@@ -594,16 +606,7 @@ class GeminiHandler:
 
     def verificar_titulo_gerado(self, titulo: str, palavra_ancora: str, palavras_a_evitar: list, titulos_existentes: list = None) -> bool:
         """
-        Verifica se o título gerado contém palavras ou padrões proibidos, a palavra-âncora e não termina com reticências.
-        
-        Args:
-            titulo: O título gerado
-            palavra_ancora: A palavra-âncora que deve estar presente
-            palavras_a_evitar: Lista de palavras e frases a evitar
-            titulos_existentes: Lista de títulos já existentes para verificar similaridade
-            
-        Returns:
-            True se o título é aceitável, False caso contrário
+        Verifica se o título gerado é válido e único.
         """
         if not titulo:
             self.logger.warning("Título vazio recebido em verificar_titulo_gerado.")
@@ -612,60 +615,68 @@ class GeminiHandler:
         titulo_norm = normalizar_texto(titulo.lower())
         palavra_ancora_norm = normalizar_texto(palavra_ancora.lower())
 
-        # 1. Verificar presença da palavra-âncora
-        if palavra_ancora_norm not in titulo_norm:
-            self.logger.warning(f"Palavra-âncora '{palavra_ancora}' não encontrada no título '{titulo}' durante a verificação.")
-            return False
+        # 1. Verificar presença da palavra-âncora (flexível)
+        if palavra_ancora and palavra_ancora.strip():
+            ancora_norm = self._normalizar_flex(palavra_ancora)
+            titulo_norm_flex = self._normalizar_flex(titulo)
+            # Aceita plural/singular simples
+            formas_aceitas = [ancora_norm]
+            if ancora_norm.endswith('s'):
+                formas_aceitas.append(ancora_norm.rstrip('s'))
+            else:
+                formas_aceitas.append(ancora_norm + 's')
+            if not any(f in titulo_norm_flex for f in formas_aceitas):
+                self.logger.warning(f"Palavra-âncora '{palavra_ancora}' (normalizada) não encontrada no título '{titulo}'. O título será rejeitado.")
+                return False
 
         # 2. Verificar se termina com reticências
         if titulo.strip().endswith("..."):
             self.logger.warning(f"Título '{titulo}' termina com reticências.")
             return False
 
-        # 3. Verifica se o título é muito similar a algum título existente
+        # 3. Verifica similaridade com títulos existentes
         if titulos_existentes:
             for titulo_existente in titulos_existentes:
                 titulo_existente_norm = normalizar_texto(titulo_existente.lower())
-                palavras_titulo = set(titulo_norm.split())
-                palavras_existente = set(titulo_existente_norm.split())
                 
-                # Ignora palavras muito curtas na comparação de similaridade
-                palavras_titulo_filtradas = {p for p in palavras_titulo if len(p) > 2}
-                palavras_existente_filtradas = {p for p in palavras_existente if len(p) > 2}
+                # Extrai palavras significativas (ignora palavras comuns e muito curtas)
+                palavras_comuns = {'o', 'a', 'os', 'as', 'um', 'uma', 'uns', 'umas', 'e', 'ou', 'mas', 'por', 'para', 'com', 'sem', 'em', 'no', 'na', 'nos', 'nas', 'de', 'do', 'da', 'dos', 'das'}
+                palavras_titulo = {p for p in titulo_norm.split() if len(p) > 3 and p not in palavras_comuns}
+                palavras_existente = {p for p in titulo_existente_norm.split() if len(p) > 3 and p not in palavras_comuns}
 
-                if not palavras_titulo_filtradas or not palavras_existente_filtradas: # Evita divisão por zero se um dos títulos for só palavras curtas
+                if not palavras_titulo or not palavras_existente:
                     continue
 
-                palavras_comuns = palavras_titulo_filtradas.intersection(palavras_existente_filtradas)
+                # Calcula similaridade usando Jaccard Index
+                palavras_comuns = palavras_titulo.intersection(palavras_existente)
+                similaridade_jaccard = len(palavras_comuns) / len(palavras_titulo.union(palavras_existente))
                 
-                # Similaridade mais rigorosa: Jaccard Index > 0.5 (ou 50% de sobreposição de palavras significativas)
-                # E verifica se o início do título é idêntico (padrões como "7 alguma coisa")
-                similaridade_jaccard = len(palavras_comuns) / len(palavras_titulo_filtradas.union(palavras_existente_filtradas))
+                # Verifica padrões numéricos no início
+                match_titulo = re.match(r"^(\d+)\s+(\w+\s+\w+)", titulo_norm)
+                match_existente = re.match(r"^(\d+)\s+(\w+\s+\w+)", titulo_existente_norm)
                 
-                # Verificação de padrão numérico inicial (ex: "7 Dicas...", "5 Segredos...")
-                match_titulo_num = re.match(r"^(\d+)\s+(\w+\s+\w+)", titulo_norm) # Captura número e as duas palavras seguintes
-                match_existente_num = re.match(r"^(\d+)\s+(\w+\s+\w+)", titulo_existente_norm)
-
-                if match_titulo_num and match_existente_num:
-                    numero_titulo = match_titulo_num.group(1)
-                    palavras_titulo = match_titulo_num.group(2)
-                    numero_existente = match_existente_num.group(1)
-                    palavras_existente = match_existente_num.group(2)
-
-                    # Se as duas palavras seguintes ao número são as mesmas, é um forte indício de repetição de padrão
-                    if palavras_titulo == palavras_existente:
-                        self.logger.warning(f"Título rejeitado por padrão numérico com palavras seguintes idênticas: '{titulo}' (padrão: '{numero_titulo} {palavras_titulo}') vs '{titulo_existente}' (padrão: '{numero_existente} {palavras_existente}')")
-                        return False
-                    # Se os números são os mesmos E a primeira palavra seguinte é a mesma (menos rigoroso, mas ainda útil)
-                    elif numero_titulo == numero_existente and palavras_titulo.split()[0] == palavras_existente.split()[0]:
-                        self.logger.warning(f"Título rejeitado por padrão numérico com mesmo número e primeira palavra seguinte idêntica: '{titulo}' vs '{titulo_existente}'")
+                if match_titulo and match_existente:
+                    numero_titulo = match_titulo.group(1)
+                    palavras_titulo = match_titulo.group(2)
+                    numero_existente = match_existente.group(1)
+                    palavras_existente = match_existente.group(2)
+                    
+                    # Rejeita se tiver mesmo número e palavras similares
+                    if numero_titulo == numero_existente and self._calcular_similaridade_palavras(palavras_titulo, palavras_existente) > 0.7:
+                        self.logger.warning(f"Título rejeitado por padrão numérico similar: '{titulo}' vs '{titulo_existente}'")
                         return False
                 
-                if similaridade_jaccard > 0.5: # Aumentado o limiar de similaridade para 0.5
+                # Verifica similaridade geral
+                if similaridade_jaccard > 0.4:  # Reduzido o limiar de similaridade
                     self.logger.warning(f"Título rejeitado por alta similaridade ({similaridade_jaccard:.2f}) com título existente: '{titulo}' vs '{titulo_existente}'")
                     return False
-        
-        # Lista ampliada de padrões absolutamente proibidos no início do título
+                
+                # Verifica similaridade de estrutura
+                if self._verificar_estrutura_similar(titulo_norm, titulo_existente_norm):
+                    self.logger.warning(f"Título rejeitado por estrutura similar: '{titulo}' vs '{titulo_existente}'")
+                    return False
+
+        # 4. Verifica padrões proibidos no início
         padroes_proibidos_inicio = [
             "a evolu", "a analis", "a histor", "a experienc", "a jornada", "a transformac", 
             "a fascinant", "a importanc", "a influenc", "o impacto", "o guia", "o manual",
@@ -684,13 +695,12 @@ class GeminiHandler:
             "um guia", "um manual", "um panorama", "um olhar", "uma investigacao"
         ]
         
-        # Verifica se começa com algum dos padrões proibidos
         for padrao in padroes_proibidos_inicio:
             if titulo_norm.startswith(padrao):
                 self.logger.warning(f"Título rejeitado por iniciar com padrão proibido '{padrao}': '{titulo}'")
                 return False
-        
-        # Verifica estruturas comuns e repetitivas no título inteiro
+
+        # 5. Verifica estruturas problemáticas
         estruturas_problematicas = [
             "dicas para", "truques para", "segredos para", "estrategias para", "metodos para",
             "guia completo", "guia definitivo", "guia pratico", "guia essencial", "manual de",
@@ -702,44 +712,101 @@ class GeminiHandler:
             if estrutura in titulo_norm:
                 self.logger.warning(f"Título rejeitado por conter estrutura problemática '{estrutura}': '{titulo}'")
                 return False
-        
-        # Verifica se contém palavras ou frases específicas a evitar
+
+        # 6. Verifica palavras a evitar
         if palavras_a_evitar:
             for palavra in palavras_a_evitar:
                 palavra_norm = normalizar_texto(palavra.lower())
-                # Verifica se é uma palavra inteira ou parte de uma
                 if f" {palavra_norm} " in f" {titulo_norm} ":
                     self.logger.warning(f"Título rejeitado por conter palavra a evitar '{palavra}': '{titulo}'")
                     return False
-        
-        # Verifica se o título tem comprimento adequado (9-15 palavras)
+
+        # 7. Verifica comprimento
         palavras = [p for p in titulo.split() if p.strip()]
         if len(palavras) < 9 or len(palavras) > 15:
             self.logger.warning(f"Título rejeitado por ter {len(palavras)} palavras (deve ter entre 9-15): '{titulo}'")
             return False
-        
-        # Verifica o comprimento em caracteres (máximo 100)
+
+        # 8. Verifica comprimento em caracteres
         if len(titulo) > 100:
             self.logger.warning(f"Título rejeitado por ter {len(titulo)} caracteres (máximo 100): '{titulo}'")
             return False
-        
-        # Verificação de duplicidade exata
-        if titulos_existentes:
-            for titulo_existente in titulos_existentes:
-                if normalizar_texto(titulo_norm) == normalizar_texto(titulo_existente.lower()):
-                    self.logger.warning(f"Título duplicado detectado: '{titulo}' já existe na planilha.")
-                    return False
-                # Verificação de padrão numérico no início (ex: '7 Dimensões ...')
-                match_titulo = re.match(r"^(\d+)\s+\w+", titulo_norm)
-                match_existente = re.match(r"^(\d+)\s+\w+", normalizar_texto(titulo_existente.lower()))
-                if match_titulo and match_existente:
-                    if match_titulo.group(1) == match_existente.group(1):
-                        self.logger.warning(f"Título com padrão numérico repetido detectado: '{titulo}' e '{titulo_existente}'")
-                        return False
-        
-        # Se passou por todas as verificações, o título é aceitável
-        self.logger.info(f"Título '{titulo}' passou na verificação de duplicidade e padrões.")
+
         return True
+
+    def _calcular_similaridade_palavras(self, palavras1: str, palavras2: str) -> float:
+        """
+        Calcula a similaridade entre duas sequências de palavras usando o algoritmo de Levenshtein.
+        """
+        from Levenshtein import ratio
+        return ratio(palavras1.lower(), palavras2.lower())
+
+    def _verificar_estrutura_similar(self, titulo1: str, titulo2: str) -> bool:
+        """
+        Verifica se dois títulos têm estrutura similar.
+        """
+        # Remove palavras comuns e muito curtas
+        palavras_comuns = {'o', 'a', 'os', 'as', 'um', 'uma', 'uns', 'umas', 'e', 'ou', 'mas', 'por', 'para', 'com', 'sem', 'em', 'no', 'na', 'nos', 'nas', 'de', 'do', 'da', 'dos', 'das'}
+        
+        # Extrai palavras significativas
+        palavras1 = [p for p in titulo1.split() if len(p) > 3 and p not in palavras_comuns]
+        palavras2 = [p for p in titulo2.split() if len(p) > 3 and p not in palavras_comuns]
+        
+        # Verifica se têm o mesmo número de palavras significativas
+        if len(palavras1) != len(palavras2):
+            return False
+        
+        # Verifica se as palavras estão na mesma ordem
+        similaridade = sum(1 for p1, p2 in zip(palavras1, palavras2) if self._calcular_similaridade_palavras(p1, p2) > 0.8)
+        return similaridade / len(palavras1) > 0.7
+
+    def verificar_conteudo_gerado(self, conteudo: str, palavra_ancora: str) -> Tuple[bool, str]:
+        """
+        Verifica se o conteúdo gerado atende aos requisitos.
+        
+        Args:
+            conteudo: O conteúdo gerado
+            palavra_ancora: A palavra-âncora que deve estar presente
+            
+        Returns:
+            Tupla (sucesso, mensagem_erro)
+        """
+        if not conteudo:
+            return False, "Conteúdo vazio"
+        
+        # 1. Verifica presença da palavra-âncora
+        if palavra_ancora.lower() not in conteudo.lower():
+            return False, f"Palavra-âncora '{palavra_ancora}' não encontrada no conteúdo"
+        
+        # 2. Verifica número de parágrafos
+        paragrafos = [p for p in conteudo.split('\n\n') if p.strip()]
+        if len(paragrafos) < 8:
+            return False, f"Conteúdo tem apenas {len(paragrafos)} parágrafos (mínimo 8)"
+        
+        # 3. Verifica número de palavras
+        palavras = conteudo.split()
+        if len(palavras) < 400:
+            return False, f"Conteúdo tem apenas {len(palavras)} palavras (mínimo 400)"
+        
+        # 4. Verifica presença de subtítulos
+        if not re.search(r'##\s+.+', conteudo):
+            return False, "Conteúdo não contém subtítulos (H2)"
+        
+        # 5. Verifica presença de listas
+        if not re.search(r'[-*]\s+.+', conteudo):
+            return False, "Conteúdo não contém listas com marcadores"
+        
+        # 6. Verifica posição da palavra-âncora
+        paragrafos_iniciais = '\n\n'.join(paragrafos[:3])
+        if palavra_ancora.lower() not in paragrafos_iniciais.lower():
+            return False, f"Palavra-âncora '{palavra_ancora}' não encontrada nos 3 primeiros parágrafos"
+        
+        # 7. Verifica comprimento dos parágrafos
+        paragrafos_longo = [p for p in paragrafos if len(p.split()) > 6]
+        if len(paragrafos_longo) > len(paragrafos) * 0.3:  # Mais de 30% dos parágrafos são longos
+            return False, "Muitos parágrafos longos detectados"
+        
+        return True, "Conteúdo válido"
 
     def gerar_conteudo(self, dados: Dict[str, str], instrucao_adicional: str = None, titulos_existentes: list = None) -> Tuple[str, Dict[str, float], Optional[Dict]]:
         """
@@ -921,3 +988,121 @@ class GeminiHandler:
             self.logger.error(f"Erro ao gerar conteúdo com o Gemini: {e}")
             self.logger.exception("Detalhes do erro:")
             raise
+
+    def gerar_titulos(self, dados: Dict[str, str], quantidade: int = 1) -> List[str]:
+        """
+        Gera apenas títulos para o conteúdo, sem gerar o corpo do texto.
+        
+        Args:
+            dados: Dicionário com os dados necessários (palavra_ancora, etc)
+            quantidade: Quantidade de títulos a serem gerados
+            
+        Returns:
+            Lista de títulos gerados
+        """
+        self.logger.info(f"Gerando {quantidade} título(s) para palavra-âncora: {dados.get('palavra_ancora')}")
+        
+        # Carrega o template de prompt para títulos
+        prompt_template = self.carregar_prompt_template('titulos')
+        
+        # Constrói o prompt específico para geração de títulos
+        prompt = self._construir_prompt(dados, prompt_template)
+        
+        # Adiciona instrução para gerar múltiplos títulos se necessário
+        if quantidade > 1:
+            prompt += f"\n\nGere {quantidade} títulos diferentes e únicos, um por linha."
+        
+        # Gera os títulos
+        response = self._make_api_call(self.model.generate_content, prompt)
+        
+        if not response or not response.text:
+            self.logger.error("Falha ao gerar títulos: resposta vazia da API")
+            return []
+        
+        # Processa a resposta para extrair os títulos
+        titulos = []
+        for linha in response.text.split('\n'):
+            titulo = linha.strip()
+            if titulo and not titulo.startswith(('#', '*', '-', '1.', '2.', '3.')):
+                # Verifica se o título é válido
+                sucesso, titulo_corrigido = verificar_e_corrigir_titulo(
+                    titulo, 
+                    dados.get('palavra_ancora', ''),
+                    is_document_title=False
+                )
+                if sucesso:
+                    titulos.append(titulo_corrigido)
+        
+        self.logger.info(f"Títulos gerados com sucesso: {len(titulos)}")
+        return titulos
+
+    def gerar_conteudo_por_titulo(self, dados: Dict[str, str], titulo: str) -> Tuple[str, Dict[str, float], Optional[Dict]]:
+        """
+        Gera conteúdo para um título específico.
+        Args:
+            dados: Dicionário com os dados necessários
+            titulo: Título pré-gerado para o conteúdo
+        Returns:
+            Tupla (conteudo, metricas, info_link)
+        """
+        self.logger.info(f"Gerando conteúdo para título: {titulo}")
+        # Carrega o template de prompt para conteúdo
+        prompt_template = self.carregar_prompt_template('conteudo')
+        # Adiciona o título ao prompt
+        prompt = self._construir_prompt(dados, prompt_template)
+        prompt += f"\n\nUse o seguinte título como base para o conteúdo:\n{titulo}"
+        # Conta tokens de entrada para estimativa de custo
+        tokens_entrada = contar_tokens(prompt)
+        # Gera o conteúdo
+        response = self._make_api_call(self.model.generate_content, prompt)
+        if not response or not response.text:
+            self.logger.error("Falha ao gerar conteúdo: resposta vazia da API")
+            return "", {}, None
+        # Processa o conteúdo gerado
+        conteudo = response.text.strip()
+        tokens_saida = contar_tokens(conteudo)
+        custo_estimado = (tokens_entrada * GEMINI_INPUT_COST_PER_1K / 1000) + (tokens_saida * GEMINI_OUTPUT_COST_PER_1K / 1000)
+        # Calcula métricas completas
+        metricas = {
+            'input_token_count': tokens_entrada,
+            'output_token_count': tokens_saida,
+            'cost_usd': custo_estimado,
+            'num_palavras': len(conteudo.split()),
+            'num_caracteres': len(conteudo),
+        }
+        # Processa links
+        conteudo_processado, info_link = substituir_links_markdown(
+            conteudo,
+            dados.get('palavra_ancora', ''),
+            dados.get('url_ancora', '')
+        )
+        self.logger.info("Conteúdo gerado com sucesso")
+        return conteudo_processado, metricas, info_link
+
+    def _normalizar_flex(self, texto):
+        return unidecode(texto.lower().strip())
+
+    def _exponential_backoff(self, attempt: int) -> float:
+        """Calcula o tempo de espera com backoff exponencial e jitter."""
+        delay = min(self.base_delay * (2 ** attempt) + random.uniform(0, 1), self.max_delay)
+        return delay
+
+    def _make_api_call(self, func, *args, **kwargs):
+        """Faz chamada à API com retry e backoff exponencial."""
+        attempt = 0
+        while attempt < self.max_retries:
+            try:
+                return func(*args, **kwargs)
+            except ResourceExhausted as e:
+                attempt += 1
+                if attempt == self.max_retries:
+                    raise
+                # Extrai o tempo de espera sugerido pela API, se disponível, mas nunca ultrapassa max_delay
+                wait_time = self._exponential_backoff(attempt)
+                if hasattr(e, 'retry_delay') and e.retry_delay:
+                    wait_time = min(self.max_delay, e.retry_delay.seconds)
+                self.logger.warning(f"Rate limit atingido. Tentativa {attempt}/{self.max_retries}. "
+                                  f"Aguardando {wait_time:.1f} segundos...")
+                time.sleep(wait_time)
+            except Exception as e:
+                raise
