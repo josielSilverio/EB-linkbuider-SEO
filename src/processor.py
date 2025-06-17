@@ -33,7 +33,7 @@ class ContentProcessor:
 
             # Primeira etapa: Geração de títulos
             if modo_processamento in ["1", "3"]:
-                self._processar_titulos(df, dynamic_column_map, limite_linhas)
+                self._processar_titulos(df, dynamic_column_map, limite_linhas, spreadsheet_id, sheet_name)
 
             # Segunda etapa: Geração de conteúdos
             if modo_processamento in ["2", "3"]:
@@ -55,7 +55,7 @@ class ContentProcessor:
         return df.iloc[idx_inicio[0]:]
 
     def _processar_titulos(self, df: pd.DataFrame, dynamic_column_map: Dict, 
-                          limite_linhas: Optional[int] = None):
+                          limite_linhas: Optional[int] = None, spreadsheet_id: Optional[str] = None, sheet_name: Optional[str] = None):
         """Processa geração de títulos"""
         logger.info("Iniciando primeira etapa: Geração de títulos")
         col_titulo = dynamic_column_map['titulo']['name'] if isinstance(dynamic_column_map['titulo'], dict) else dynamic_column_map['titulo']
@@ -68,7 +68,7 @@ class ContentProcessor:
             titulo_escolhido = self._gerar_titulo(dados)
             
             if titulo_escolhido:
-                self._salvar_titulo(titulo_escolhido, row, col_titulo)
+                self._salvar_titulo(titulo_escolhido, row, col_titulo, spreadsheet_id, sheet_name)
                 self.titulos_gerados.append(titulo_escolhido)
                 self.linhas_processadas += 1
                 time.sleep(config.DELAY_ENTRE_CHAMADAS_GEMINI)
@@ -191,10 +191,11 @@ class ContentProcessor:
             logger.error(f"Erro ao gerar conteúdo: {e}")
             return None
 
-    def _salvar_titulo(self, titulo: str, row: pd.Series, col_titulo: str):
+    def _salvar_titulo(self, titulo: str, row: pd.Series, col_titulo: str, spreadsheet_id: Optional[str] = None, sheet_name: Optional[str] = None):
         """Salva título na planilha"""
         try:
-            self.sheets.atualizar_celula(row.name, col_titulo, titulo)
+            sheet_row_num = row['sheet_row_num'] if 'sheet_row_num' in row else row.name + 2
+            self.sheets.atualizar_titulo_documento(sheet_row_num, titulo, spreadsheet_id, sheet_name)
             logger.info(f"Título salvo: {titulo}")
         except Exception as e:
             logger.error(f"Erro ao salvar título: {e}")

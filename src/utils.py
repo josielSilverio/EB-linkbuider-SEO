@@ -240,25 +240,19 @@ def converter_markdown_para_docs(texto, info_link=None):
             })
             posicao_atual += len(linha) + 2
         i += 1
-    
     # Se temos informações de link, adiciona o link
     if info_link and 'palavra' in info_link and 'url' in info_link:
         palavra = info_link['palavra']
         url = info_link['url']
         paragrafo_alvo = info_link.get('paragrafo', -1)
-        
         # Se sabemos em qual parágrafo a palavra está
         if paragrafo_alvo > 0 and paragrafo_alvo in mapa_paragrafos:
             paragrafo = mapa_paragrafos[paragrafo_alvo]
             texto_paragrafo = paragrafo['texto'].lower()
             posicao_na_linha = texto_paragrafo.find(palavra.lower())
-            
             if posicao_na_linha >= 0:
-                # Calcula a posição exata no documento
                 posicao_inicio = paragrafo['inicio'] + posicao_na_linha
                 posicao_fim = posicao_inicio + len(palavra)
-                
-                # Adiciona o comando para criar o link
                 requests.append({
                     'updateTextStyle': {
                         'range': {
@@ -273,8 +267,6 @@ def converter_markdown_para_docs(texto, info_link=None):
                         'fields': 'link'
                     }
                 })
-                
-                # Adiciona um estilo extra para destacar o link
                 requests.append({
                     'updateTextStyle': {
                         'range': {
@@ -296,27 +288,20 @@ def converter_markdown_para_docs(texto, info_link=None):
                         'fields': 'foregroundColor,underline'
                     }
                 })
-                
                 logger.info(
                     f"Link aplicado à palavra '{palavra}' no parágrafo {paragrafo_alvo} posição {posicao_inicio}-{posicao_fim}"
                 )
                 return requests
-        
         # Se não sabemos o parágrafo exato ou não encontramos a palavra no parágrafo, procuramos em todos os parágrafos
         for num_paragrafo, paragrafo in mapa_paragrafos.items():
-            # Pular parágrafos de título ou subtítulo
-            if paragrafo.get('tipo') == 'subtitulo':
+            # Pular parágrafos de título, subtítulo e o parágrafo 0 (título)
+            if num_paragrafo == 0 or paragrafo.get('tipo') == 'subtitulo':
                 continue
-                
             texto_paragrafo = paragrafo['texto'].lower()
             posicao_na_linha = texto_paragrafo.find(palavra.lower())
-            
             if posicao_na_linha >= 0:
-                # Calcula a posição exata no documento
                 posicao_inicio = paragrafo['inicio'] + posicao_na_linha
                 posicao_fim = posicao_inicio + len(palavra)
-                
-                # Adiciona o comando para criar o link
                 requests.append({
                     'updateTextStyle': {
                         'range': {
@@ -331,8 +316,6 @@ def converter_markdown_para_docs(texto, info_link=None):
                         'fields': 'link'
                     }
                 })
-                
-                # Adiciona um estilo extra para destacar o link
                 requests.append({
                     'updateTextStyle': {
                         'range': {
@@ -354,12 +337,10 @@ def converter_markdown_para_docs(texto, info_link=None):
                         'fields': 'foregroundColor,underline'
                     }
                 })
-                
                 logger.info(
                     f"Link aplicado à palavra '{palavra}' no parágrafo {num_paragrafo} posição {posicao_inicio}-{posicao_fim}"
                 )
                 break
-    
     return requests
 
 # Contador de tokens
@@ -381,61 +362,34 @@ def contar_tokens(texto, modelo="gpt-3.5-turbo"):
 
 def substituir_links_markdown(texto, palavra_ancora, url_ancora):
     """
-    Aplica o hyperlink na palavra-âncora apenas no segundo parágrafo do corpo do texto (ignorando o título).
-    Se não encontrar no segundo, tenta no terceiro. Nunca aplica no título.
+    Aplica o hyperlink na palavra-âncora em todas as ocorrências nos três primeiros parágrafos do corpo do texto (ignorando o título).
+    Nunca aplica no título. Remove qualquer link Markdown do título.
     """
     logger = logging.getLogger('seo_linkbuilder.utils')
     paragrafos = [p for p in texto.split('\n') if p.strip()]
     palavra_ancora = palavra_ancora.strip()
+    if not palavra_ancora or not url_ancora:
+        logger.warning("Palavra-âncora ou URL não fornecida para aplicar hyperlink.")
+        return texto, None
+
     # Ignora o título (primeiro parágrafo)
+    titulo = paragrafos[0] if paragrafos else ''
+    # Remove qualquer link Markdown do título
+    titulo = re.sub(r'\[([^\]]+)\]\([^\)]*\)', r'\1', titulo)
     corpo = paragrafos[1:] if len(paragrafos) > 1 else []
-    # Tenta aplicar no segundo parágrafo do corpo (parágrafo 2 do texto)
-    if len(corpo) >= 1 and palavra_ancora in corpo[0]:
-        i = 1  # Parágrafo 2 do texto
-        paragrafo = corpo[0]
-        match = re.search(r'\b' + re.escape(palavra_ancora) + r'\b', paragrafo)
-        if match:
-            inicio_contexto = max(0, match.start() - 50)
-            fim_contexto = min(len(paragrafo), match.end() + 50)
-            contexto = paragrafo[inicio_contexto:fim_contexto]
-            logger.info(f"Contexto da palavra-âncora: '...{contexto}...'")
-        info_link = {
-            'palavra': palavra_ancora,
-            'url': url_ancora,
-            'paragrafo': i+1,  # +1 porque ignoramos o título
-            'contexto_natural': True
-        }
-        return texto, info_link
-    # Se não encontrar no segundo, tenta no terceiro parágrafo do corpo
-    if len(corpo) >= 2 and palavra_ancora in corpo[1]:
-        i = 2  # Parágrafo 3 do texto
-        paragrafo = corpo[1]
-        match = re.search(r'\b' + re.escape(palavra_ancora) + r'\b', paragrafo)
-        if match:
-            inicio_contexto = max(0, match.start() - 50)
-            fim_contexto = min(len(paragrafo), match.end() + 50)
-            contexto = paragrafo[inicio_contexto:fim_contexto]
-            logger.info(f"Contexto da palavra-âncora: '...{contexto}...'")
-        info_link = {
-            'palavra': palavra_ancora,
-            'url': url_ancora,
-            'paragrafo': i+1,
-            'contexto_natural': True
-        }
-        return texto, info_link
-    # Se não encontrar, segue o fluxo normal (busca em outros parágrafos, mas nunca no título)
-    for idx, paragrafo in enumerate(corpo):
-        if palavra_ancora in paragrafo:
-            info_link = {
-                'palavra': palavra_ancora,
-                'url': url_ancora,
-                'paragrafo': idx+2,  # +2 porque ignoramos o título
-                'contexto_natural': True
-            }
-            return texto, info_link
-    # Se não encontrar, retorna texto sem info_link
-    logger.warning(f"Palavra-âncora '{palavra_ancora}' não encontrada no corpo do texto para aplicar hyperlink.")
-    return texto, None
+
+    # Aplica o link nos três primeiros parágrafos do corpo
+    for i in range(min(3, len(corpo))):
+        paragrafo = corpo[i]
+        corpo[i] = re.sub(rf'\b{re.escape(palavra_ancora)}\b', f'[{palavra_ancora}]({url_ancora})', paragrafo)
+
+    novo_texto = '\n'.join([titulo] + corpo)
+    info_link = {
+        'palavra': palavra_ancora,
+        'url': url_ancora,
+        'paragrafos_com_link': [i+2 for i in range(min(3, len(corpo))) if palavra_ancora in corpo[i]]
+    }
+    return novo_texto, info_link
 
 # Lista de stopwords em português (expandida e normalizada)
 PORTUGUESE_STOPWORDS = set([

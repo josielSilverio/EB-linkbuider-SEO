@@ -258,6 +258,10 @@ def processar_linhas(sheets: SheetsHandler, gemini: GeminiHandler, docs: DocsHan
             titulos_gerados.append((dados['id'], titulo_escolhido))
             linhas_processadas += 1
     
+    # Recarrega o DataFrame após gerar títulos, se for modo 3
+    if modo_processamento == "3":
+        df = sheets.carregar_dados_planilha(spreadsheet_id, sheet_name)
+
     # Segunda etapa: Geração de conteúdo (se necessário)
     if modo_processamento in ["2", "3"]:
         logger.info("Iniciando segunda etapa: Geração de conteúdo")
@@ -290,7 +294,6 @@ def processar_linhas(sheets: SheetsHandler, gemini: GeminiHandler, docs: DocsHan
         total_custo = sum(c['metricas'].get('cost_usd', 0) for c in conteudos_lote)
         total_palavras = sum(c['metricas'].get('num_palavras', 0) for c in conteudos_lote)
         total_caracteres = sum(c['metricas'].get('num_caracteres', 0) for c in conteudos_lote)
-        # Exibir dados principais das linhas processadas
         print(f"\nResumo do lote de conteúdos gerados ({linhas_processadas_lote}):")
         for c in conteudos_lote:
             dados = c['dados']
@@ -300,7 +303,11 @@ def processar_linhas(sheets: SheetsHandler, gemini: GeminiHandler, docs: DocsHan
         print(f"Custo estimado (USD): {total_custo:.6f}")
         print(f"Palavras: {total_palavras}")
         print(f"Caracteres: {total_caracteres}")
-        confirm = input("\nDeseja criar os documentos e atualizar a planilha para este lote? (S/N): ").strip().upper()
+        # Confirmação automática no modo 3
+        if modo_processamento == '3':
+            confirm = 'S'
+        else:
+            confirm = input("\nDeseja criar os documentos e atualizar a planilha para este lote? (S/N): ").strip().upper()
         if confirm != 'S':
             print("Lote descartado pelo usuário. Nenhum documento será criado.")
             return

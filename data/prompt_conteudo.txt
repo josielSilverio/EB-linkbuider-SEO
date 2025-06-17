@@ -21,6 +21,11 @@ Crie artigos com títulos OBRIGATORIAMENTE únicos, criativos e variados que NUN
 9. Todos os links para as palavras-ancoras devem ser geradas no formato do DOCS do Google.
 10. Quando utlizar listas, use a formatação tradicional de listas
 11. Desenvolvimento com dados, contexto histórico, análise, comparativos e curiosidades
+12. **É PROIBIDO usar a palavra 'raciais' em qualquer contexto. Se o sentido for de lógica, razão ou tomada de decisão, use 'racional' ou 'racionais'. O termo 'raciais' é inadequado e pode ser interpretado como pejorativo ou discriminatório.**
+
+**ATENÇÃO CRÍTICA:**
+- A palavra-âncora pode (e deve) aparecer no título, mas NUNCA como hyperlink no título.
+- O hyperlink só pode ser aplicado no corpo do texto, nunca no título.
 
 ## INSTRUÇÃO CRÍTICA DE DIVERSIDADE E ANTI-REPETIÇÃO (NOVA):
 
