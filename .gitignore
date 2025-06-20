@@ -22,24 +22,68 @@ ENV/
 .vscode/
 *.swp
 *.swo
+*.sublime-workspace
+*.sublime-project
 
 # Logs
 *.log
+logs/
+log/
 
 # Credentials and secrets
 credentials.json
 token.json
 token.pickle
+credentials/
+token-*.json
+*.pem
+*.key
 
 # Local configuration
 *.ini
 config.local.py
+.env.local
+.env.*.local
 
 # Jupyter Notebook
 .ipynb_checkpoints
+*.ipynb
 
 # Local data files
 data/.last_selection.json
+data/*.json
+data/*.csv
+data/*.xlsx
+data/*.xls
 
 # Tests
-tests/ 
+tests/
+test/
+__tests__/
+
+# Cache
+.cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# System files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.swp
+*~
+
+# Python specific
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.dylib
+*.dll 
