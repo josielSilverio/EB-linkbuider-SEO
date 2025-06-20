@@ -162,7 +162,7 @@ class MenuHandler:
         while True:
             escolha = input("\nEscolha uma opção: ").strip()
             if escolha == '1':
-                return None  # None = processar tudo
+                return -1  # Valor especial para indicar "processar tudo"
             elif escolha == '2':
                 try:
                     qtd = int(input("Digite o número de itens a processar: ").strip())
@@ -172,5 +172,33 @@ class MenuHandler:
                 except ValueError:
                     print("Valor inválido. Tente novamente.")
             elif escolha == '3':
-                return 'cancelar'
-            print("Opção inválida. Tente novamente.") 
+                return None  # None significa cancelar
+            print("Opção inválida. Tente novamente.")
+
+    def avaliar_titulo(self, titulo: str) -> float:
+        """
+        Permite ao usuário avaliar um título em uma escala de 0 a 1.
+        
+        Args:
+            titulo: O título a ser avaliado
+            
+        Returns:
+            Float entre 0 e 1 representando a avaliação
+        """
+        print(f"\nPor favor, avalie o título:\n{titulo}\n")
+        print("Escala de avaliação:")
+        print("0.0 - Péssimo")
+        print("0.2 - Ruim")
+        print("0.4 - Regular")
+        print("0.6 - Bom")
+        print("0.8 - Muito Bom")
+        print("1.0 - Excelente")
+        
+        while True:
+            try:
+                nota = float(input("\nDigite sua avaliação (0.0 a 1.0): "))
+                if 0 <= nota <= 1:
+                    return nota
+                print("Por favor, digite um número entre 0.0 e 1.0")
+            except ValueError:
+                print("Por favor, digite um número válido") 

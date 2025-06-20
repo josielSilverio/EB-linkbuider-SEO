@@ -9,6 +9,8 @@ from typing import Dict, Tuple, Optional, List
 from unidecode import unidecode
 from google.api_core import retry
 from google.api_core.exceptions import ResourceExhausted
+from Levenshtein import ratio
+import sqlite3
 
 from src.config import (
     GOOGLE_API_KEY, 
@@ -20,6 +22,7 @@ from src.config import (
     GEMINI_PRECO_SAIDA as GEMINI_OUTPUT_COST_PER_1K
 )
 from src.utils import contar_tokens, substituir_links_markdown, normalizar_texto
+from .db_handler import DBHandler
 
 def qualquer_palavra_em_outra(palavras1, palavras2):
     """
@@ -67,7 +70,44 @@ def verificar_conteudo_proibido(texto: str) -> str:
         # Termos relacionados a dinheiro
         r'\bdinheiro fácil\b': 'diversão responsável',
         r'\bgrana\b': 'experiência',
-        r'\bdinheiro real\b': 'jogo interativo'
+        r'\bdinheiro real\b': 'jogo interativo',
+        
+        # Termos de apostas (novos)
+        r'\bapostar tudo\b': 'jogar com responsabilidade',
+        r'\bapostar alto\b': 'jogar com moderação',
+        r'\bapostas altas\b': 'jogadas estratégicas',
+        r'\bvício\b': 'hobby',
+        r'\bviciado\b': 'entusiasta',
+        
+        # Termos discriminatórios (novos)
+        r'\braciais\b': 'racionais',
+        r'\bpreconceito\b': 'diferenças',
+        r'\bdiscriminação\b': 'distinção',
+        
+        # Termos políticos (novos)
+        r'\bpolítica\b': 'gestão',
+        r'\bpolítico\b': 'administrador',
+        r'\bpartido\b': 'grupo',
+        r'\beleição\b': 'escolha',
+        r'\bvotar\b': 'escolher',
+        
+        # Termos de violência (novos)
+        r'\bviolência\b': 'desafio',
+        r'\bbriga\b': 'competição',
+        r'\bcrime\b': 'incidente',
+        r'\btragédia\b': 'acontecimento',
+        
+        # Termos infantis (novos)
+        r'\bcriança\b': 'pessoa',
+        r'\binfantil\b': 'iniciante',
+        r'\bmenor de idade\b': 'inexperiente',
+        
+        # Termos de investimento (novos)
+        r'\binvestir\b': 'participar',
+        r'\binvestimento\b': 'participação',
+        r'\binvestidor\b': 'participante',
+        r'\baplicar\b': 'utilizar',
+        r'\baplicação\b': 'utilização'
     }
     
     texto_modificado = texto
@@ -89,64 +129,76 @@ def verificar_conteudo_proibido(texto: str) -> str:
     
 
 def extrair_instrucao_especial_jogo(palavra_ancora: str) -> str:
-    """Gera instruções personalizadas de estilo para cada jogo, garantindo conteúdo único e eficaz"""
+    """Gera instruções personalizadas de estilo para cada tema, garantindo conteúdo único e eficaz"""
     
     instrucoes_especiais = {
-        # Crash games
-        "aviator": "Destaque a mecânica única de timing e a experiência visual do jogo. Foque em como o jogo combina estratégia pessoal com decisões rápidas. Mencione a curva de voo e o aspecto visual distinto.",
-        "spaceman": "Enfatize o tema espacial e o visual único. Descreva a experiência imersiva e como o jogo se destaca dos outros crash games com sua temática intergaláctica.",
-        "crash": "Destaque o elemento de estratégia e timing. Explique como o jogo oferece uma experiência diferente dos slots tradicionais, com foco na tomada de decisões e controle.",
+        # Temas de Entretenimento e Cultura Pop
+        "filme": "Explore conexões com a cultura pop, críticas, curiosidades de bastidores e impacto cultural. Relacione com outros filmes do mesmo gênero ou diretor.",
+        "série": "Analise elementos narrativos, desenvolvimento de personagens, teorias de fãs e comparações com outras séries populares.",
+        "música": "Discuta influências musicais, história da música, análise de letras, impacto cultural e conexões com outros artistas.",
+        "game": "Aborde mecânicas de jogo, desenvolvimento, comunidade de jogadores, competições e evolução dos videogames.",
         
-        # Slots populares
-        "gates of olympus": "Foque na rica temática mitológica grega. Descreva como o jogo incorpora Zeus e outros elementos da mitologia em sua mecânica. Mencione os multiplicadores e o sistema de rodadas bônus. Explore ângulos como: a popularidade de temas míticos em slots, ou como a volatilidade do jogo se alinha com a natureza dos deuses.",
-        "fortune rabbit": "Enfatize a temática asiática e os elementos culturais de sorte. Descreva os símbolos especiais e como eles se conectam com as tradições de fortuna. Mencione as mecânicas de bônus. Sugira títulos que explorem a simbologia da sorte ou o design visual do jogo.",
-        "sweet bonanza": "Destaque o visual colorido e a temática de doces. Explique o sistema único de pagamentos em cluster em vez de linhas tradicionais. Mencione as rodadas bônus e multiplicadores. Incentive títulos que brinquem com a experiência sensorial ou a inovação da mecânica de cluster.",
-        "lucky dragons": "Explore a mística dos dragões asiáticos neste slot. Além das mecânicas de bônus e visuais, sugira ângulos como: o simbolismo dos dragões na cultura dos jogos de sorte, comparativos com outros slots de temática similar, ou a experiência do jogador em busca da sorte do dragão.",
+        # Temas de Cassino (mantidos e adaptados)
+        "aviator": "Destaque a mecânica única de timing e a experiência visual do jogo. Foque em como o jogo combina estratégia pessoal com decisões rápidas.",
+        "blackjack": "Aborde o equilíbrio entre sorte e estratégia. Explique a mecânica básica e por que o jogo atrai tanto jogadores iniciantes quanto experientes.",
+        "roleta": "Explique a elegância e simplicidade do jogo. Descreva os diferentes tipos de apostas possíveis e como a roleta mantém seu charme através dos séculos.",
         
-        # Jogos de mesa
-        "blackjack": "Aborde o equilíbrio entre sorte e estratégia. Explique a mecânica básica e por que o jogo atrai tanto jogadores iniciantes quanto experientes. Mencione a importância das decisões estratégicas. Sugira análises sobre a psicologia do jogador de blackjack ou a evolução das estratégias.",
-        "poker": "Destaque o elemento de habilidade e psicologia. Explique como o jogo se diferencia de outros jogos de cassino pelo componente estratégico. Mencione as variantes mais populares. Encoraje discussões sobre o poker como esporte mental ou a importância do bluff.",
-        "roleta": "Explique a elegância e simplicidade do jogo. Descreva os diferentes tipos de apostas possíveis e como a roleta mantém seu charme através dos séculos. Mencione as diferenças entre as versões online e físicas, como dealers ao vivo e variedades exclusivas da web. Incentive ângulos como: a matemática por trás da roleta, ou o glamour associado ao jogo.",
-        "bacbo": "Este jogo combina elementos do Bacará com dados. Explique essa fusão única e como ela atrai jogadores. Considere ângulos como: Bacbo é uma simplificação bem-vinda do Bacará? Como a adição de dados muda a dinâmica do jogo? A experiência é mais rápida ou tensa? Explore a popularidade crescente de jogos de cassino ao vivo com mecânicas inovadoras.",
+        # Temas de Esporte e E-sports
+        "futebol": "Analise táticas, estatísticas, histórico de partidas, rivalidades clássicas e momentos memoráveis do esporte.",
+        "basquete": "Explore estratégias de jogo, evolução do esporte, recordes históricos e impacto cultural.",
+        "e-sports": "Discuta cenário competitivo, times profissionais, estratégias de jogo e crescimento do setor.",
         
-        # Termos genéricos de apostas - NOVAS ADIÇÕES
-        "casa de apostas": "Foque nos aspectos de confiança, segurança, variedade de mercados (esportes, cassino), qualidade do atendimento e experiência do usuário na plataforma. Ângulos possíveis: O que procurar em uma casa de apostas de excelência? Como a tecnologia está transformando as casas de apostas? Comparativos de funcionalidades.",
-        "aposta online": "Aborde a conveniência, acessibilidade e a vasta gama de opções disponíveis nas apostas online. Pode incluir dicas para iniciantes, como entender odds, diferentes tipos de apostas (simples, múltiplas, sistemas) e a importância do jogo responsável no ambiente digital.",
-        "aposta esportiva": "Explore a paixão pelos esportes combinada com a análise e estratégia. Destaque a importância de conhecer o esporte, os times/atletas, e como analisar estatísticas. Pode focar em mercados específicos (futebol, basquete, tênis, eSports) e estratégias como handicap, over/under, etc.",
-        "site de apostas": "Similar a 'casa de apostas', mas com ênfase na interface digital. Explore a usabilidade da plataforma, design responsivo (mobile), facilidade de navegação, métodos de pagamento seguros e a integração de ferramentas de jogo responsável. O que faz um site de apostas ser intuitivo e seguro?",
-        "bet": "Use este termo mais genérico para discutir o conceito de 'bet' (aposta) de forma mais ampla. Pode incluir a psicologia por trás das apostas, a evolução histórica, a importância da gestão de banca, e como o 'bet' se manifesta em diferentes culturas e contextos de entretenimento.",
-        "roleta online": "Diferencie da roleta tradicional, destacando as vantagens do ambiente online: variedades do jogo (europeia, americana, francesa, multi-wheel), mesas com dealers ao vivo para uma experiência imersiva, bônus específicos para roleta online e a conveniência de jogar a qualquer hora e lugar.",
-        "bet online": "Combine os conceitos de 'bet' e 'online'. Enfatize a transformação digital no setor de apostas, a facilidade de acesso, a diversidade de modalidades (esportes, cassino, crash games, etc.) disponíveis online e a importância de escolher plataformas regulamentadas e seguras para uma experiência de bet online positiva."
+        # Temas de Tecnologia e Inovação
+        "tecnologia": "Aborde inovações recentes, impacto na sociedade, tendências futuras e análise de produtos/serviços.",
+        "smartphone": "Compare modelos, analise recursos, discuta tendências de mercado e impacto na comunicação moderna.",
+        "inteligência artificial": "Explore aplicações práticas, avanços recentes, implicações éticas e futuro da tecnologia.",
+        
+        # Temas de Arte e Cultura
+        "arte": "Discuta movimentos artísticos, técnicas, artistas influentes e impacto cultural.",
+        "literatura": "Analise obras literárias, autores, gêneros e influência na cultura contemporânea.",
+        "teatro": "Explore produções teatrais, história do teatro, técnicas de atuação e impacto cultural.",
+        
+        # Temas de Gastronomia
+        "culinária": "Aborde receitas, técnicas de preparo, história dos pratos e influências culturais.",
+        "restaurante": "Analise experiências gastronômicas, tendências culinárias e críticas gastronômicas.",
+        
+        # Temas de Viagem e Turismo
+        "viagem": "Explore destinos, dicas de planejamento, experiências culturais e recomendações práticas.",
+        "turismo": "Discuta pontos turísticos, cultura local, dicas de viagem e experiências únicas."
     }
     
-    # Detecta palavras-chave no nome do jogo
+    # Detecta palavras-chave no nome do jogo/tema
+    palavra_ancora_lower = palavra_ancora.lower()
     for palavra_chave, instrucao in instrucoes_especiais.items():
-        if palavra_chave.lower() in palavra_ancora.lower():
+        if palavra_chave.lower() in palavra_ancora_lower:
             return instrucao
     
-    # Instruções padrão baseadas em categorias de jogos
-    if any(termo in palavra_ancora.lower() for termo in ["fortune", "lucky", "tiger", "gold", "gems", "dragon"]):
-        return "Destaque a temática de fortuna e riqueza do jogo. Além de explicar símbolos e bônus, explore ângulos como: a psicologia da busca pela sorte nesses jogos, o design visual que evoca riqueza, ou um comparativo com outros jogos de temática similar."
+    # Instruções baseadas em categorias gerais
+    if any(termo in palavra_ancora_lower for termo in ["fortune", "lucky", "tiger", "gold", "gems", "dragon"]):
+        return "Destaque a temática de fortuna e sorte. Explore aspectos culturais, simbolismo e elementos visuais."
     
-    if any(termo in palavra_ancora.lower() for termo in ["book", "dead", "egypt", "vikings", "aztec"]):
-        return "Enfatize o tema histórico ou mitológico. Além de explicar mecânicas, explore o apelo dessas narrativas nos jogos, como o jogo se compara a lendas reais, ou a experiência de 'aventura' que ele proporciona."
+    if any(termo in palavra_ancora_lower for termo in ["book", "dead", "egypt", "vikings", "aztec"]):
+        return "Enfatize o tema histórico ou mitológico. Explore conexões com a cultura, história e lendas relacionadas."
     
-    if any(termo in palavra_ancora.lower() for termo in ["fruit", "candy", "sweet", "fish"]):
-        return "Destaque o visual colorido e temático. Além das mecânicas, explore como o design influencia o humor do jogador, a nostalgia (no caso de frutas), ou a simplicidade divertida que esses temas oferecem."
+    if any(termo in palavra_ancora_lower for termo in ["esporte", "sport", "campeonato", "copa"]):
+        return "Analise aspectos esportivos, estatísticas, histórico de competições e momentos memoráveis."
+    
+    if any(termo in palavra_ancora_lower for termo in ["tech", "digital", "app", "software"]):
+        return "Explore aspectos tecnológicos, inovações, tendências e impacto na sociedade moderna."
     
     # Instrução genérica para garantir originalidade
-    return "Para este jogo, destaque o que o torna verdadeiramente único. Vá além da simples descrição de mecânicas e visuais. Explore ângulos como: Qual é a experiência central que ele oferece ao jogador? Como ele se posiciona em relação a outros jogos do mesmo gênero? Existe algum aspecto cultural ou tendência que ele reflete? O objetivo é encontrar uma perspectiva nova e interessante para o título e o artigo."
+    return "Para este tema, destaque o que o torna verdadeiramente único. Explore aspectos culturais, históricos ou sociais relevantes. Considere tendências atuais e conexões com outros temas populares. O objetivo é encontrar uma perspectiva nova e interessante para o título e o artigo."
 
 
 def verificar_e_corrigir_titulo(titulo: str, palavra_ancora: str, is_document_title: bool = False) -> Tuple[bool, str]:
     """
     Verifica e corrige o comprimento do título, garantindo que tenha entre 9-15 palavras,
-    não ultrapasse 100 caracteres, contenha a palavra-âncora e não termine com reticências.
+    não ultrapasse 100 caracteres e não termine com reticências.
     Também remove o prefixo "Título:" e rejeita frases de continuação.
     
     Args:
         titulo: O título a ser verificado
-        palavra_ancora: A palavra-âncora que deve estar presente no título
+        palavra_ancora: A palavra-âncora (opcional)
         is_document_title: Se True, aceita títulos menores para documentos já existentes
         
     Returns:
@@ -169,30 +221,26 @@ def verificar_e_corrigir_titulo(titulo: str, palavra_ancora: str, is_document_ti
     if titulo_processado != titulo_original:
         logger.info(f"Marcações Markdown (asteriscos) removidos do título: '{titulo_original}' -> '{titulo_processado}'")
 
-    # Remover prefixos como "Título:", "**Título:**", "Tema:", etc. de forma flexível.
-    # Esta regex remove espaços, markdown opcional (**, *), a palavra "título" ou "tema" (com ou sem acento),
-    # e um dois-pontos opcional, tudo no início da string, case-insensitive.
-    # A palavra "palavra-chave" ou "palavra chave" também foi adicionada aos prefixos a remover.
+    # Remover prefixos como "Título:", "**Título:**", "Tema:", etc.
     padrao_prefixo = r"^\s*(\*\*|\*|)(t[íi]tulo|tema|palavra-chave|palavra chave|conteudo|texto|conclusão)\s*[:：]?\s*"
     titulo_limpo_de_prefixo = re.sub(padrao_prefixo, "", titulo_processado, flags=re.IGNORECASE).strip()
     
-    # Remove também quaisquer asteriscos ou # que possam ter sobrado no início após a remoção do prefixo
-    # ou que foram gerados incorretamente pelo modelo.
+    # Remove também quaisquer asteriscos ou # que possam ter sobrado no início
     titulo_limpo_de_prefixo = re.sub(r"^\s*(\*\*|\*|#)+\s*", "", titulo_limpo_de_prefixo).strip()
 
     if titulo_limpo_de_prefixo != titulo_processado:
         logger.info(f"Prefixo de título/tema/palavra-chave/marcador removido. Título antes: '{titulo_processado}'. Depois: '{titulo_limpo_de_prefixo}'")
         titulo_processado = titulo_limpo_de_prefixo
-        if not titulo_processado: # Se o título ficou vazio após remover o prefixo
+        if not titulo_processado:
             logger.warning("Título ficou vazio após remover prefixo e será rejeitado.")
             return False, "Sem título após limpeza"
 
     # NOVA LIMPEZA: Remover asteriscos/cerquilhas do final do título processado
     titulo_processado_antes_final_clean = titulo_processado
-    titulo_processado = re.sub(r"\s*(\*\*|\*|#)+$", "", titulo_processado).strip() # Regex para o final
+    titulo_processado = re.sub(r"\s*(\*\*|\*|#)+$", "", titulo_processado).strip()
     if titulo_processado != titulo_processado_antes_final_clean:
         logger.info(f"Caracteres de formatação removidos do final do título. Antes: '{titulo_processado_antes_final_clean}'. Depois: '{titulo_processado}'")
-        if not titulo_processado: # Se ficou vazio após remover do final
+        if not titulo_processado:
             logger.warning("Título ficou vazio após remover formatação final e será rejeitado.")
             return False, "Sem título após limpeza final"
 
@@ -216,56 +264,41 @@ def verificar_e_corrigir_titulo(titulo: str, palavra_ancora: str, is_document_ti
         " e", " ou", " mas", " nem", " pois",
         " se", " como", " quando", " onde",
         " sobre", " entre", " até", " sem", " sob",
-        " um", " uma", " uns", " umas", "; é" 
-        # Adicionar mais conforme necessário, sempre com espaço antes para pegar a palavra inteira no final.
-        # "; é" é um caso específico.
+        " um", " uma", " uns", " umas", "; é"
     ]
-    # Também verifica se termina com ponto e vírgula simples, o que pode indicar continuação
+    
+    # Também verifica se termina com ponto e vírgula simples
     if titulo_processado.endswith(";"):
         logger.warning(f"Título rejeitado por terminar com ponto e vírgula, sugerindo incompletude: '{titulo_processado}'")
         return False, titulo_processado
 
     titulo_lower_para_final = titulo_processado.lower()
     for term_proibido in terminacoes_incompletas_proibidas:
-        if titulo_lower_para_final.endswith(term_proibido.strip()): # .strip() para o caso de "; é" 
-            # Para casos como "; é", o .strip() assegura que estamos verificando o final correto.
-            # Para os outros com espaço antes, o endswith continuará funcionando bem após o strip() no term_proibido
+        if titulo_lower_para_final.endswith(term_proibido.strip()):
             if term_proibido == "; é" and titulo_lower_para_final.endswith("; é"):
-                 logger.warning(f"Título rejeitado por terminar com padrão proibido indicando incompletude ('{term_proibido}'): '{titulo_processado}'")
-                 return False, titulo_processado
-            elif term_proibido != "; é" and titulo_lower_para_final.endswith(term_proibido): # Garante que não é um falso positivo com "; é"
-                 # Verifica se a palavra antes da terminação não a torna válida (ex: "Guia Completo de A a Z")
-                 # Esta é uma heurística e pode precisar de refinamento.
-                 partes = titulo_processado.rsplit(None, 1) # Divide na última palavra
-                 if len(partes) > 1 and partes[-1].lower() == term_proibido.strip():
+                logger.warning(f"Título rejeitado por terminar com padrão proibido indicando incompletude ('{term_proibido}'): '{titulo_processado}'")
+                return False, titulo_processado
+            elif term_proibido != "; é" and titulo_lower_para_final.endswith(term_proibido):
+                partes = titulo_processado.rsplit(None, 1)
+                if len(partes) > 1 and partes[-1].lower() == term_proibido.strip():
                     logger.warning(f"Título rejeitado por terminar com palavra/frase que sugere incompletude ('{term_proibido.strip()}'): '{titulo_processado}'")
                     return False, titulo_processado
     
     # Verificar se a string é realmente o conteúdo completo em vez de um título
-    if len(titulo_processado) > 250:  # Se é muito longo, provavelmente não é um título
+    if len(titulo_processado) > 250:
         palavras_titulo = titulo_processado.split()[:10]
         titulo_processado = " ".join(palavras_titulo)
         logger.warning(f"Texto muito longo detectado como título. Considerado como: {titulo_processado}")
-        # Adiciona reticências aqui porque é um truncamento de um texto maior, não um título finalizado com "..."
         if not titulo_processado.endswith("..."):
-             titulo_processado += "..."
-
+            titulo_processado += "..."
 
     # 1. Verificar e remover reticências do final
     if titulo_processado.endswith("..."):
         titulo_processado = titulo_processado[:-3].strip()
         logger.info(f"Reticências removidas do final do título: '{titulo_processado}'")
-        if not titulo_processado: # Se o título ficou vazio após remover "..."
+        if not titulo_processado:
             logger.warning("Título ficou vazio após remover reticências.")
             return False, "Sem título após remover reticências"
-
-    # 2. Verificar presença da palavra-âncora (case-insensitive)
-    if palavra_ancora and palavra_ancora.strip() and palavra_ancora.lower() not in titulo_processado.lower():
-        if not is_document_title:  # Só rejeitamos se for um novo título, não se estivermos corrigindo um existente
-            logger.warning(f"Palavra-âncora '{palavra_ancora}' não encontrada no título: '{titulo_processado}'. O título será rejeitado.")
-            return False, titulo_processado # Rejeita o título se a palavra-âncora não estiver presente
-        else:
-            logger.info(f"Palavra-âncora '{palavra_ancora}' não encontrada no título existente: '{titulo_processado}', mas não rejeitando por ser documento existente.")
 
     # Conta palavras
     palavras = titulo_processado.split()
@@ -275,41 +308,18 @@ def verificar_e_corrigir_titulo(titulo: str, palavra_ancora: str, is_document_ti
     MAX_CARACTERES = 100
     if len(titulo_processado) > MAX_CARACTERES:
         logger.warning(f"Título excede {MAX_CARACTERES} caracteres: '{titulo_processado}' ({len(titulo_processado)} caracteres)")
-        # Reduz o título para caber no limite de caracteres, tenta não cortar palavras-chave
-        if palavra_ancora and palavra_ancora.strip() and palavra_ancora.lower() in titulo_processado.lower():
-            # Tenta preservar a palavra_ancora ao truncar
-            idx_ancora = titulo_processado.lower().find(palavra_ancora.lower())
-            fim_ancora = idx_ancora + len(palavra_ancora)
-            
-            if fim_ancora > MAX_CARACTERES - 20 and len(titulo_processado) > MAX_CARACTERES : # Se a âncora está no final e estoura
-                 # Trunca antes da âncora e tenta re-adicionar, se possível
-                parte_antes = titulo_processado[:idx_ancora].rsplit(' ',1)[0] if idx_ancora >0 else ""
-                novo_titulo_tentativa = f"{parte_antes} {palavra_ancora}"
-                if len(novo_titulo_tentativa) <= MAX_CARACTERES :
-                    titulo_processado = novo_titulo_tentativa.strip()
-                else: # Se mesmo assim não cabe, usa o método padrão de truncamento
-                    titulo_processado = titulo_processado[:MAX_CARACTERES].rsplit(' ', 1)[0]
-
-            elif len(titulo_processado) > MAX_CARACTERES : # Ancora no inicio ou meio
-                 titulo_processado = titulo_processado[:MAX_CARACTERES].rsplit(' ', 1)[0]
-        else: # Se âncora não está ou não foi fornecida, trunca normalmente
-            titulo_processado = titulo_processado[:MAX_CARACTERES].rsplit(' ', 1)[0]
-
+        titulo_processado = titulo_processado[:MAX_CARACTERES].rsplit(' ', 1)[0]
         logger.info(f"Título reduzido para: '{titulo_processado}' ({len(titulo_processado)} caracteres)")
-        palavras = titulo_processado.split() # Recalcula palavras
+        palavras = titulo_processado.split()
         num_palavras = len(palavras)
 
     # Verifica se está dentro dos limites de palavras (9-15)
     if not (9 <= num_palavras <= 15) and not is_document_title:
         logger.warning(f"Título com número de palavras fora do intervalo (9-15): '{titulo_processado}' ({num_palavras} palavras).")
-        # Para títulos de documentos existentes, somos mais tolerantes
         if is_document_title:
             logger.info(f"Aceitando título existente com {num_palavras} palavras pois is_document_title=True")
             return True, titulo_processado
-        # Títulos fora da contagem de palavras após ajustes são rejeitados para nova geração.
-        # A lógica de expansão/redução anterior era muito propensa a criar títulos de baixa qualidade.
-        # É melhor o Gemini tentar novamente com as restrições do prompt.
-        return False, titulo_processado 
+        return False, titulo_processado
         
     # Se todas as verificações passaram
     logger.info(f"Título validado e corrigido: '{titulo_processado}'")
@@ -317,7 +327,7 @@ def verificar_e_corrigir_titulo(titulo: str, palavra_ancora: str, is_document_ti
 
 
 class GeminiHandler:
-    def __init__(self):
+    def __init__(self, credentials_path: str = None):
         # Inicializa o logger
         self.logger = logging.getLogger('seo_linkbuilder.gemini')
         
@@ -351,6 +361,7 @@ class GeminiHandler:
         self.max_retries = 5
         self.base_delay = 2  # 60 segundos base delay
         self.max_delay = 5  # 5 minutos máximo delay
+        self.db = DBHandler()
     
     def carregar_prompt_template(self, tipo: str = 'conteudo') -> str:
         """
@@ -371,159 +382,76 @@ class GeminiHandler:
     
     def _verificar_diversidade_titulos(self, prompt: str, dados: Dict[str, str]) -> str:
         """
-        Adiciona verificação específica para garantir que os títulos não sigam padrões repetitivos.
+        Verifica e garante a diversidade de títulos no prompt.
         
         Args:
-            prompt: O prompt original
-            dados: Dicionário com os dados para o prompt
-        
+            prompt: O prompt base
+            dados: Dicionário com dados do prompt
+            
         Returns:
-            Prompt modificado com instruções adicionais anti-padrões
+            Prompt modificado com instruções de diversidade
         """
-        # Verifica se temos um titulo já definido
-        if 'titulo' in dados and dados['titulo'] and dados['titulo'].strip():
-            return prompt  # Se já tem título, não precisa modificar
+        # Categorias temáticas para diversificação
+        categorias_tematicas = {
+            "Entretenimento": ["filme", "série", "música", "game", "livro", "quadrinho"],
+            "Cultura": ["arte", "literatura", "teatro", "dança", "cinema", "fotografia"],
+            "Tecnologia": ["tech", "app", "software", "gadget", "smartphone", "computador"],
+            "Esportes": ["futebol", "basquete", "vôlei", "tênis", "corrida", "natação"],
+            "Gastronomia": ["comida", "culinária", "restaurante", "receita", "chef", "bebida"],
+            "Viagem": ["turismo", "viagem", "destino", "hotel", "passeio", "aventura"],
+            "Ciência": ["descoberta", "pesquisa", "inovação", "estudo", "experimento"],
+            "História": ["época", "período", "civilização", "personagem", "evento"],
+            "Lifestyle": ["moda", "beleza", "saúde", "bem-estar", "decoração"],
+            "Cassino": ["slot", "roleta", "poker", "blackjack", "bingo", "apostas"]
+        }
         
-        # Palavras e frases de início comuns que queremos evitar - CRÍTICO PARA DIVERSIDADE
-        padroes_proibidos = [
-            # Artigos definidos + substantivos comuns
-            "a evolu", "a analis", "a histor", "a experienc", "a jornada", "a transformac", 
-            "a fascinant", "a importanc", "a influenc", "o impacto", "o guia", "o manual",
-            "o segredo", "o papel", "o poder", "o jeito", "o metodo", "a arte", "a magia",
-            "a tecnica", "o jogo", "a estrateg", "a mecanic", "as vantagens", "as possibilidades",
-            
-            # Adjetivos iniciais comuns
-            "fascinante", "incrivel", "surpreendente", "impressionante", "inacreditavel",
-            "fundamental", "essencial", "crucial", "importante", "significativo", "inovador",
-            "revolucionario", "tradicional", "classico", "moderno", "contemporaneo", "completo",
-            "detalhado", "abrangente", "definitivo", "unico", "exclusivo", "especial",
-            
-            # Construções comuns
-            "como dominar", "como jogar", "como aproveitar", "como utilizar", "como entender",
-            "dicas para", "truques para", "segredos para", "estrategias para", "metodos para",
-            "guia completo", "guia definitivo", "guia pratico", "guia essencial", "manual de",
-            "tudo sobre", "tudo que", "tudo o que", "o que voce", "o que todo", "por que escolher",
-            
-            # Estruturas de listas
-            "top", "melhores", "principais", "essenciais", "fundamentais", "cruciais", "basicas",
-            
-            # Padrões específicos identificados como repetitivos
-            "uma analise", "uma abordagem", "uma visao", "uma perspectiva", "uma exploracao",
-            "entendendo", "compreendendo", "descobrindo", "explorando", "desvendando", "revelando",
-            "dominando", "aprendendo", "conhecendo", "desenvolvendo", "aprimorando", "maximizando"
-        ]
+        # Identifica a categoria principal baseada na palavra-âncora
+        palavra_ancora = dados.get('palavra_ancora', '').lower()
+        categoria_principal = None
+        for categoria, palavras_chave in categorias_tematicas.items():
+            if any(palavra in palavra_ancora for palavra in palavras_chave):
+                categoria_principal = categoria
+                break
         
-        # Rotação obrigatória de estruturas (12 tipos diferentes)
-        estruturas_rotativas = [
-            # 1. PERGUNTA PROVOCATIVA
-            "Por que {PALAVRA_ANCORA} continua fascinando jogadores mesmo após anos de lançamento?",
-            "O que torna {PALAVRA_ANCORA} tão singular no universo dos jogos de cassino online?",
-            "Onde encontrar as informações mais precisas sobre estratégias em {PALAVRA_ANCORA}?",
-            "Qual o segredo por trás do design imersivo que caracteriza {PALAVRA_ANCORA}?",
-            
-            # 2. DADOS NUMÉRICOS
-            "5 fatores que contribuem para a popularidade crescente de {PALAVRA_ANCORA} entre brasileiros",
-            "7 conceitos essenciais para compreender a matemática por trás de {PALAVRA_ANCORA}",
-            "3 razões pelas quais {PALAVRA_ANCORA} atrai tanto jogadores iniciantes quanto veteranos",
-            "10 curiosidades pouco conhecidas que explicam o fenômeno {PALAVRA_ANCORA} na atualidade",
-            
-            # 3. CONTRASTE/OPOSIÇÃO
-            "Entre sorte e estratégia: {PALAVRA_ANCORA} analisado sob perspectivas complementares",
-            "Mito versus realidade: o que jogadores precisam saber sobre {PALAVRA_ANCORA}",
-            "Tradição e inovação: como {PALAVRA_ANCORA} equilibra elementos clássicos e modernos",
-            "Simplicidade aparente, complexidade real: desvendando as camadas de {PALAVRA_ANCORA}",
-            
-            # 4. NARRATIVA HISTÓRICA
-            "Das mesas europeias para o mundo digital: traçando a evolução de {PALAVRA_ANCORA}",
-            "Do nicho à popularidade global: a trajetória surpreendente de {PALAVRA_ANCORA}",
-            "Origens e transformações: como {PALAVRA_ANCORA} se adaptou às novas gerações",
-            "Momentos decisivos que definiram o desenvolvimento e posicionamento de {PALAVRA_ANCORA}",
-            
-            # 5. ANÁLISE TÉCNICA
-            "Mecânicas fundamentais que fazem de {PALAVRA_ANCORA} um exemplo de design equilibrado",
-            "Elementos estruturais que explicam o engajamento duradouro com {PALAVRA_ANCORA}",
-            "Padrões algorítmicos presentes em {PALAVRA_ANCORA} e seus efeitos na experiência",
-            "Dissecando as camadas técnicas que compõem a jogabilidade única de {PALAVRA_ANCORA}",
-            
-            # 6. FRASE INACABADA
-            "Quando {PALAVRA_ANCORA} transcende as expectativas tradicionais de seu gênero...",
-            "Enquanto especialistas debatem estratégias para {PALAVRA_ANCORA}, jogadores descobrem...",
-            "Mesmo entre tantas opções no mercado, {PALAVRA_ANCORA} continua relevante porque...",
-            "Para além do entretenimento básico, {PALAVRA_ANCORA} representa um fenômeno cultural...",
-            
-            # 7. CITAÇÃO/FRASE DE EFEITO
-            "Simplesmente revolucionário: por que {PALAVRA_ANCORA} redefine padrões na indústria",
-            "Impossível ignorar: como {PALAVRA_ANCORA} conquistou seu espaço no hall da fama",
-            "Mais que um jogo, uma experiência: dissecando o fenômeno {PALAVRA_ANCORA}",
-            "Além das expectativas: o impacto cultural de {PALAVRA_ANCORA} em diferentes mercados",
-            
-            # 8. IMPERATIVO
-            "Descubra por que {PALAVRA_ANCORA} permanece relevante mesmo com tantas alternativas",
-            "Entenda os mecanismos psicológicos que fazem de {PALAVRA_ANCORA} tão atraente",
-            "Conheça as nuances estratégicas que podem transformar sua experiência com {PALAVRA_ANCORA}",
-            "Explore as dimensões culturais e sociais que cercam o universo de {PALAVRA_ANCORA}",
-            
-            # 9. PARADOXO
-            "Simples na aparência, complexo na execução: {PALAVRA_ANCORA} sob análise profunda",
-            "Acessível para iniciantes, desafiador para veteranos: o equilíbrio em {PALAVRA_ANCORA}",
-            "Aleatório mas previsível: compreendendo a matemática que governa {PALAVRA_ANCORA}",
-            "Tradicional e inovador simultaneamente: o caso fascinante de {PALAVRA_ANCORA}",
-            
-            # 10. MOVIMENTO/CICLO
-            "Do nicho ao mainstream: como {PALAVRA_ANCORA} transformou-se em fenômeno cultural",
-            "Da criação ao reconhecimento global: jornada histórica de {PALAVRA_ANCORA}",
-            "Entre altos e baixos: a resiliente trajetória de {PALAVRA_ANCORA} no mercado",
-            "Do desenvolvimento à consolidação: marcos importantes na história de {PALAVRA_ANCORA}",
-            
-            # 11. IMPACTO
-            "Como {PALAVRA_ANCORA} influenciou toda uma geração de jogos similares",
-            "Por que {PALAVRA_ANCORA} continua impactando o comportamento dos jogadores",
-            "De que forma {PALAVRA_ANCORA} redefiniu expectativas na indústria do entretenimento",
-            "Em que medida {PALAVRA_ANCORA} contribuiu para a evolução dos jogos online",
-            
-            # 12. PSICOLOGIA
-            "Gatilhos psicológicos que explicam o fascínio duradouro por {PALAVRA_ANCORA}",
-            "Mecanismos cognitivos ativados durante sessões de {PALAVRA_ANCORA}",
-            "Aspectos emocionais envolvidos na experiência imersiva de {PALAVRA_ANCORA}",
-            "Processos mentais que tornam {PALAVRA_ANCORA} tão envolvente para diferentes perfis"
-        ]
+        # Se não encontrou categoria específica, usa uma aleatória
+        if not categoria_principal:
+            categoria_principal = random.choice(list(categorias_tematicas.keys()))
         
-        # Seleciona aleatoriamente um modelo de cada categoria para sugerir ao Gemini
-        estruturas_selecionadas = []
-        for i in range(0, len(estruturas_rotativas), 4):
-            grupo = estruturas_rotativas[i:i+4]
-            estruturas_selecionadas.append(random.choice(grupo))
+        # Gera instruções de diversificação baseadas na categoria
+        instrucoes_diversidade = f"""
+INSTRUÇÕES DE DIVERSIFICAÇÃO TEMÁTICA:
+
+1. FOCO PRINCIPAL: {categoria_principal}
+   - Explore diferentes aspectos dentro desta categoria
+   - Evite repetir os mesmos ângulos ou abordagens
+   
+2. CONEXÕES CRIATIVAS:
+   - Relacione o tema principal com outras categorias de forma natural
+   - Crie conexões interessantes mas relevantes
+   - Mantenha o equilíbrio entre o tema principal e as conexões
+   
+3. VARIAÇÃO DE ESTRUTURAS:
+   - Alterne entre diferentes formatos de título
+   - Use diferentes elementos de engajamento (perguntas, números, comparações)
+   - Evite padrões repetitivos
+   
+4. ELEMENTOS DE ENGAJAMENTO:
+   - Curiosidade: Desperte interesse sem clickbait
+   - Valor: Ofereça benefício claro ao leitor
+   - Originalidade: Traga ângulos únicos e frescos
+   
+5. EQUILÍBRIO DE TONS:
+   - Informativo: Dados, fatos, análises
+   - Entretenimento: Diversão, curiosidades
+   - Prático: Dicas, guias, soluções
+   
+6. EVITAR:
+   - Repetição de palavras-chave
+   - Estruturas similares consecutivas
+   - Temas muito distantes do foco principal
+   - Clickbait ou sensacionalismo
+"""
         
-        # Embaralha as estruturas selecionadas para maior diversidade
-        random.shuffle(estruturas_selecionadas)
-        
-        # Instruções específicas sobre diversidade de títulos
-        instrucoes_diversidade = (
-            "\n\nINSTRUÇÕES CRÍTICAS PARA GARANTIR TÍTULOS ÚNICOS E DIVERSIFICADOS:\n"
-            f"1. É ABSOLUTAMENTE PROIBIDO começar o título com qualquer dos seguintes padrões (ou suas variações): {', '.join(padroes_proibidos[:20])}...\n"
-            "2. PROIBIDO usar ARTIGOS DEFINIDOS no início do título (A, O, As, Os).\n"
-            "3. PROIBIDO usar QUALQUER ADJETIVO no início do título.\n"
-            "4. PROIBIDO iniciar com 'Uma análise', 'Um guia', ou estruturas similares.\n"
-            "5. OBRIGATÓRIO: Use uma abordagem criativa e única, evitando QUALQUER estrutura já comum em blogs.\n\n"
-            "Para ajudar, aqui estão algumas ESTRUTURAS APROVADAS que você pode ADAPTAR (mas não copiar exatamente):\n"
-        )
-        
-        # Adiciona 5 estruturas aleatórias das selecionadas como exemplos
-        exemplos_estruturas = random.sample(estruturas_selecionadas, min(5, len(estruturas_selecionadas)))
-        for i, exemplo in enumerate(exemplos_estruturas, 1):
-            if '{PALAVRA_ANCORA}' in exemplo:
-                # Substitui o placeholder pela palavra real
-                palavra_ancora = dados.get('palavra_ancora', 'este jogo')
-                exemplo = exemplo.replace('{PALAVRA_ANCORA}', palavra_ancora)
-            instrucoes_diversidade += f"- Exemplo {i}: \"{exemplo}\"\n"
-        
-        # Adiciona aviso final sobre a importância da diversidade
-        instrucoes_diversidade += (
-            "\nAVISO FINAL: Qualquer título que começar com estruturas comuns como \"A Evolução\", \"A Análise\", "
-            "ou \"A Experiência\" será REJEITADO e o artigo terá que ser refeito. Use criatividade para evitar padrões!"
-        )
-        
-        # Adiciona as instruções ao prompt original
         return prompt + instrucoes_diversidade
 
     
@@ -552,17 +480,18 @@ class GeminiHandler:
             
             # Instrução específica para garantir uso exclusivo da palavra-âncora
             instrucao_ancora_especifica = (
-                "\n\nATENÇÃO CRÍTICA SOBRE A PALAVRA-ÂNCORA:\n"
-                "1. A palavra-âncora para este artigo é EXCLUSIVAMENTE: '{palavra_ancora}'\n"
-                "2. NÃO mencione outras palavras-âncora ou jogos não relacionados a '{palavra_ancora}'\n"
-                "3. Todo o conteúdo deve ser sobre '{palavra_ancora}' e APENAS '{palavra_ancora}'\n"
-                "4. O título DEVE mencionar especificamente '{palavra_ancora}' e não outros jogos\n"
-                "5. NUNCA substitua '{palavra_ancora}' por outro jogo ou tema similar\n"
+                "\n\nATENÇÃO SOBRE A PALAVRA-ÂNCORA:\n"
+                f"1. A palavra-âncora para este artigo é: '{palavra_ancora}'\n"
+                "2. NÃO mencione outras palavras-âncora ou jogos não relacionados\n"
+                f"3. O conteúdo deve ser sobre '{palavra_ancora}' e temas relacionados\n"
+                f"4. O título pode ou não mencionar '{palavra_ancora}', use se encaixar naturalmente\n"
+                f"5. NUNCA substitua '{palavra_ancora}' por outro jogo ou tema similar\n"
             )
             
             # Preenche o template com os dados específicos desta linha
             prompt = prompt_template.replace("{{site}}", site)
             prompt = prompt.replace("{{palavra_ancora}}", palavra_ancora)
+            prompt = prompt.replace("{palavra_ancora}", palavra_ancora)  # Adiciona suporte ao formato sem chaves duplas
             prompt = prompt.replace("{{url_ancora}}", url_ancora)
             
             # Se houver um título predefinido, use-o
@@ -593,183 +522,133 @@ class GeminiHandler:
                 "entretenimento, estratégia e experiência."
             )
             
-            # Adiciona informação do site e do link para personalização + alerta de termos proibidos
-            prompt += f"\n{link_info}{termos_proibidos_alerta}"
+            prompt += link_info + termos_proibidos_alerta
             
             return prompt
-        except KeyError as e:
-            self.logger.error(f"Erro ao construir prompt - chave ausente: {e}")
-            raise
+            
         except Exception as e:
             self.logger.error(f"Erro ao construir prompt: {e}")
             raise
 
+    def _calcular_similaridade_titulos(self, titulo1: str, titulo2: str) -> float:
+        """
+        Calcula a similaridade entre dois títulos usando uma combinação de métricas.
+        Retorna um valor entre 0 (completamente diferentes) e 1 (muito similares).
+        """
+        # Normaliza os títulos
+        titulo1_norm = normalizar_texto(titulo1.lower())
+        titulo2_norm = normalizar_texto(titulo2.lower())
+        
+        # Calcula similaridade de palavras (Levenshtein)
+        similaridade_palavras = self._calcular_similaridade_palavras(titulo1_norm, titulo2_norm)
+        
+        # Calcula similaridade de estrutura
+        estrutura_similar = self._verificar_estrutura_similar(titulo1_norm, titulo2_norm)
+        
+        # Calcula similaridade de temas
+        temas_similares = self._verificar_temas_similares(titulo1_norm, titulo2_norm)
+        
+        # Pesos para cada tipo de similaridade
+        peso_palavras = 0.4
+        peso_estrutura = 0.3
+        peso_temas = 0.3
+        
+        # Calcula similaridade final ponderada
+        similaridade_final = (
+            similaridade_palavras * peso_palavras +
+            float(estrutura_similar) * peso_estrutura +
+            float(temas_similares) * peso_temas
+        )
+        
+        return similaridade_final
+
+    def _verificar_temas_similares(self, titulo1: str, titulo2: str) -> bool:
+        """
+        Verifica se dois títulos compartilham temas similares.
+        """
+        # Palavras-chave por categoria temática
+        temas = {
+            'cinema': {'filme', 'série', 'netflix', 'cinema', 'hollywood', 'diretor', 'ator'},
+            'música': {'música', 'cantor', 'banda', 'show', 'festival', 'spotify'},
+            'games': {'game', 'jogo', 'console', 'playstation', 'xbox', 'nintendo'},
+            'tech': {'tecnologia', 'app', 'smartphone', 'gadget', 'internet', 'digital'},
+            'lifestyle': {'vida', 'rotina', 'hábito', 'dica', 'produtividade'},
+            'cultura': {'arte', 'cultura', 'história', 'museu', 'teatro'},
+        }
+        
+        # Identifica temas presentes em cada título
+        temas_titulo1 = set()
+        temas_titulo2 = set()
+        
+        for tema, palavras in temas.items():
+            if any(palavra in titulo1 for palavra in palavras):
+                temas_titulo1.add(tema)
+            if any(palavra in titulo2 for palavra in palavras):
+                temas_titulo2.add(tema)
+        
+        # Calcula interseção de temas
+        temas_comuns = temas_titulo1.intersection(temas_titulo2)
+        
+        # Retorna True se compartilham mais de um tema
+        return len(temas_comuns) > 1
+
     def verificar_titulo_gerado(self, titulo: str, palavra_ancora: str, palavras_a_evitar: list, titulos_existentes: list = None) -> bool:
         """
-        Verifica se o título gerado é válido e único.
-        """
-        if not titulo:
-            self.logger.warning("Título vazio recebido em verificar_titulo_gerado.")
-            return False
+        Verifica se um título gerado é válido segundo critérios estabelecidos.
         
+        Args:
+            titulo: O título a ser verificado
+            palavra_ancora: A palavra-âncora que deve estar presente no título
+            palavras_a_evitar: Lista de palavras que não devem aparecer no título
+            titulos_existentes: Lista opcional de títulos já existentes para verificar duplicidade
+            
+        Returns:
+            Boolean indicando se o título é válido
+        """
+        logger = logging.getLogger('seo_linkbuilder.gemini')
+        
+        # Verifica se o título está vazio
+        if not titulo or len(titulo.strip()) == 0:
+            logger.warning(f"Título vazio rejeitado")
+            return False
+            
+        # Normaliza o título e a palavra-âncora para comparação
         titulo_norm = normalizar_texto(titulo.lower())
         palavra_ancora_norm = normalizar_texto(palavra_ancora.lower())
-
-        # 1. Verificar presença da palavra-âncora (flexível)
-        if palavra_ancora and palavra_ancora.strip():
-            ancora_norm = self._normalizar_flex(palavra_ancora)
-            titulo_norm_flex = self._normalizar_flex(titulo)
-            # Aceita plural/singular simples
-            formas_aceitas = [ancora_norm]
-            if ancora_norm.endswith('s'):
-                formas_aceitas.append(ancora_norm.rstrip('s'))
-            else:
-                formas_aceitas.append(ancora_norm + 's')
-            if not any(f in titulo_norm_flex for f in formas_aceitas):
-                self.logger.warning(f"Palavra-âncora '{palavra_ancora}' (normalizada) não encontrada no título '{titulo}'. O título será rejeitado.")
-                return False
-
-        # 2. Verificar se termina com reticências
-        if titulo.strip().endswith("..."):
-            self.logger.warning(f"Título '{titulo}' termina com reticências.")
+        
+        # Verifica se a palavra-âncora está presente
+        if palavra_ancora_norm not in titulo_norm:
+            logger.warning(f"Palavra-âncora '{palavra_ancora}' não encontrada no título: '{titulo}'. O título será rejeitado.")
             return False
-
-        # 3. Verifica similaridade com títulos existentes
+            
+        # Verifica palavras a evitar
+        for palavra in palavras_a_evitar:
+            if normalizar_texto(palavra.lower()) in titulo_norm:
+                logger.warning(f"Palavra proibida '{palavra}' encontrada no título: '{titulo}'. O título será rejeitado.")
+                return False
+                
+        # Verifica similaridade com títulos existentes
         if titulos_existentes:
             for titulo_existente in titulos_existentes:
-                titulo_existente_norm = normalizar_texto(titulo_existente.lower())
-                
-                # Extrai palavras significativas (ignora palavras comuns e muito curtas)
-                palavras_comuns = {'o', 'a', 'os', 'as', 'um', 'uma', 'uns', 'umas', 'e', 'ou', 'mas', 'por', 'para', 'com', 'sem', 'em', 'no', 'na', 'nos', 'nas', 'de', 'do', 'da', 'dos', 'das'}
-                palavras_titulo = {p for p in titulo_norm.split() if len(p) > 3 and p not in palavras_comuns}
-                palavras_existente = {p for p in titulo_existente_norm.split() if len(p) > 3 and p not in palavras_comuns}
-
-                if not palavras_titulo or not palavras_existente:
-                    continue
-
-                # Calcula similaridade usando Jaccard Index
-                palavras_comuns = palavras_titulo.intersection(palavras_existente)
-                similaridade_jaccard = len(palavras_comuns) / len(palavras_titulo.union(palavras_existente))
-                
-                # Verifica padrões numéricos no início
-                match_titulo = re.match(r"^(\d+)\s+(\w+\s+\w+)", titulo_norm)
-                match_existente = re.match(r"^(\d+)\s+(\w+\s+\w+)", titulo_existente_norm)
-                
-                if match_titulo and match_existente:
-                    numero_titulo = match_titulo.group(1)
-                    palavras_titulo = match_titulo.group(2)
-                    numero_existente = match_existente.group(1)
-                    palavras_existente = match_existente.group(2)
-                    
-                    # Rejeita se tiver mesmo número e palavras similares
-                    if numero_titulo == numero_existente and self._calcular_similaridade_palavras(palavras_titulo, palavras_existente) > 0.7:
-                        self.logger.warning(f"Título rejeitado por padrão numérico similar: '{titulo}' vs '{titulo_existente}'")
-                        return False
-                
-                # Verifica similaridade geral
-                if similaridade_jaccard > 0.4:  # Reduzido o limiar de similaridade
-                    self.logger.warning(f"Título rejeitado por alta similaridade ({similaridade_jaccard:.2f}) com título existente: '{titulo}' vs '{titulo_existente}'")
+                similaridade = self._calcular_similaridade_titulos(titulo, titulo_existente)
+                if similaridade > 0.6:  # Limite de similaridade
+                    logger.warning(f"Título muito similar a um existente (similaridade: {similaridade:.2f}). Rejeitado.")
                     return False
-                
-                # Verifica similaridade de estrutura
-                if self._verificar_estrutura_similar(titulo_norm, titulo_existente_norm):
-                    self.logger.warning(f"Título rejeitado por estrutura similar: '{titulo}' vs '{titulo_existente}'")
-                    return False
-
-        # 4. Verifica padrões proibidos no início
-        padroes_proibidos_inicio = [
-            "a evolu", "a analis", "a histor", "a experienc", "a jornada", "a transformac", 
-            "a fascinant", "a importanc", "a influenc", "o impacto", "o guia", "o manual",
-            "o segredo", "o papel", "o poder", "o jeito", "o metodo", "a arte", "a magia",
-            "a tecnica", "o jogo", "a estrateg", "a mecanic", "as vantagens", "as possibilidades",
-            "a abordagem", "a visao", "a perspectiva", "a exploracao", "a descoberta",
-            "o fenomeno", "a ciencia", "o estudo", "a investigacao", "a analise",
-            "o caminho", "a rota", "a trajetoria", "a aventura", "a missao",
-            "a explicacao", "a compreensao", "o entendimento", "a percepcao",
-            "a revolucao", "a inovacao", "a transformacao", "a mudanca", "a alteracao",
-            "o desenvolvimento", "a evolucao", "o crescimento", "a expansao", "o avanco",
-            "a exploracao", "a investigacao", "a pesquisa", "o estudo", "a observacao",
-            "a essencia", "a natureza", "o cerne", "o nucleo", "a base", "o fundamento",
-            "os segredos", "os misterios", "as curiosidades", "os detalhes", "os aspectos",
-            "uma analise", "uma abordagem", "uma visao", "uma perspectiva", "uma exploracao",
-            "um guia", "um manual", "um panorama", "um olhar", "uma investigacao"
-        ]
         
-        for padrao in padroes_proibidos_inicio:
-            if titulo_norm.startswith(padrao):
-                self.logger.warning(f"Título rejeitado por iniciar com padrão proibido '{padrao}': '{titulo}'")
-                return False
-
-        # 5. Verifica estruturas problemáticas
-        estruturas_problematicas = [
-            "dicas para", "truques para", "segredos para", "estrategias para", "metodos para",
-            "guia completo", "guia definitivo", "guia pratico", "guia essencial", "manual de",
-            "tudo sobre", "tudo que", "tudo o que", "o que voce", "o que todo", "por que escolher",
-            "como dominar", "como jogar", "como aproveitar", "como utilizar", "como entender"
-        ]
-        
-        for estrutura in estruturas_problematicas:
-            if estrutura in titulo_norm:
-                self.logger.warning(f"Título rejeitado por conter estrutura problemática '{estrutura}': '{titulo}'")
-                return False
-
-        # 6. Verifica palavras a evitar
-        if palavras_a_evitar:
-            for palavra in palavras_a_evitar:
-                palavra_norm = normalizar_texto(palavra.lower())
-                if f" {palavra_norm} " in f" {titulo_norm} ":
-                    self.logger.warning(f"Título rejeitado por conter palavra a evitar '{palavra}': '{titulo}'")
-                    return False
-
-        # 7. Verifica comprimento
-        palavras = [p for p in titulo.split() if p.strip()]
-        if len(palavras) < 9 or len(palavras) > 15:
-            self.logger.warning(f"Título rejeitado por ter {len(palavras)} palavras (deve ter entre 9-15): '{titulo}'")
-            return False
-
-        # 8. Verifica comprimento em caracteres
-        if len(titulo) > 100:
-            self.logger.warning(f"Título rejeitado por ter {len(titulo)} caracteres (máximo 100): '{titulo}'")
-            return False
-
         return True
-
-    def _calcular_similaridade_palavras(self, palavras1: str, palavras2: str) -> float:
-        """
-        Calcula a similaridade entre duas sequências de palavras usando o algoritmo de Levenshtein.
-        """
-        from Levenshtein import ratio
-        return ratio(palavras1.lower(), palavras2.lower())
-
-    def _verificar_estrutura_similar(self, titulo1: str, titulo2: str) -> bool:
-        """
-        Verifica se dois títulos têm estrutura similar.
-        """
-        # Remove palavras comuns e muito curtas
-        palavras_comuns = {'o', 'a', 'os', 'as', 'um', 'uma', 'uns', 'umas', 'e', 'ou', 'mas', 'por', 'para', 'com', 'sem', 'em', 'no', 'na', 'nos', 'nas', 'de', 'do', 'da', 'dos', 'das'}
-        
-        # Extrai palavras significativas
-        palavras1 = [p for p in titulo1.split() if len(p) > 3 and p not in palavras_comuns]
-        palavras2 = [p for p in titulo2.split() if len(p) > 3 and p not in palavras_comuns]
-        
-        # Verifica se têm o mesmo número de palavras significativas
-        if len(palavras1) != len(palavras2):
-            return False
-        
-        # Verifica se as palavras estão na mesma ordem
-        similaridade = sum(1 for p1, p2 in zip(palavras1, palavras2) if self._calcular_similaridade_palavras(p1, p2) > 0.8)
-        return similaridade / len(palavras1) > 0.7
 
     def verificar_conteudo_gerado(self, conteudo: str, palavra_ancora: str) -> Tuple[bool, str]:
         """
-        Verifica se o conteúdo gerado atende aos requisitos.
+        Verifica se o conteúdo gerado é válido e atende aos critérios estabelecidos.
         
         Args:
-            conteudo: O conteúdo gerado
-            palavra_ancora: A palavra-âncora que deve estar presente
+            conteudo: O conteúdo a ser verificado
+            palavra_ancora: A palavra-âncora que deve estar presente no conteúdo
             
         Returns:
-            Tupla (sucesso, mensagem_erro)
+            Tupla (sucesso, mensagem)
+            - sucesso: Boolean indicando se o conteúdo é válido
+            - mensagem: Mensagem de erro ou sucesso
         """
         if not conteudo:
             return False, "Conteúdo vazio"
@@ -1014,11 +893,13 @@ class GeminiHandler:
 - Usar uma estrutura diferente (ex: pergunta provocativa, frase de efeito, metáfora, afirmação ousada, etc.)
 - NÃO repetir padrões comuns como 'Erros Críticos', 'Dicas Essenciais', 'Guia Completo', etc.
 - Ser original, instigante e fugir do óbvio.
+- A palavra-âncora '{palavra_ancora}' pode ser usada se encaixar naturalmente, mas não é obrigatória.
+
 Exemplos de estruturas:
-1. Pergunta provocativa: "Que verdade sobre {palavra_ancora} iniciantes descobrem tarde demais (e custa caro)?"
-2. Frase de efeito: "{palavra_ancora}: Convertendo Simples Palpites em Decisões Calculadas"
-3. Metáfora: "Entendendo {palavra_ancora}: Menos [Comparação A Menos Atrativa] e Mais [Comparação B Mais Estratégica/Interessante]."
-4. Afirmação ousada: "Quase Tudo Que Você Sabe Sobre {palavra_ancora} Pode Estar Errado."
+1. Pergunta provocativa: "Que verdade sobre entretenimento online iniciantes descobrem tarde demais?"
+2. Frase de efeito: "Convertendo Simples Palpites em Decisões Calculadas"
+3. Metáfora: "Entendendo o Jogo: Menos Sorte, Mais Estratégia"
+4. Afirmação ousada: "Quase Tudo Que Você Sabe Sobre Jogos Online Pode Estar Errado."
 """
 
         # Aumenta levemente a temperatura para títulos
@@ -1050,7 +931,7 @@ Exemplos de estruturas:
                 # Rejeita títulos muito similares aos já aceitos
                 if sucesso:
                     titulo_norm = normalizar_texto(titulo_corrigido.lower())
-                    if any(self._calcular_similaridade_palavras(titulo_norm, normalizar_texto(t.lower())) > 0.7 for t in titulos_existentes):
+                    if any(self._calcular_similaridade_titulos(titulo_norm, normalizar_texto(t.lower())) > 0.7 for t in titulos_existentes):
                         self.logger.warning(f"Título rejeitado por ser muito similar a outro já aceito: '{titulo_corrigido}'")
                         continue
                     titulos.append(titulo_corrigido)
@@ -1063,10 +944,12 @@ Exemplos de estruturas:
 
     def gerar_conteudo_por_titulo(self, dados: Dict[str, str], titulo: str) -> Tuple[str, Dict[str, float], Optional[Dict]]:
         """
-        Gera conteúdo para um título específico.
+        Gera conteúdo baseado em um título específico.
+        
         Args:
-            dados: Dicionário com os dados necessários
-            titulo: Título pré-gerado para o conteúdo
+            dados: Dicionário com os dados para geração
+            titulo: Título específico para o conteúdo
+            
         Returns:
             Tupla (conteudo, metricas, info_link)
         """
@@ -1104,6 +987,53 @@ Exemplos de estruturas:
         self.logger.info("Conteúdo gerado com sucesso")
         return conteudo_processado, metricas, info_link
 
+    def calcular_metricas_conteudo(self, dados: Dict[str, str], titulo: str) -> Optional[Dict[str, float]]:
+        """
+        Calcula as métricas estimadas para um conteúdo sem gerá-lo.
+        
+        Args:
+            dados: Dicionário com os dados para geração
+            titulo: Título específico para o conteúdo
+            
+        Returns:
+            Dicionário com as métricas estimadas ou None em caso de erro
+        """
+        logger = logging.getLogger('seo_linkbuilder.gemini')
+        
+        try:
+            # Carrega o template do prompt
+            prompt_template = self.carregar_prompt_template('conteudo')
+            
+            # Constrói o prompt
+            prompt = self._construir_prompt(dados, prompt_template)
+            
+            # Calcula tokens de entrada
+            input_tokens = contar_tokens(prompt)
+            
+            # Estima tokens de saída (baseado em experiências anteriores)
+            estimated_output_tokens = 2000  # Estimativa média para um artigo
+            
+            # Calcula custo estimado
+            input_cost = (input_tokens / 1000) * GEMINI_INPUT_COST_PER_1K
+            output_cost = (estimated_output_tokens / 1000) * GEMINI_OUTPUT_COST_PER_1K
+            total_cost = input_cost + output_cost
+            
+            # Estima número de palavras e caracteres
+            estimated_words = estimated_output_tokens // 1.3  # Média de 1.3 tokens por palavra
+            estimated_chars = estimated_words * 5  # Média de 5 caracteres por palavra
+            
+            return {
+                'input_token_count': input_tokens,
+                'output_token_count': estimated_output_tokens,
+                'cost_usd': total_cost,
+                'num_palavras': int(estimated_words),
+                'num_caracteres': int(estimated_chars)
+            }
+            
+        except Exception as e:
+            logger.error(f"Erro ao calcular métricas do conteúdo: {e}")
+            return None
+
     def _normalizar_flex(self, texto):
         return unidecode(texto.lower().strip())
 
@@ -1128,3 +1058,131 @@ Exemplos de estruturas:
                 time.sleep(wait_time)
             except Exception as e:
                 raise
+
+    def _calcular_similaridade_palavras(self, palavras1: str, palavras2: str) -> float:
+        """
+        Calcula a similaridade entre duas sequências de palavras usando o algoritmo de Levenshtein.
+        """
+        return ratio(palavras1.lower(), palavras2.lower())
+
+    def _verificar_estrutura_similar(self, titulo1: str, titulo2: str) -> bool:
+        """
+        Verifica se dois títulos têm estrutura similar.
+        """
+        # Remove palavras comuns e muito curtas
+        palavras_comuns = {'o', 'a', 'os', 'as', 'um', 'uma', 'uns', 'umas', 'e', 'ou', 'mas', 'por', 'para', 'com', 'sem', 'em', 'no', 'na', 'nos', 'nas', 'de', 'do', 'da', 'dos', 'das'}
+        
+        # Extrai palavras significativas
+        palavras1 = [p for p in titulo1.split() if len(p) > 3 and p not in palavras_comuns]
+        palavras2 = [p for p in titulo2.split() if len(p) > 3 and p not in palavras_comuns]
+        
+        # Verifica se têm o mesmo número de palavras significativas
+        if len(palavras1) != len(palavras2):
+            return False
+        
+        # Verifica se as palavras estão na mesma ordem
+        similaridade = sum(1 for p1, p2 in zip(palavras1, palavras2) if self._calcular_similaridade_palavras(p1, p2) > 0.8)
+        return similaridade / len(palavras1) > 0.7
+
+    def _extrair_tema_principal(self, titulo: str) -> str:
+        """Extrai o tema principal de um título."""
+        temas = {
+            "Cinema": ["filme", "cinema", "diretor", "ator", "atriz", "oscar"],
+            "Séries": ["série", "netflix", "temporada", "episódio", "hbo", "disney+"],
+            "Games": ["game", "jogo", "playstation", "xbox", "nintendo", "steam"],
+            "Tecnologia": ["tech", "smartphone", "app", "gadget", "android", "iphone"],
+            "Música": ["música", "cantor", "banda", "álbum", "spotify", "show"],
+            "Esportes": ["futebol", "basquete", "esporte", "atleta", "campeonato"],
+            "Lifestyle": ["moda", "estilo", "tendência", "dicas", "lifestyle"],
+            "Cultura Pop": ["pop", "viral", "meme", "influencer", "youtube"]
+        }
+        
+        titulo_lower = titulo.lower()
+        for tema, palavras_chave in temas.items():
+            if any(palavra in titulo_lower for palavra in palavras_chave):
+                return tema
+        return "Geral"
+
+    def _extrair_estrutura(self, titulo: str) -> str:
+        """Extrai o padrão de estrutura de um título."""
+        import re
+        
+        # Remove números específicos
+        estrutura = re.sub(r'\d+', '#', titulo)
+        # Remove palavras específicas mantendo estrutura
+        estrutura = re.sub(r'\b\w+\b', 'PALAVRA', estrutura)
+        return estrutura
+
+    async def gerar_titulo(self, palavra_ancora: str, prompt: str) -> str:
+        """Gera um título usando o modelo e aprende com sucessos anteriores."""
+        tema_principal = self._extrair_tema_principal(palavra_ancora)
+        
+        # Busca padrões bem-sucedidos
+        padroes_sucesso = self.db.get_successful_patterns(tema_principal)
+        titulos_similares = self.db.get_similar_successful_titles(palavra_ancora, tema_principal)
+        
+        # Adiciona exemplos bem-sucedidos ao prompt
+        if titulos_similares:
+            prompt += "\n\nExemplos de títulos bem-sucedidos:\n"
+            for titulo in titulos_similares:
+                prompt += f"- {titulo['title']}\n"
+        
+        # Gera o título
+        titulo = await super().gerar_titulo(palavra_ancora, prompt)
+        
+        # Armazena o novo título
+        estrutura = self._extrair_estrutura(titulo)
+        temas_secundarios = [tema for tema in self._extrair_temas_secundarios(titulo)]
+        
+        title_id = self.db.add_title(
+            title=titulo,
+            anchor_word=palavra_ancora,
+            main_theme=tema_principal,
+            structure_type=estrutura,
+            themes=temas_secundarios
+        )
+        
+        return titulo
+
+    def _extrair_temas_secundarios(self, titulo: str) -> List[str]:
+        """Extrai temas secundários de um título."""
+        temas = []
+        titulo_lower = titulo.lower()
+        
+        # Mapeia palavras-chave para temas
+        mapeamento_temas = {
+            "Entretenimento": ["diversão", "lazer", "hobby", "passatempo"],
+            "Tecnologia": ["digital", "online", "virtual", "internet"],
+            "Cultura": ["arte", "cultura", "história", "tradição"],
+            "Lifestyle": ["vida", "estilo", "dia a dia", "rotina"],
+            "Social": ["amigos", "família", "relacionamento", "pessoas"]
+        }
+        
+        for tema, palavras in mapeamento_temas.items():
+            if any(palavra in titulo_lower for palavra in palavras):
+                temas.append(tema)
+        
+        return temas
+
+    def atualizar_desempenho_titulo(self, titulo: str, performance_score: float, feedback_score: float = None):
+        """Atualiza o desempenho de um título e aprende com seu sucesso."""
+        try:
+            # Encontra o ID do título no banco
+            with sqlite3.connect(self.db.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT id FROM titles WHERE title = ?", (titulo,))
+                result = cursor.fetchone()
+                
+                if result:
+                    title_id = result[0]
+                    # Atualiza as métricas
+                    self.db.update_title_performance(title_id, performance_score, feedback_score)
+                    
+                    # Se o título foi bem-sucedido, atualiza o contador de estruturas
+                    if performance_score > 0.7 or (feedback_score and feedback_score > 0.7):
+                        estrutura = self._extrair_estrutura(titulo)
+                        tema = self._extrair_tema_principal(titulo)
+                        self.db.update_structure_success(estrutura, tema)
+                        
+        except Exception as e:
+            self.logger.error(f"Erro ao atualizar desempenho: {e}")

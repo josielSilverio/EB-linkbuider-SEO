@@ -1,6 +1,29 @@
-# SEO-LinkBuilder - Versão 2.5
+## O que há de novo na versão 3.1?
 
-**SEO-LinkBuilder** é uma solução automatizada para geração de conteúdo em larga escala para Link Building SEO. Utilizando inteligência artificial para gerar conteúdo de alta qualidade, o script gerencia o fluxo completo desde dados iniciais em uma planilha do Google Sheets até a criação de documentos no Google Docs com conteúdo otimizado.
+*   **Processamento em Duas Etapas**: Agora você pode escolher gerar apenas títulos, apenas conteúdos, ou ambos em uma única execução.
+*   **Sistema de Aprendizado**: Implementação de um banco de dados SQLite para armazenar e aprender com os títulos gerados.
+*   **Feedback de Títulos**: Sistema de avaliação de títulos gerados para melhorar a qualidade das próximas gerações.
+*   **Controle de Rate Limit**: Implementação de sistema de retry com backoff exponencial para lidar com limites de API.
+*   **Verificação de Linhas Processadas**: O script agora verifica e para automaticamente quando todas as linhas necessárias foram processadas.
+*   **Melhor Gerenciamento de Memória**: Otimizações para lidar com grandes volumes de dados.
+
+## O que há de novo na versão 3.0?
+
+*   **Interface Interativa Completa**: Seleção de Planilha/Aba e Pasta do Drive via menus no terminal, eliminando a necessidade de configurar IDs no `.env`.
+*   **Menu de Categorias Aprimorado**: Selecione por palavra-âncora, todos os itens ou quantidade aleatória, com estimativa de custo clara antes de prosseguir.
+*   **Geração de Conteúdo Otimizada**:
+    *   Inclusão de descrições de jogos e instruções de estilo específicas por jogo/categoria no prompt do Gemini para maior relevância e unicidade.
+    *   Verificação e correção automática do tamanho do título gerado (9-15 palavras).
+*   **Integração Gemini Robusta**: Uso do modelo `gemini-1.5-flash` (ou configurável), com tratamento de erros e estimativa de custos aprimorada.
+*   **Controle de Qualidade Pós-Geração (Opcional)**:
+    *   Verificação e alerta para títulos duplicados entre os documentos gerados na mesma execução.
+    *   Detecção de similaridade de conteúdo entre documentos (usando TF-IDF básico) para identificar possíveis repetições.
+    *   Verificação e substituição automática de termos proibidos/sensíveis no conteúdo gerado.
+*   **Melhor Gerenciamento de Custos**: Estimativas mais claras no menu e baseadas nos preços configuráveis no `.env`.
+*   **Logging Detalhado**: Logs em arquivo (`logs/`) com codificação UTF-8 para facilitar diagnóstico de erros, incluindo informações sobre qual linha/célula está sendo atualizada.
+*   **Tratamento de Erros Aprimorado**: Mensagens de erro mais claras e tratamento específico para problemas comuns de autenticação, API e acesso a arquivos.
+*   **Estrutura de Código Refatorada**: Melhor organização em módulos (`src/`) para facilitar a manutenção e futuras expansões.
+*   **README Atualizado (Versão 2.4)**: Documentação mais completa e clara, refletindo as últimas funcionalidades e refinamentos no processo de geração de conteúdo. 
 
 ## Descrição
 
@@ -43,6 +66,11 @@ Este projeto automatiza o fluxo de trabalho para geração de conteúdo SEO a pa
     *   **Recomendado:** [**Cursor**](https://www.cursor.com/) - Um editor de código moderno baseado no VSCode, mas com funcionalidades de IA profundamente integradas que podem aumentar sua produtividade. Baixe a versão para Windows no site e siga o instalador.
     *   **Alternativa:** [**Windsurf Editor**](https://windsurf.com/editor) - Outra opção de IDE com foco em IA, que pode ser uma alternativa interessante. Verifique o site para download e instalação no Windows.
 
+### Dependências do Sistema
+
+*   **SQLite3**: O projeto agora utiliza SQLite para armazenamento de dados. Na maioria dos sistemas, o SQLite já vem instalado com o Python.
+*   **Google Chrome**: Recomendado para autenticação OAuth2 com o Google.
+
 ### APIs e Credenciais do Google
 
 *   Acesso às seguintes APIs do Google Cloud (habilite-as no seu projeto do Google Cloud Console):
@@ -64,7 +92,7 @@ Este projeto automatiza o fluxo de trabalho para geração de conteúdo SEO a pa
     ```
     *Observação: Se você já clonou o repositório anteriormente, use `git pull` dentro da pasta para obter as atualizações mais recentes.*
 
-2.  Crie e ative um ambiente virtual Python (altamente recomendado):
+2.  Crie e ative um ambiente virtual Python (obrigatório):
     ```bash
     # Certifique-se de que o Python está no PATH (ver pré-requisitos)
     python -m venv venv
@@ -86,101 +114,69 @@ Este projeto automatiza o fluxo de trabalho para geração de conteúdo SEO a pa
 
 3.  Instale as dependências Python dentro do ambiente virtual ativo:
     ```bash
+    # Atualiza o pip para a versão mais recente
+    python -m pip install --upgrade pip
+    
+    # Instala as dependências do projeto
     pip install -r requirements.txt
     ```
 
-4.  Crie um arquivo `.env` na raiz do projeto (na mesma pasta que o `main.py`). Use o exemplo abaixo como base, **substituindo os valores de exemplo pelas suas chaves reais**:
+4.  Crie um arquivo `.env` na raiz do projeto (na mesma pasta que o `main_duas_etapas.py`). Use o exemplo abaixo como base, **substituindo os valores de exemplo pelas suas chaves reais**:
     ```dotenv
     # Credenciais e Configurações - NÃO FAÇA COMMIT DESTE ARQUIVO!
     
     # Google Cloud / Gemini API Key
     GOOGLE_API_KEY="SUA_API_KEY_GEMINI_AQUI"
-    # GOOGLE_CLOUD_API_KEY="SUA_API_KEY_GOOGLE_CLOUD_AQUI" # Opcional, pode ser a mesma acima se aplicável
-    
-    # Google Sheets (SERÁ SOLICITADO NO INÍCIO - Deixe comentado ou remova)
-    # SPREADSHEET_ID="ID_DA_SUA_PLANILHA_PADRAO"
-    # SHEET_NAME="NOME_DA_ABA_PADRAO"
-    
-    # Google Drive (SERÁ SOLICITADO NO INÍCIO - Deixe comentado ou remova)
-    # DRIVE_FOLDER_ID="ID_DA_PASTA_NO_DRIVE_PARA_SALVAR_DOCS"
     
     # Caminho para o arquivo de credenciais OAuth 2.0 (obrigatório)
     CREDENTIALS_FILE_PATH="credentials/credentials.json"
     
-    # Configurações do Gemini (Exemplos - ajuste conforme necessário)
-    GEMINI_MODEL="gemini-1.5-flash" # Modelo mais recente e rápido no momento da escrita
-    GEMINI_MAX_OUTPUT_TOKENS="8192"  # Limite máximo de tokens para a resposta do modelo
-    GEMINI_TEMPERATURE="0.4"        # Controle de criatividade (0.0 = determinístico, 1.0 = mais criativo)
+    # Configurações do Gemini
+    GEMINI_MODEL="gemini-1.5-flash"
+    GEMINI_MAX_OUTPUT_TOKENS="8192"
+    GEMINI_TEMPERATURE="0.4"
     
-    # Preços Gemini (USD por 1 Milhão de tokens - Verifique os preços atuais!)
-    # Usando preços de Abril/2024 para gemini-1.5-flash como exemplo
-    GEMINI_PRECO_ENTRADA_MILHAO_TOKENS="0.35" # Custo por 1 Milhão de tokens de entrada (prompt)
-    GEMINI_PRECO_SAIDA_MILHAO_TOKENS="1.05" # Custo por 1 Milhão de tokens de saída (resposta)
+    # Preços Gemini (USD por 1 Milhão de tokens)
+    GEMINI_PRECO_ENTRADA_MILHAO_TOKENS="0.35"
+    GEMINI_PRECO_SAIDA_MILHAO_TOKENS="1.05"
     
-    # (Opcional) Configurações de formatação para os documentos (padrões definidos no código)
-    # TITULO_TAMANHO=17
-    # SUBTITULOS_ESTILO="NEGRITO"
-    # CONTEUDO_COLUNA_DRIVE="J" # Coluna onde a URL do Doc será salva (Padrão J)
+    # Configurações de Delay e Retry
+    DELAY_ENTRE_CHAMADAS_GEMINI=2  # Segundos entre chamadas à API
+    MAX_RETRIES=3                  # Número máximo de tentativas em caso de erro
     ```
-    **Importante:** Certifique-se de que o arquivo `.env** não** seja adicionado ao Git (ele deve estar no `.gitignore`).
 
-5.  Coloque seu arquivo de credenciais OAuth (`credentials.json`) baixado do Google Cloud Console dentro da pasta `credentials/`, conforme configurado no `.env` (`CREDENTIALS_FILE_PATH`).
+5.  Coloque seu arquivo de credenciais OAuth (`credentials.json`) baixado do Google Cloud Console dentro da pasta `credentials/`.
+
+6.  Inicialize o banco de dados SQLite (primeira execução apenas):
+    ```bash
+    python check_db.py
+    ```
 
 ## Uso
 
 Execute o script principal a partir do terminal, **com o ambiente virtual (`venv`) ativado**:
 
 ```bash
-# Execução padrão (processa os 10 primeiros itens válidos após seleção)
+# Execução com menu interativo
 python main_duas_etapas.py
 
-# Modo teste (processa apenas o PRIMEIRO item válido selecionado, mas ATUALIZA a planilha para esse item)
-# Útil para verificar rapidamente o fluxo sem gastar muitas chamadas de API.
-python main_duas_etapas.py --teste
-
-# Processar um número específico de itens válidos após seleção
-python main_duas_etapas.py --limite 5
-
-# Processar TODOS os itens válidos selecionados (sem limite)
-# CUIDADO: Pode gerar custos significativos na API do Gemini dependendo da quantidade.
-python main_duas_etapas.py --todos
-
-# Verificar e corrigir títulos duplicados em documentos existentes
-python main_duas_etapas.py --verificar-duplicados
-
-# Verificar e corrigir similaridade entre conteúdos existentes
-python main_duas_etapas.py --verificar-similaridade
-
-# Verificar e corrigir termos proibidos em documentos existentes
-python main_duas_etapas.py --verificar-termos
+# Verificar estatísticas do banco de dados de títulos
+python check_learning_db.py
 ```
 
 ### Menus Interativos
 
-Ao executar, o script apresentará os seguintes menus:
+O script agora apresenta um menu inicial com três opções:
 
-1.  **Configuração da Planilha**: 
-    - Pede o **ID ou a URL completa** da planilha Google Sheets que contém os dados.
-    - Após validar o acesso, lista as abas (páginas) disponíveis para você selecionar pelo número ou nome.
-    - A última seleção é salva e oferecida como opção padrão nas próximas execuções.
+1.  **Gerar apenas títulos**: Use esta opção primeiro para gerar e avaliar títulos.
+2.  **Gerar apenas conteúdos**: Use após ter títulos aprovados para gerar os artigos.
+3.  **Gerar títulos e conteúdos**: Processo completo em uma única execução.
 
-2.  **Configuração da Pasta do Google Drive**: 
-    - Pede o **ID ou a URL completa** da pasta no Google Drive onde os documentos gerados pelo script serão salvos.
-    - Certifique-se de que a conta que autoriza o script tenha permissão de escrita nesta pasta.
-    - A última seleção é salva e oferecida como opção padrão nas próximas execuções.
+Em seguida, você pode escolher:
 
-3.  **Seleção de Categorias/Quantidade**: 
-    - Mostra um resumo dos itens encontrados na aba selecionada, agrupados por categorias (baseadas na coluna "Palavra-Âncora").
-    - Permite escolher processar:
-        *   Todos os itens válidos encontrados.
-        *   Itens de uma categoria específica (ex: todos os "Aviator").
-        *   Uma quantidade específica de itens aleatórios dentre os válidos.
-        *   **Processar por ID Específico (Opção 'L')**: Permite digitar o ID de uma linha específica. Em seguida, o script pergunta quantos itens devem ser processados a partir dessa linha (inclusive ela).
-    - Exibe o custo estimado por categoria e total.
-
-4.  **Confirmação de Custo**: 
-    - Exibe o custo total estimado para a seleção feita, com base nos preços configurados no `.env` e na contagem estimada de tokens.
-    - Pede confirmação ('s' ou 'n') para prosseguir com a geração.
+1.  **Gerar tudo**: Processa todas as linhas que não têm título/conteúdo.
+2.  **Gerar número específico**: Define quantos itens processar.
+3.  **Cancelar**: Volta ao menu anterior.
 
 ### Verificações de Qualidade
 
@@ -293,10 +289,6 @@ Para que o script funcione corretamente, a planilha e a aba selecionadas devem t
 - Os preços variam conforme o modelo (`GEMINI_MODEL`) escolhido no `.env`. Verifique a [página de preços oficial do Google AI](https://ai.google.dev/pricing) para os valores mais recentes.
 - O script exibe uma **estimativa de custo** antes de iniciar o processamento em lote, com base nos preços definidos no seu `.env`. **Esta é apenas uma estimativa**, e o custo real pode variar ligeiramente.
 
-## Contribuições
-
-Contribuições são bem-vindas! Sinta-se à vontade para abrir *issues* para reportar bugs ou sugerir melhorias, e *pull requests* para propor alterações no código.
-
 ## Guia Detalhado dos Scripts (`.py`)
 
 Aqui está um detalhamento do propósito e das funções principais de cada arquivo Python no diretório `src/`, além do `main.py`:
@@ -397,20 +389,52 @@ O sistema agora inclui um conjunto abrangente de instruções específicas para 
 - **Logging Detalhado**: Sistema abrangente de logs para rastrear todo o processo de geração.
 - **Validação de Dados**: Verificações robustas em cada etapa do processo.
 
-## O que há de novo na versão 3.0?
+# Configuração do Ambiente Virtual
 
-*   **Interface Interativa Completa**: Seleção de Planilha/Aba e Pasta do Drive via menus no terminal, eliminando a necessidade de configurar IDs no `.env`.
-*   **Menu de Categorias Aprimorado**: Selecione por palavra-âncora, todos os itens ou quantidade aleatória, com estimativa de custo clara antes de prosseguir.
-*   **Geração de Conteúdo Otimizada**:
-    *   Inclusão de descrições de jogos e instruções de estilo específicas por jogo/categoria no prompt do Gemini para maior relevância e unicidade.
-    *   Verificação e correção automática do tamanho do título gerado (9-15 palavras).
-*   **Integração Gemini Robusta**: Uso do modelo `gemini-1.5-flash` (ou configurável), com tratamento de erros e estimativa de custos aprimorada.
-*   **Controle de Qualidade Pós-Geração (Opcional)**:
-    *   Verificação e alerta para títulos duplicados entre os documentos gerados na mesma execução.
-    *   Detecção de similaridade de conteúdo entre documentos (usando TF-IDF básico) para identificar possíveis repetições.
-    *   Verificação e substituição automática de termos proibidos/sensíveis no conteúdo gerado.
-*   **Melhor Gerenciamento de Custos**: Estimativas mais claras no menu e baseadas nos preços configuráveis no `.env`.
-*   **Logging Detalhado**: Logs em arquivo (`logs/`) com codificação UTF-8 para facilitar diagnóstico de erros, incluindo informações sobre qual linha/célula está sendo atualizada.
-*   **Tratamento de Erros Aprimorado**: Mensagens de erro mais claras e tratamento específico para problemas comuns de autenticação, API e acesso a arquivos.
-*   **Estrutura de Código Refatorada**: Melhor organização em módulos (`src/`) para facilitar a manutenção e futuras expansões.
-*   **README Atualizado (Versão 2.4)**: Documentação mais completa e clara, refletindo as últimas funcionalidades e refinamentos no processo de geração de conteúdo. 
+Antes de executar o projeto, recomenda-se criar um ambiente virtual para isolar as dependências do Python. Siga os passos abaixo:
+
+## 1. Crie o ambiente virtual
+
+No terminal, navegue até a pasta do projeto e execute:
+
+### Windows
+```powershell
+python -m venv venv
+```
+
+### Linux/Mac
+```bash
+python3 -m venv venv
+```
+
+## 2. Ative o ambiente virtual
+
+### Windows
+```powershell
+.\venv\Scripts\activate
+```
+
+### Linux/Mac
+```bash
+source venv/bin/activate
+```
+
+Você saberá que o ambiente está ativado quando aparecer `(venv)` no início da linha do terminal.
+
+## 3. Instale as dependências
+
+Com o ambiente virtual ativado, execute:
+
+```sh
+pip install -r requirements.txt
+```
+
+Se necessário, atualize o pip:
+```sh
+pip install --upgrade pip
+```
+
+---
+
+# (Seção original do README continua abaixo)
+

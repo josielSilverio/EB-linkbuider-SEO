@@ -3,10 +3,12 @@ import os
 import time
 import logging
 import pandas as pd
+import asyncio
 from typing import Dict, List, Tuple, Optional
 from datetime import datetime
 from collections import Counter
 import json
+import math
 
 from src.utils import configurar_logging
 from src.sheets_handler import SheetsHandler
@@ -48,11 +50,15 @@ def apresentar_menu_planilha(sheets_handler: SheetsHandler, ultima_selecao: Dict
             if usar_ultima == '0':
                 return None
             if usar_ultima == 'S':
-                return (
-                    ultima_selecao.get('spreadsheet_id'),
-                    ultima_selecao.get('sheet_name', 'Sheet1'),
-                    ultima_selecao.get('drive_folder_id')
-                )
+                spreadsheet_id = ultima_selecao.get('spreadsheet_id')
+                sheet_name = ultima_selecao.get('sheet_name', 'Sheet1')
+                drive_folder_id = ultima_selecao.get('drive_folder_id')
+                
+                if not spreadsheet_id or not drive_folder_id:
+                    print("Configuração incompleta. Por favor, configure manualmente.")
+                    return None
+                    
+                return (str(spreadsheet_id), str(sheet_name), str(drive_folder_id))
 
         # Lista todas as planilhas disponíveis
         planilhas = sheets_handler.obter_planilhas_disponiveis()
@@ -154,14 +160,19 @@ def apresentar_menu_planilha(sheets_handler: SheetsHandler, ultima_selecao: Dict
 def apresentar_menu_processamento() -> str:
     """Apresenta menu para seleção do tipo de processamento"""
     print("\nOpções de processamento:")
-    print("1. Gerar apenas títulos")
-    print("2. Gerar apenas conteúdos")
-    print("3. Gerar títulos e conteúdos")
+    print("1. Gerar apenas títulos (use esta opção primeiro)")
+    print("2. Gerar apenas conteúdos (use após ter títulos)")
+    print("3. Gerar títulos e conteúdos (processo completo)")
     print("0. Sair/Cancelar")
 
     while True:
-        escolha = input("\nEscolha uma opção: ")
+        escolha = input("\nEscolha uma opção (recomendado começar com 1): ")
         if escolha in ["0", "1", "2", "3"]:
+            if escolha == "2":
+                print("\nATENÇÃO: Modo 2 requer que as linhas já tenham títulos.")
+                confirma = input("Tem certeza que deseja continuar? (S/N): ").upper()
+                if confirma != "S":
+                    continue
             return escolha
         print("Opção inválida. Tente novamente.")
 
@@ -174,7 +185,7 @@ def apresentar_menu_quantidade() -> Optional[int]:
     while True:
         escolha = input("\nEscolha uma opção: ").strip()
         if escolha == '1':
-            return None  # None = processar tudo
+            return -1  # Valor especial para indicar "processar tudo"
         elif escolha == '2':
             try:
                 qtd = int(input("Digite o número de itens a processar: ").strip())
@@ -185,150 +196,118 @@ def apresentar_menu_quantidade() -> Optional[int]:
             except ValueError:
                 print("Valor inválido. Tente novamente.")
         elif escolha == '3':
-            return 'cancelar'
+            return None  # None significa cancelar
         else:
             print("Opção inválida. Tente novamente.")
 
-def processar_linhas(sheets: SheetsHandler, gemini: GeminiHandler, docs: DocsHandler, df: pd.DataFrame, 
+async def processar_linhas(sheets: SheetsHandler, gemini: GeminiHandler, docs: DocsHandler, df: pd.DataFrame, 
                     dynamic_column_map: Dict, modo_teste: bool = False, limite_linhas: Optional[int] = None,
                     modo_processamento: str = "3", id_inicial: Optional[str] = None,
                     spreadsheet_id: Optional[str] = None, sheet_name: Optional[str] = None):
-    """
-    Processa as linhas selecionadas de acordo com o modo escolhido:
-    - modo_processamento: "1" para apenas títulos, "2" para apenas conteúdos, "3" para ambos
-    - id_inicial: ID específico para começar o processamento
-    """
-    logger = logging.getLogger('seo_linkbuilder.main')
-    
-    # Contador para linhas processadas
-    linhas_processadas = 0
-    
-    # Lista para armazenar títulos gerados
-    titulos_gerados = []
-    
-    # Filtra o DataFrame se houver ID inicial
-    if id_inicial:
-        col_id = dynamic_column_map['id']['name'] if isinstance(dynamic_column_map['id'], dict) else dynamic_column_map['id']
-        # Garante que o DataFrame está ordenado pela ordem original
-        df = df.reset_index(drop=True)
-        idx_inicio = df.index[df[col_id] == id_inicial].tolist()
-        if not idx_inicio:
-            logger.warning(f"Nenhuma linha encontrada com ID {id_inicial}")
-            return
-        idx_inicio = idx_inicio[0]
-        df = df.iloc[idx_inicio:]
-    
-    # Primeira etapa: Geração de títulos (se necessário)
-    if modo_processamento in ["1", "3"]:
-        logger.info("Iniciando primeira etapa: Geração de títulos")
-        col_titulo = dynamic_column_map['titulo']['name'] if isinstance(dynamic_column_map['titulo'], dict) else dynamic_column_map['titulo']
+    """Processa as linhas da planilha"""
+    logger = logging.getLogger('seo_linkbuilder')
+    menu = MenuHandler()
+    processor = ContentProcessor()
+
+    try:
+        # Configurações iniciais
+        total_linhas = len(df)
+        if limite_linhas:
+            total_linhas = min(total_linhas, limite_linhas)
+        
+        linhas_processadas = 0
+        erros = 0
+        
+        # Itera sobre as linhas
         for idx, row in df.iterrows():
-            titulo_atual = row.get(col_titulo)
-            if titulo_atual and str(titulo_atual).strip() and str(titulo_atual).strip().lower() != "sem titulo":
-                continue  # Pula linhas já preenchidas com tema/título
             if limite_linhas and linhas_processadas >= limite_linhas:
                 break
-            dados = sheets.extrair_dados_linha(row, dynamic_column_map)
-            titulo_escolhido = None
-            tentativas = 0
-            temperatura_original = getattr(gemini, 'temperatura_atual', 0.7)
-            while not titulo_escolhido:
-                tentativas += 1
-                # Aumenta a temperatura a cada tentativa para forçar mais criatividade
-                if hasattr(gemini, 'temperatura_atual'):
-                    gemini.temperatura_atual = min(1.0, temperatura_original + 0.1 * tentativas)
-                titulos = gemini.gerar_titulos(dados, quantidade=3)
-                for titulo in titulos:
-                    titulo_norm = titulo.strip().lower()
-                    if titulo_norm in titulos_gerados:
-                        continue
-                    titulo_escolhido = titulo
-                    break
-                if tentativas > 10:
-                    logger.warning(f"Não foi possível gerar título original para ID {dados['id']} após 10 tentativas. Pulando linha.")
-                    break
-            # Restaura temperatura original
-            if hasattr(gemini, 'temperatura_atual'):
-                gemini.temperatura_atual = temperatura_original
-            if not titulo_escolhido:
-                continue
-            sheet_row_num = row['sheet_row_num'] if 'sheet_row_num' in row else row.name + 2
-            sheets.atualizar_titulo_documento(sheet_row_num, titulo_escolhido, spreadsheet_id, sheet_name)
-            print(f"Título gerado para ID {dados['id']}: {titulo_escolhido}")
-            titulos_gerados.append((dados['id'], titulo_escolhido))
-            linhas_processadas += 1
-    
-    # Recarrega o DataFrame após gerar títulos, se for modo 3
-    if modo_processamento == "3":
-        df = sheets.carregar_dados_planilha(spreadsheet_id, sheet_name)
 
-    # Segunda etapa: Geração de conteúdo (se necessário)
-    if modo_processamento in ["2", "3"]:
-        logger.info("Iniciando segunda etapa: Geração de conteúdo")
-        conteudos_lote = []
-        linhas_processadas_lote = 0
-        col_titulo = dynamic_column_map['titulo']['name'] if isinstance(dynamic_column_map['titulo'], dict) else dynamic_column_map['titulo']
-        col_url_doc = dynamic_column_map['url_documento']['name'] if isinstance(dynamic_column_map['url_documento'], dict) else dynamic_column_map['url_documento']
-        for _, row in df.iterrows():
-            titulo_atual = row.get(col_titulo)
-            url_doc_atual = row.get(col_url_doc)
-            if titulo_atual and str(titulo_atual).strip() and str(titulo_atual).strip().lower() != "sem titulo" and url_doc_atual and str(url_doc_atual).strip():
-                continue  # Pula linhas já preenchidas com tema e conteúdo
-            if limite_linhas and linhas_processadas_lote >= limite_linhas:
-                break
-            dados = sheets.extrair_dados_linha(row, dynamic_column_map)
-            conteudo, metricas, info_link = gemini.gerar_conteudo_por_titulo(dados, dados['titulo'])
-            if not conteudo:
-                logger.warning(f"Falha ao gerar conteúdo para ID {dados['id']}")
-                continue
-            conteudos_lote.append({
-                'dados': dados,
-                'conteudo': conteudo,
-                'metricas': metricas,
-                'row': row
-            })
-            linhas_processadas_lote += 1
-        # Soma métricas
-        total_tokens_entrada = sum(c['metricas'].get('input_token_count', 0) for c in conteudos_lote)
-        total_tokens_saida = sum(c['metricas'].get('output_token_count', 0) for c in conteudos_lote)
-        total_custo = sum(c['metricas'].get('cost_usd', 0) for c in conteudos_lote)
-        total_palavras = sum(c['metricas'].get('num_palavras', 0) for c in conteudos_lote)
-        total_caracteres = sum(c['metricas'].get('num_caracteres', 0) for c in conteudos_lote)
-        print(f"\nResumo do lote de conteúdos gerados ({linhas_processadas_lote}):")
-        for c in conteudos_lote:
-            dados = c['dados']
-            print(f"ID: {dados.get('id', '')} | Título: {dados.get('titulo', '')} | Palavra-âncora: {dados.get('palavra_ancora', '')} | Site: {dados.get('site', '')}")
-        print(f"Tokens de entrada: {total_tokens_entrada}")
-        print(f"Tokens de saída: {total_tokens_saida}")
-        print(f"Custo estimado (USD): {total_custo:.6f}")
-        print(f"Palavras: {total_palavras}")
-        print(f"Caracteres: {total_caracteres}")
-        # Confirmação automática no modo 3
-        if modo_processamento == '3':
-            confirm = 'S'
-        else:
-            confirm = input("\nDeseja criar os documentos e atualizar a planilha para este lote? (S/N): ").strip().upper()
-        if confirm != 'S':
-            print("Lote descartado pelo usuário. Nenhum documento será criado.")
-            return
-        # Cria documentos e atualiza planilha
-        for c in conteudos_lote:
-            dados = c['dados']
-            conteudo = c['conteudo']
-            row = c['row']
-            # Nome do documento no padrão correto
-            nome_arquivo = f"{dados['id']} - {dados['site']} - {dados['palavra_ancora']}"
-            doc_id, doc_url = docs.criar_documento(
-                dados['titulo'],
-                conteudo,
-                nome_arquivo
-            )
-            # Atualiza a planilha apenas com a URL do documento
-            sheet_row_num = row['sheet_row_num'] if 'sheet_row_num' in row else row.name + 2
-            sheets.atualizar_url_documento(sheet_row_num, doc_url, spreadsheet_id, sheet_name)
-            print(f"Documento criado para ID {dados['id']}: {doc_url}")
+            try:
+                # Verifica se deve processar esta linha
+                if not processor.deve_processar_linha(row, dynamic_column_map, modo_processamento):
+                    continue
 
-def main(modo_teste: bool = False):
+                # Extrai dados da linha
+                palavra_ancora = str(row[dynamic_column_map['palavra_ancora']])
+                url_ancora = str(row[dynamic_column_map['url_ancora']])
+                
+                # Processa título se necessário
+                if modo_processamento in ["1", "3"] and not row[dynamic_column_map['titulo']]:
+                    prompt_titulo = gemini.carregar_prompt_template(tipo='titulos')
+                    titulo = await gemini.gerar_titulo(palavra_ancora, prompt_titulo)
+                    
+                    if not modo_teste:
+                        # Atualiza a planilha com o título
+                        sheets.atualizar_celula(
+                            spreadsheet_id,
+                            sheet_name,
+                            idx + 2,  # +2 porque idx é 0-based e planilha tem cabeçalho
+                            dynamic_column_map['titulo'],
+                            titulo
+                        )
+                        
+                        # Solicita feedback do usuário
+                        print(f"\nTítulo gerado para '{palavra_ancora}':")
+                        print(titulo)
+                        feedback = menu.avaliar_titulo(titulo)
+                        
+                        # Atualiza o sistema de aprendizado
+                        # Aqui usamos uma métrica simples baseada no comprimento do título
+                        # Em produção, você pode usar métricas reais de engajamento
+                        performance_score = min(1.0, len(titulo) / 100)  # Exemplo simples
+                        gemini.atualizar_desempenho_titulo(
+                            titulo=titulo,
+                            performance_score=performance_score,
+                            feedback_score=feedback
+                        )
+
+                # Processa conteúdo se necessário
+                if modo_processamento in ["2", "3"] and not row[dynamic_column_map['doc_id']]:
+                    dados = {
+                        'palavra_ancora': palavra_ancora,
+                        'url_ancora': url_ancora,
+                        'titulo': row[dynamic_column_map['titulo']] if 'titulo' in dynamic_column_map else None
+                    }
+                    
+                    # Gera o conteúdo
+                    conteudo = await gemini.gerar_conteudo(dados)
+                    
+                    if not modo_teste and conteudo:
+                        # Cria o documento
+                        doc_id = await docs.criar_documento(
+                            titulo=dados['titulo'],
+                            conteudo=conteudo,
+                            pasta_id=row[dynamic_column_map['pasta_id']] if 'pasta_id' in dynamic_column_map else None
+                        )
+                        
+                        if doc_id:
+                            # Atualiza a planilha com o ID do documento
+                            sheets.atualizar_celula(
+                                spreadsheet_id,
+                                sheet_name,
+                                idx + 2,
+                                dynamic_column_map['doc_id'],
+                                doc_id
+                            )
+
+                linhas_processadas += 1
+                
+            except Exception as e:
+                logger.error(f"Erro ao processar linha {idx + 2}: {str(e)}")
+                erros += 1
+                if erros >= 3:  # Limite de erros consecutivos
+                    logger.error("Muitos erros consecutivos. Parando processamento.")
+                    break
+                continue
+
+        return linhas_processadas
+
+    except Exception as e:
+        logger.error(f"Erro no processamento de linhas: {str(e)}")
+        return 0
+
+async def main(modo_teste: bool = False):
     """Função principal do script"""
     try:
         # Configuração inicial
@@ -362,9 +341,13 @@ def main(modo_teste: bool = False):
 
         # Menu de quantidade
         limite_linhas = menu_handler.apresentar_menu_quantidade()
-        if limite_linhas == 'cancelar':
+        if limite_linhas is None:  # Verifica se foi cancelado
             logger.info("Operação cancelada pelo usuário")
             return
+            
+        # Converte -1 para None para processar tudo
+        if limite_linhas == -1:
+            limite_linhas = None
 
         # Perguntar se deseja começar de um ID específico
         id_inicial = None
@@ -409,4 +392,4 @@ def main(modo_teste: bool = False):
         raise
 
 if __name__ == "__main__":
-    main() 
+    asyncio.run(main())         

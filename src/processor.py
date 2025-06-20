@@ -8,6 +8,7 @@ from src.gemini_handler import GeminiHandler
 from src.docs_handler import DocsHandler
 from src.utils import substituir_links_markdown
 import re
+from src.db_handler import DBHandler
 
 logger = logging.getLogger('seo_linkbuilder.processor')
 
@@ -18,6 +19,7 @@ class ContentProcessor:
         self.docs = docs
         self.titulos_gerados = []
         self.linhas_processadas = 0
+        self.logger = logging.getLogger('seo_linkbuilder.processor')
 
     def processar_linhas(self, df: pd.DataFrame, dynamic_column_map: Dict, 
                         modo_teste: bool = False, limite_linhas: Optional[int] = None,
@@ -60,6 +62,17 @@ class ContentProcessor:
         logger.info("Iniciando primeira etapa: Geração de títulos")
         col_titulo = dynamic_column_map['titulo']['name'] if isinstance(dynamic_column_map['titulo'], dict) else dynamic_column_map['titulo']
         
+        linhas_sem_titulo = 0
+        for idx, row in df.iterrows():
+            if not row[col_titulo]:
+                linhas_sem_titulo += 1
+                
+        if linhas_sem_titulo == 0:
+            logger.info("Todas as linhas já possuem títulos. Nada a processar.")
+            return
+            
+        logger.info(f"Encontradas {linhas_sem_titulo} linhas sem título para processar.")
+        
         for idx, row in df.iterrows():
             if self._deve_pular_linha(row, col_titulo, limite_linhas):
                 continue
@@ -72,6 +85,11 @@ class ContentProcessor:
                 self.titulos_gerados.append(titulo_escolhido)
                 self.linhas_processadas += 1
                 time.sleep(config.DELAY_ENTRE_CHAMADAS_GEMINI)
+                
+            # Verifica se atingiu o limite de linhas
+            if limite_linhas and self.linhas_processadas >= limite_linhas:
+                logger.info(f"Limite de {limite_linhas} linhas atingido. Parando processamento.")
+                break
 
     def _processar_conteudos(self, df: pd.DataFrame, dynamic_column_map: Dict, 
                            limite_linhas: Optional[int] = None, spreadsheet_id: Optional[str] = None, sheet_name: Optional[str] = None):
@@ -178,6 +196,25 @@ class ContentProcessor:
             titulos = self.gemini.gerar_titulos(dados, quantidade=3)
             for titulo in titulos:
                 if titulo not in self.titulos_gerados:
+                    # Extrair informações para o banco de dados
+                    main_theme = self.gemini._extrair_tema_principal(titulo)
+                    structure_type = self.gemini._extrair_estrutura(titulo)
+                    themes = self.gemini._extrair_temas_secundarios(titulo)
+                    
+                    # Adicionar ao banco de dados
+                    try:
+                        db = DBHandler()
+                        title_id = db.add_title(
+                            title=titulo,
+                            anchor_word=dados.get('palavra_ancora', ''),
+                            main_theme=main_theme,
+                            structure_type=structure_type,
+                            themes=themes
+                        )
+                        logger.info(f"Título salvo no banco de dados com ID {title_id}")
+                    except Exception as e:
+                        logger.error(f"Erro ao salvar título no banco de dados: {e}")
+                    
                     return titulo
                     
         logger.warning(f"Não foi possível gerar um título único após {tentativas} tentativas")
@@ -191,11 +228,89 @@ class ContentProcessor:
             logger.error(f"Erro ao gerar conteúdo: {e}")
             return None
 
+    def _calcular_pontuacao_titulo(self, titulo: str, dados: Dict) -> float:
+        """
+        Calcula a pontuação do título baseado em critérios objetivos.
+        
+        Critérios:
+        - Presença da palavra-âncora: +0.1
+        - Comprimento adequado (50-100 caracteres): +0.2
+        - Uso de números ou estatísticas: +0.1
+        - Tema atraente de entretenimento: +0.3
+        - Estrutura clara (começa com palavra de ação ou número): +0.1
+        - Relevância ao tema/site: +0.2
+        
+        Returns:
+            Pontuação entre 0 e 1
+        """
+        pontuacao = 0.0
+        titulo_lower = titulo.lower()
+        palavra_ancora = dados.get('palavra_ancora', '').lower()
+        site = dados.get('site', '').lower()
+        
+        # Presença da palavra-âncora (+0.1)
+        if palavra_ancora and palavra_ancora in titulo_lower:
+            pontuacao += 0.1
+        
+        # Comprimento adequado (+0.2)
+        if 50 <= len(titulo) <= 100:
+            pontuacao += 0.2
+        
+        # Uso de números (+0.1)
+        if re.search(r'\d+', titulo):
+            pontuacao += 0.1
+        
+        # Tema atraente de entretenimento (+0.3)
+        temas_entretenimento = {
+            'jogos': ['game', 'jogo', 'jogar', 'gaming', 'gameplay', 'player'],
+            'apostas': ['aposta', 'bet', 'odds', 'palpite', 'prognóstico'],
+            'esportes': ['futebol', 'basquete', 'esporte', 'campeonato', 'time', 'atleta'],
+            'diversão': ['diversão', 'entretenimento', 'lazer', 'hobby', 'passatempo'],
+            'tecnologia': ['tech', 'tecnologia', 'digital', 'online', 'virtual'],
+            'cultura': ['filme', 'série', 'música', 'arte', 'cultura', 'show']
+        }
+        
+        palavras_titulo = set(titulo_lower.split())
+        for categoria, palavras in temas_entretenimento.items():
+            if any(palavra in titulo_lower for palavra in palavras):
+                pontuacao += 0.3
+                break
+        
+        # Estrutura clara (+0.1)
+        palavras_acao = ['como', 'descubra', 'conheça', 'saiba', 'veja', 'aprenda', 'entenda', 'confira',
+                        'explore', 'domine', 'melhore', 'aumente', 'maximize', 'potencialize']
+        primeira_palavra = titulo_lower.split()[0]
+        if primeira_palavra in palavras_acao or re.match(r'\d+', primeira_palavra):
+            pontuacao += 0.1
+        
+        # Relevância ao tema/site (+0.2)
+        if site:
+            # Remove domínio e extensão para focar no nome do site
+            nome_site = re.sub(r'\.com.*$', '', site.split('/')[-1])
+            temas_site = nome_site.split('-')
+            
+            # Verifica se palavras do título são relacionadas ao tema do site
+            if any(tema in palavras_titulo for tema in temas_site):
+                pontuacao += 0.2
+        
+        # Garante que a pontuação não ultrapasse 1.0
+        return min(1.0, pontuacao)
+
     def _salvar_titulo(self, titulo: str, row: pd.Series, col_titulo: str, spreadsheet_id: Optional[str] = None, sheet_name: Optional[str] = None):
         """Salva título na planilha"""
         try:
             sheet_row_num = row['sheet_row_num'] if 'sheet_row_num' in row else row.name + 2
             self.sheets.atualizar_titulo_documento(sheet_row_num, titulo, spreadsheet_id, sheet_name)
+            
+            # Calcula e atualiza o desempenho do título no banco de dados
+            try:
+                dados = self.sheets.extrair_dados_linha(row, self.sheets.dynamic_column_map)
+                performance_score = self._calcular_pontuacao_titulo(titulo, dados)
+                self.gemini.atualizar_desempenho_titulo(titulo, performance_score)
+                logger.info(f"Desempenho do título atualizado no banco de dados (pontuação: {performance_score:.2f})")
+            except Exception as e:
+                logger.error(f"Erro ao atualizar desempenho do título no banco: {e}")
+            
             logger.info(f"Título salvo: {titulo}")
         except Exception as e:
             logger.error(f"Erro ao salvar título: {e}")
@@ -206,4 +321,50 @@ class ContentProcessor:
             self.sheets.atualizar_celula(row.name, col_conteudo, conteudo)
             logger.info(f"Conteúdo salvo para linha {row.name}")
         except Exception as e:
-            logger.error(f"Erro ao salvar conteúdo: {e}") 
+            logger.error(f"Erro ao salvar conteúdo: {e}")
+
+    def deve_processar_linha(self, row: pd.Series, dynamic_column_map: Dict, modo_processamento: str) -> bool:
+        """
+        Verifica se uma linha deve ser processada com base no modo de processamento.
+        """
+        try:
+            # Verifica se tem palavra-âncora e URL
+            if not row[dynamic_column_map['palavra_ancora']] or not row[dynamic_column_map['url_ancora']]:
+                self.logger.debug(f"Linha pulada: falta palavra-âncora ou URL")
+                return False
+                
+            # Modo 1: Apenas títulos
+            if modo_processamento == "1":
+                if not row[dynamic_column_map['titulo']]:
+                    self.logger.info(f"Gerando título para palavra-âncora: {row[dynamic_column_map['palavra_ancora']]}")
+                    return True
+                self.logger.debug(f"Linha pulada: já tem título")
+                return False
+                
+            # Modo 2: Apenas conteúdo
+            elif modo_processamento == "2":
+                if not row[dynamic_column_map['titulo']]:
+                    self.logger.warning(f"Linha pulada: não tem título para gerar conteúdo")
+                    return False
+                if not row[dynamic_column_map['doc_id']]:
+                    self.logger.info(f"Gerando conteúdo para título: {row[dynamic_column_map['titulo']]}")
+                    return True
+                self.logger.debug(f"Linha pulada: já tem documento")
+                return False
+                
+            # Modo 3: Títulos e conteúdo
+            elif modo_processamento == "3":
+                if not row[dynamic_column_map['titulo']]:
+                    self.logger.info(f"Gerando título para palavra-âncora: {row[dynamic_column_map['palavra_ancora']]}")
+                    return True
+                if not row[dynamic_column_map['doc_id']]:
+                    self.logger.info(f"Gerando conteúdo para título: {row[dynamic_column_map['titulo']]}")
+                    return True
+                self.logger.debug(f"Linha pulada: já tem título e documento")
+                return False
+                
+            return False
+            
+        except Exception as e:
+            self.logger.error(f"Erro ao verificar se deve processar linha: {e}")
+            return False 
