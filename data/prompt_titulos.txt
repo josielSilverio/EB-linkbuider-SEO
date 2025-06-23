@@ -90,19 +90,26 @@ Para cada título, você DEVE integrar o tema principal com um tema secundário 
 - "Ranking: As cidades mais sortudas do mundo (e o que isso diz sobre apostas)"  
 - "Você se sairia bem num jogo de azar estilo Round 6?"  
 - "Por que todo mundo está apostando no mesmo jogo e ninguém percebeu?"
+- "Guerreiros do Zodíaco: Jogos que mais combinam com cada signo"
+- "Sua Série Favorita de TV Revela Seu Estilo de Aposta: Descubra Agora!"
+- "Descubra Se Seu Signo do Zodíaco Prediz Sucesso em Apostas Online: Teste Aqui!" 
+
 
 ## REGRAS OBRIGATÓRIAS:
 
 1. PRIORIZE TEMAS DIVERSOS: O título deve primeiro atrair pelo tema principal (cinema, música, tech, etc) e depois fazer uma conexão natural com a palavra-âncora
 2. EVITE FOCO EXCESSIVO: A palavra-âncora não precisa ser o tema principal, pode ser uma conexão interessante
 3. SEJA CRIATIVO: Use referências culturais atuais, memes, tendências
-4. MANTENHA NATURAL: A conexão com a palavra-âncora deve parecer natural, não forçada 
+4. MANTENHA NATURAL: A conexão com a palavra-âncora deve parecer natural, não forçada
+5. Use o termo "zodíaco"ao invés de "zodiacal"
 
 ## EXEMPLOS DE TÍTULOS PROIBIDOS:
 ❌ "5 dicas para {{palavra_ancora}}"
 ❌ "Como ganhar em {{palavra_ancora}}"
 ❌ "O guia definitivo de {{palavra_ancora}}"
 ❌ "Tudo sobre {{palavra_ancora}}"
+❌ "Aposta esportiva: De fã a expert: Como a psicologia..."
+❌ "Harry Potter e qualquer tipo de entretenimento de cunho infantil"
 
 ## TEMAS PROIBIDOS:
 ❌ Política
@@ -110,5 +117,6 @@ Para cada título, você DEVE integrar o tema principal com um tema secundário 
 ❌ Conteúdo adulto
 ❌ Temas infantis
 ❌ Discriminação ou preconceito
+❌ Roleta Russa
 
 Retorne apenas os títulos gerados, um por linha, sem numeração ou marcadores. 

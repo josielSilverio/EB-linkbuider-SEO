@@ -9,6 +9,7 @@ from src.docs_handler import DocsHandler
 from src.utils import substituir_links_markdown
 import re
 from src.db_handler import DBHandler
+from tqdm import tqdm
 
 logger = logging.getLogger('seo_linkbuilder.processor')
 
@@ -20,6 +21,29 @@ class ContentProcessor:
         self.titulos_gerados = []
         self.linhas_processadas = 0
         self.logger = logging.getLogger('seo_linkbuilder.processor')
+        # Métricas acumuladas
+        self.total_tokens_entrada = 0
+        self.total_tokens_saida = 0
+        self.total_custo = 0
+        self.total_palavras = 0
+        self.total_caracteres = 0
+
+    def _atualizar_metricas(self, metricas: Dict):
+        """Atualiza as métricas acumuladas e mostra o progresso"""
+        self.total_tokens_entrada += metricas.get('input_token_count', 0)
+        self.total_tokens_saida += metricas.get('output_token_count', 0)
+        self.total_custo += metricas.get('cost_usd', 0)
+        self.total_palavras += metricas.get('num_palavras', 0)
+        self.total_caracteres += metricas.get('num_caracteres', 0)
+
+    def _mostrar_metricas_atuais(self):
+        """Mostra as métricas acumuladas até o momento"""
+        print(f"\nMétricas acumuladas:")
+        print(f"Tokens de entrada: {self.total_tokens_entrada:,}")
+        print(f"Tokens de saída: {self.total_tokens_saida:,}")
+        print(f"Custo estimado (USD): ${self.total_custo:.6f}")
+        print(f"Palavras: {self.total_palavras:,}")
+        print(f"Caracteres: {self.total_caracteres:,}")
 
     def processar_linhas(self, df: pd.DataFrame, dynamic_column_map: Dict, 
                         modo_teste: bool = False, limite_linhas: Optional[int] = None,
@@ -62,6 +86,7 @@ class ContentProcessor:
         logger.info("Iniciando primeira etapa: Geração de títulos")
         col_titulo = dynamic_column_map['titulo']['name'] if isinstance(dynamic_column_map['titulo'], dict) else dynamic_column_map['titulo']
         
+        # Conta quantas linhas precisam de título
         linhas_sem_titulo = 0
         for idx, row in df.iterrows():
             if not row[col_titulo]:
@@ -71,25 +96,30 @@ class ContentProcessor:
             logger.info("Todas as linhas já possuem títulos. Nada a processar.")
             return
             
-        logger.info(f"Encontradas {linhas_sem_titulo} linhas sem título para processar.")
+        logger.info(f"Encontradas {linhas_sem_titulo} linhas sem título para processar")
         
-        for idx, row in df.iterrows():
-            if self._deve_pular_linha(row, col_titulo, limite_linhas):
-                continue
-
-            dados = self.sheets.extrair_dados_linha(row, dynamic_column_map)
-            titulo_escolhido = self._gerar_titulo(dados)
+        # Cria barra de progresso
+        with tqdm(total=linhas_sem_titulo if not limite_linhas else min(linhas_sem_titulo, limite_linhas),
+                 desc="Gerando títulos", unit="título") as pbar:
             
-            if titulo_escolhido:
-                self._salvar_titulo(titulo_escolhido, row, col_titulo, spreadsheet_id, sheet_name)
-                self.titulos_gerados.append(titulo_escolhido)
-                self.linhas_processadas += 1
-                time.sleep(config.DELAY_ENTRE_CHAMADAS_GEMINI)
+            for idx, row in df.iterrows():
+                if self._deve_pular_linha(row, col_titulo, limite_linhas):
+                    continue
+
+                dados = self.sheets.extrair_dados_linha(row, dynamic_column_map)
+                titulo_escolhido = self._gerar_titulo(dados)
                 
-            # Verifica se atingiu o limite de linhas
-            if limite_linhas and self.linhas_processadas >= limite_linhas:
-                logger.info(f"Limite de {limite_linhas} linhas atingido. Parando processamento.")
-                break
+                if titulo_escolhido:
+                    self._salvar_titulo(titulo_escolhido, row, col_titulo, spreadsheet_id, sheet_name)
+                    self.titulos_gerados.append(titulo_escolhido)
+                    self.linhas_processadas += 1
+                    pbar.update(1)
+                    time.sleep(config.DELAY_ENTRE_CHAMADAS_GEMINI)
+                    
+                # Verifica se atingiu o limite de linhas
+                if limite_linhas and self.linhas_processadas >= limite_linhas:
+                    logger.info(f"Limite de {limite_linhas} linhas atingido. Parando processamento.")
+                    break
 
     def _processar_conteudos(self, df: pd.DataFrame, dynamic_column_map: Dict, 
                            limite_linhas: Optional[int] = None, spreadsheet_id: Optional[str] = None, sheet_name: Optional[str] = None):
@@ -97,47 +127,73 @@ class ContentProcessor:
         logger.info("Iniciando segunda etapa: Geração de conteúdos")
         col_conteudo = dynamic_column_map['url_documento']['name'] if isinstance(dynamic_column_map['url_documento'], dict) else dynamic_column_map['url_documento']
         col_titulo = dynamic_column_map['titulo']['name'] if isinstance(dynamic_column_map['titulo'], dict) else dynamic_column_map['titulo']
+        
+        # Conta quantas linhas precisam de conteúdo
+        linhas_para_processar = 0
+        for idx, row in df.iterrows():
+            if not self._deve_pular_linha(row, col_conteudo, limite_linhas) and row.get(col_titulo):
+                linhas_para_processar += 1
+                
+        if linhas_para_processar == 0:
+            logger.info("Nenhuma linha precisa de conteúdo. Nada a processar.")
+            return
+            
+        logger.info(f"Encontradas {linhas_para_processar} linhas para gerar conteúdo")
+        
         conteudos_lote = []
         linhas_processadas_lote = 0
-        for idx, row in df.iterrows():
-            if self._deve_pular_linha(row, col_conteudo, limite_linhas):
-                continue
-            if not row.get(col_titulo):
-                logger.warning(f"Linha {idx} não tem título. Pulando geração de conteúdo.")
-                continue
-            dados = self.sheets.extrair_dados_linha(row, dynamic_column_map)
-            conteudo, metricas, info_link = self.gemini.gerar_conteudo_por_titulo(dados, dados.get('titulo', ''))
-            if not conteudo:
-                print(f"Falha ao gerar conteúdo para ID {dados.get('id', '')}")
-                continue
-            conteudos_lote.append({
-                'dados': dados,
-                'conteudo': conteudo,
-                'metricas': metricas,
-                'row': row
-            })
-            linhas_processadas_lote += 1
-            if limite_linhas and linhas_processadas_lote >= limite_linhas:
-                break
-        # Resumo do lote
-        total_tokens_entrada = sum(c['metricas'].get('input_token_count', 0) for c in conteudos_lote)
-        total_tokens_saida = sum(c['metricas'].get('output_token_count', 0) for c in conteudos_lote)
-        total_custo = sum(c['metricas'].get('cost_usd', 0) for c in conteudos_lote)
-        total_palavras = sum(c['metricas'].get('num_palavras', 0) for c in conteudos_lote)
-        total_caracteres = sum(c['metricas'].get('num_caracteres', 0) for c in conteudos_lote)
-        print(f"\nResumo do lote de conteúdos gerados ({linhas_processadas_lote}):")
+        
+        # Cria barra de progresso
+        with tqdm(total=linhas_para_processar if not limite_linhas else min(linhas_para_processar, limite_linhas),
+                 desc="Gerando conteúdos", unit="artigo") as pbar:
+            
+            for idx, row in df.iterrows():
+                if self._deve_pular_linha(row, col_conteudo, limite_linhas):
+                    continue
+                if not row.get(col_titulo):
+                    logger.warning(f"Linha {idx} não tem título. Pulando geração de conteúdo.")
+                    continue
+                    
+                dados = self.sheets.extrair_dados_linha(row, dynamic_column_map)
+                conteudo, metricas, info_link = self.gemini.gerar_conteudo_por_titulo(dados, dados.get('titulo', ''))
+                
+                if not conteudo:
+                    print(f"Falha ao gerar conteúdo para ID {dados.get('id', '')}")
+                    continue
+                    
+                # Atualiza métricas e progresso
+                self._atualizar_metricas(metricas)
+                pbar.set_postfix(custo_usd=f"${self.total_custo:.4f}")
+                pbar.update(1)
+                
+                conteudos_lote.append({
+                    'dados': dados,
+                    'conteudo': conteudo,
+                    'metricas': metricas,
+                    'row': row
+                })
+                linhas_processadas_lote += 1
+                
+                if limite_linhas and linhas_processadas_lote >= limite_linhas:
+                    break
+                    
+                # Mostra métricas a cada 5 artigos
+                if linhas_processadas_lote % 5 == 0:
+                    self._mostrar_metricas_atuais()
+        
+        # Mostra resumo final
+        print("\nResumo do lote de conteúdos gerados:")
         for c in conteudos_lote:
             dados = c['dados']
             print(f"ID: {dados.get('id', '')} | Título: {dados.get('titulo', '')} | Palavra-âncora: {dados.get('palavra_ancora', '')} | Site: {dados.get('site', '')}")
-        print(f"Tokens de entrada: {total_tokens_entrada}")
-        print(f"Tokens de saída: {total_tokens_saida}")
-        print(f"Custo estimado (USD): {total_custo:.6f}")
-        print(f"Palavras: {total_palavras}")
-        print(f"Caracteres: {total_caracteres}")
+        
+        self._mostrar_metricas_atuais()
+        
         confirm = input("\nDeseja salvar os conteúdos e atualizar a planilha para este lote? (S/N): ").strip().upper()
         if confirm != 'S':
             print("Lote descartado pelo usuário. Nenhum documento será criado.")
             return
+
         # Salvar todos os conteúdos
         for c in conteudos_lote:
             dados = c['dados']

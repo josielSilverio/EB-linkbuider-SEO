@@ -85,6 +85,7 @@ Você é um especialista em criação de conteúdo viral da web, com profundo co
 ❌ Temas infantis
 ❌ Discriminação ou preconceito
 ❌ Roleta russa
+❌ Nunca usar nenhum tipo de caracter especial para especificar um termo ou palavra (*, {}, [], #...)
 
 
 ## DICAS FINAIS:
